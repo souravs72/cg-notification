@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -59,6 +60,10 @@ public class SiteService {
     public FrappeSite getSiteById(UUID siteId) {
         return siteRepository.findById(siteId)
             .orElseThrow(() -> new IllegalArgumentException("Site not found: " + siteId));
+    }
+
+    public List<FrappeSite> getAllSites() {
+        return siteRepository.findAll();
     }
 }
 

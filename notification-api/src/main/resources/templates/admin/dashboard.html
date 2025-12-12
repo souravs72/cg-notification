@@ -63,6 +63,9 @@
                 <i class="bi bi-graph-up"></i> Admin Dashboard
             </span>
             <div class="d-flex align-items-center gap-3">
+                <a href="/admin/campaigns" class="btn btn-sm btn-outline-light" style="text-decoration: none;">
+                    <i class="bi bi-megaphone"></i> Campaigns
+                </a>
                 <button class="btn btn-sm btn-outline-light" onclick="showCreateSiteModal()">
                     <i class="bi bi-plus-circle"></i> Create Site
                 </button>
@@ -77,6 +80,25 @@
     </nav>
 
     <div class="container-fluid mt-4">
+        <!-- Quick Actions Card -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-primary">
+                    <div class="card-body bg-primary bg-opacity-10">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="card-title mb-1"><i class="bi bi-megaphone"></i> Send Messages & Create Campaigns</h5>
+                                <p class="card-text text-muted mb-0">Send WhatsApp messages, emails, or schedule bulk campaigns</p>
+                            </div>
+                            <a href="/admin/campaigns" class="btn btn-primary btn-lg">
+                                <i class="bi bi-arrow-right-circle"></i> Go to Campaigns
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Summary Cards -->
         <div class="row mb-4">
             <div class="col-md-3 mb-3">
@@ -186,6 +208,9 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><i class="bi bi-envelope"></i> Recent Messages</h5>
                         <div>
+                            <button class="btn btn-sm btn-outline-info me-2" onclick="loadScheduledMessages()">
+                                <i class="bi bi-clock"></i> Show Scheduled
+                            </button>
                             <button class="btn btn-sm btn-outline-danger me-2" onclick="loadFailedMessages()">
                                 <i class="bi bi-exclamation-triangle"></i> Show Failed
                             </button>
@@ -206,13 +231,14 @@
                                         <th>Status</th>
                                         <th>Subject/Body</th>
                                         <th>Error</th>
+                                        <th>Scheduled At</th>
                                         <th>Sent At</th>
                                         <th>Delivered At</th>
                                     </tr>
                                 </thead>
                                 <tbody id="messagesTableBody">
                                     <tr>
-                                        <td colspan="9" class="text-center text-muted">Loading messages...</td>
+                                        <td colspan="10" class="text-center text-muted">Loading messages...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -429,7 +455,7 @@
                 .then(data => {
                     const tbody = document.getElementById('messagesTableBody');
                     if (data.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No messages found</td></tr>';
                         return;
                     }
                     tbody.innerHTML = data.map(msg => `
@@ -443,11 +469,13 @@
                                     msg.status === 'DELIVERED' ? 'bg-success' :
                                     msg.status === 'SENT' ? 'bg-primary' :
                                     msg.status === 'FAILED' ? 'bg-danger' :
-                                    msg.status === 'PENDING' ? 'bg-warning' : 'bg-secondary'
+                                    msg.status === 'PENDING' ? 'bg-warning' :
+                                    msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
                                 }">${msg.status}</span>
                             </td>
                             <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
                             <td><small class="text-danger">${msg.errorMessage || '-'}</small></td>
+                            <td><small>${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
                         </tr>
@@ -456,7 +484,38 @@
                 .catch(error => {
                     console.error('Error loading messages:', error);
                     document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="9" class="text-center text-danger">Error loading messages</td></tr>';
+                        '<tr><td colspan="10" class="text-center text-danger">Error loading messages</td></tr>';
+                });
+        }
+
+        function loadScheduledMessages() {
+            fetch('/admin/api/messages/scheduled?limit=50')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('messagesTableBody');
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No scheduled messages found</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = data.map(msg => `
+                        <tr class="table-info">
+                            <td><code>${msg.messageId}</code></td>
+                            <td>${msg.siteName}</td>
+                            <td><span class="badge ${msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info'}">${msg.channel}</span></td>
+                            <td>${msg.recipient}</td>
+                            <td><span class="badge bg-info">${msg.status}</span></td>
+                            <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
+                            <td><small class="text-danger">${msg.errorMessage || '-'}</small></td>
+                            <td><small class="fw-bold">${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
+                            <td><small>-</small></td>
+                            <td><small>-</small></td>
+                        </tr>
+                    `).join('');
+                })
+                .catch(error => {
+                    console.error('Error loading scheduled messages:', error);
+                    document.getElementById('messagesTableBody').innerHTML = 
+                        '<tr><td colspan="10" class="text-center text-danger">Error loading scheduled messages</td></tr>';
                 });
         }
 
@@ -466,7 +525,7 @@
                 .then(data => {
                     const tbody = document.getElementById('messagesTableBody');
                     if (data.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No failed messages found</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No failed messages found</td></tr>';
                         return;
                     }
                     tbody.innerHTML = data.map(msg => `
@@ -478,6 +537,7 @@
                             <td><span class="badge bg-danger">${msg.status}</span></td>
                             <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
                             <td><small class="text-danger fw-bold">${msg.errorMessage || 'Unknown error'}</small></td>
+                            <td><small>${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
                             <td><small>-</small></td>
                         </tr>
@@ -486,7 +546,7 @@
                 .catch(error => {
                     console.error('Error loading failed messages:', error);
                     document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="9" class="text-center text-danger">Error loading failed messages</td></tr>';
+                        '<tr><td colspan="10" class="text-center text-danger">Error loading failed messages</td></tr>';
                 });
         }
 

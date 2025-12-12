@@ -100,6 +100,7 @@ public class AdminService {
                 detail.setErrorMessage(msg.getErrorMessage());
                 detail.setSentAt(msg.getSentAt());
                 detail.setDeliveredAt(msg.getDeliveredAt());
+                detail.setScheduledAt(msg.getScheduledAt());
                 detail.setCreatedAt(msg.getCreatedAt());
                 return detail;
             })
@@ -131,6 +132,37 @@ public class AdminService {
                 detail.setErrorMessage(msg.getErrorMessage());
                 detail.setSentAt(msg.getSentAt());
                 detail.setDeliveredAt(msg.getDeliveredAt());
+                detail.setScheduledAt(msg.getScheduledAt());
+                detail.setCreatedAt(msg.getCreatedAt());
+                return detail;
+            })
+            .collect(Collectors.toList());
+    }
+
+    public List<MessageDetailResponse> getScheduledMessages(int limit) {
+        Pageable pageable = PageRequest.of(0, limit * 10, Sort.by(Sort.Direction.ASC, "scheduledAt"));
+        List<MessageLog> messages = messageLogRepository.findAll(pageable).getContent().stream()
+            .filter(msg -> msg.getStatus() == DeliveryStatus.SCHEDULED)
+            .limit(limit)
+            .collect(Collectors.toList());
+        
+        Map<java.util.UUID, String> siteNameMap = siteRepository.findAll().stream()
+            .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
+        
+        return messages.stream()
+            .map(msg -> {
+                MessageDetailResponse detail = new MessageDetailResponse();
+                detail.setMessageId(msg.getMessageId());
+                detail.setSiteName(siteNameMap.getOrDefault(msg.getSiteId(), "Unknown"));
+                detail.setChannel(msg.getChannel());
+                detail.setStatus(msg.getStatus());
+                detail.setRecipient(msg.getRecipient());
+                detail.setSubject(msg.getSubject());
+                detail.setBody(msg.getBody());
+                detail.setErrorMessage(msg.getErrorMessage());
+                detail.setSentAt(msg.getSentAt());
+                detail.setDeliveredAt(msg.getDeliveredAt());
+                detail.setScheduledAt(msg.getScheduledAt());
                 detail.setCreatedAt(msg.getCreatedAt());
                 return detail;
             })

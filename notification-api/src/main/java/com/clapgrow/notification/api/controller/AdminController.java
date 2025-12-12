@@ -52,6 +52,13 @@ public class AdminController {
         return ResponseEntity.ok(messages);
     }
 
+    @GetMapping("/api/messages/scheduled")
+    public ResponseEntity<List<MessageDetailResponse>> getScheduledMessages(
+            @RequestParam(name = "limit", defaultValue = "50") int limit) {
+        List<MessageDetailResponse> messages = adminService.getScheduledMessages(limit);
+        return ResponseEntity.ok(messages);
+    }
+
     @PostMapping("/api/sites/create")
     public ResponseEntity<?> createSite(@RequestBody SiteRegistrationRequest request) {
         try {

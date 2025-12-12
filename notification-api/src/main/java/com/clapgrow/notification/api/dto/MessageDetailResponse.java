@@ -22,6 +22,7 @@ public class MessageDetailResponse {
     private String errorMessage;
     private LocalDateTime sentAt;
     private LocalDateTime deliveredAt;
+    private LocalDateTime scheduledAt;
     private LocalDateTime createdAt;
 }
 
