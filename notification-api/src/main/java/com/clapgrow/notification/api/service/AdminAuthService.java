@@ -37,14 +37,14 @@ public class AdminAuthService {
         if (a == null || b == null) {
             return a == b;
         }
-        if (a.length() != b.length()) {
-            return false;
-        }
+        int maxLength = Math.max(a.length(), b.length());
         int result = 0;
-        for (int i = 0; i < a.length(); i++) {
-            result |= a.charAt(i) ^ b.charAt(i);
+        for (int i = 0; i < maxLength; i++) {
+            char charA = (i < a.length()) ? a.charAt(i) : 0;
+            char charB = (i < b.length()) ? b.charAt(i) : 0;
+            result |= charA ^ charB;
         }
-        return result == 0;
+        return result == 0 && a.length() == b.length();
     }
 }
 

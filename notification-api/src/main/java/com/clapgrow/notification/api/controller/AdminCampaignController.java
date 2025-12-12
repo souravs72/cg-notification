@@ -8,6 +8,7 @@ import com.clapgrow.notification.api.service.ScheduledMessageService;
 import com.clapgrow.notification.api.service.SiteService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -28,9 +29,10 @@ public class AdminCampaignController {
     private final AdminAuthService adminAuthService;
 
     @GetMapping
-    public String campaignsPage(Model model) {
+    public String campaignsPage(Model model, @Value("${admin.api-key:}") String adminApiKey) {
         List<FrappeSite> sites = siteService.getAllSites();
         model.addAttribute("sites", sites);
+        model.addAttribute("adminApiKey", adminApiKey);
         return "admin/campaigns";
     }
 
