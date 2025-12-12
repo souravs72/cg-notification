@@ -82,6 +82,7 @@ services:
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
     volumes:
       - ./notification-api/src/main/resources:/app/config
     healthcheck:
