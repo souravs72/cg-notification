@@ -319,12 +319,36 @@
                 <div class="modal-body">
                     <form id="createSiteForm">
                         <div class="mb-3">
-                            <label for="siteName" class="form-label">Site Name</label>
+                            <label for="siteName" class="form-label">Site Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="siteName" required>
                         </div>
                         <div class="mb-3">
                             <label for="siteDescription" class="form-label">Description (Optional)</label>
-                            <textarea class="form-control" id="siteDescription" rows="3"></textarea>
+                            <textarea class="form-control" id="siteDescription" rows="2"></textarea>
+                        </div>
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-whatsapp"></i> WhatsApp Configuration (Optional)</h6>
+                        <div class="mb-3">
+                            <label for="whatsappSessionName" class="form-label">WhatsApp Session Name</label>
+                            <input type="text" class="form-control" id="whatsappSessionName" placeholder="e.g., shared-session or site-specific-session">
+                            <small class="form-text text-muted">Leave empty if not using WhatsApp. Multiple sites can share the same session name.</small>
+                        </div>
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-envelope"></i> Email Configuration (Optional)</h6>
+                        <div class="mb-3">
+                            <label for="emailFromAddress" class="form-label">From Email Address</label>
+                            <input type="email" class="form-control" id="emailFromAddress" placeholder="noreply@example.com">
+                            <small class="form-text text-muted">Default sender email for this site.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="emailFromName" class="form-label">From Name</label>
+                            <input type="text" class="form-control" id="emailFromName" placeholder="Company Name">
+                            <small class="form-text text-muted">Display name for email sender.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sendgridApiKey" class="form-label">SendGrid API Key</label>
+                            <input type="password" class="form-control" id="sendgridApiKey" placeholder="SG.xxx">
+                            <small class="form-text text-muted">Optional. Uses default SendGrid key if not provided.</small>
                         </div>
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle"></i> An API key will be generated automatically after creation.
@@ -558,19 +582,38 @@
         function createSite() {
             const siteName = document.getElementById('siteName').value;
             const description = document.getElementById('siteDescription').value;
+            const whatsappSessionName = document.getElementById('whatsappSessionName').value;
+            const emailFromAddress = document.getElementById('emailFromAddress').value;
+            const emailFromName = document.getElementById('emailFromName').value;
+            const sendgridApiKey = document.getElementById('sendgridApiKey').value;
             
             if (!siteName.trim()) {
                 alert('Site name is required');
                 return;
             }
 
+            const requestBody = {
+                siteName: siteName,
+                description: description || null
+            };
+            
+            if (whatsappSessionName.trim()) {
+                requestBody.whatsappSessionName = whatsappSessionName.trim();
+            }
+            if (emailFromAddress.trim()) {
+                requestBody.emailFromAddress = emailFromAddress.trim();
+            }
+            if (emailFromName.trim()) {
+                requestBody.emailFromName = emailFromName.trim();
+            }
+            if (sendgridApiKey.trim()) {
+                requestBody.sendgridApiKey = sendgridApiKey.trim();
+            }
+
             fetch('/admin/api/sites/create', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    siteName: siteName,
-                    description: description || null
-                })
+                body: JSON.stringify(requestBody)
             })
             .then(response => response.json())
             .then(data => {
