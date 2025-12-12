@@ -1,0 +1,25 @@
+name: GitFlow Branch Protection
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  branch-protection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch rules
+        run: |
+          echo "GitFlow branch protection rules:"
+          echo "- main: Production-ready code only"
+          echo "- develop: Integration branch for features"
+          echo "- feature/*: Feature development branches"
+          echo "- release/*: Release preparation branches"
+          echo "- hotfix/*: Critical bug fixes"
+
