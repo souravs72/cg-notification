@@ -11,6 +11,7 @@ import com.clapgrow.notification.api.repository.FrappeSiteRepository;
 import com.clapgrow.notification.api.repository.MessageLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -140,11 +141,11 @@ public class AdminService {
     }
 
     public List<MessageDetailResponse> getScheduledMessages(int limit) {
-        Pageable pageable = PageRequest.of(0, limit * 10, Sort.by(Sort.Direction.ASC, "scheduledAt"));
-        List<MessageLog> messages = messageLogRepository.findAll(pageable).getContent().stream()
-            .filter(msg -> msg.getStatus() == DeliveryStatus.SCHEDULED)
-            .limit(limit)
-            .collect(Collectors.toList());
+        Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.ASC, "scheduledAt"));
+        Page<MessageLog> messagePage = messageLogRepository.findByStatusOrderByScheduledAtAsc(
+            DeliveryStatus.SCHEDULED, pageable
+        );
+        List<MessageLog> messages = messagePage.getContent();
         
         Map<java.util.UUID, String> siteNameMap = siteRepository.findAll().stream()
             .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
