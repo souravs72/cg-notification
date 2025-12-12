@@ -27,24 +27,42 @@ public class SiteService {
             throw new IllegalArgumentException("Site with name '" + request.getSiteName() + "' already exists");
         }
 
-        String apiKey = apiKeyService.generateApiKey();
-        String apiKeyHash = apiKeyService.hashApiKey(apiKey);
+        FrappeSite site = siteRepository.findBySiteName(request.getSiteName())
+            .filter(s -> Boolean.TRUE.equals(s.getIsDeleted()))
+            .orElse(null);
 
-        FrappeSite site = new FrappeSite();
-        site.setSiteName(request.getSiteName());
-        site.setApiKey(apiKey);
-        site.setApiKeyHash(apiKeyHash);
-        site.setDescription(request.getDescription());
-        site.setWhatsappSessionName(request.getWhatsappSessionName());
-        site.setEmailFromAddress(request.getEmailFromAddress());
-        site.setEmailFromName(request.getEmailFromName());
-        site.setSendgridApiKey(request.getSendgridApiKey());
-        site.setIsActive(true);
-        site.setCreatedBy("SYSTEM");
+        String apiKey;
+        if (site != null) {
+            apiKey = apiKeyService.generateApiKey();
+            site.setApiKey(apiKey);
+            site.setApiKeyHash(apiKeyService.hashApiKey(apiKey));
+            site.setDescription(request.getDescription());
+            site.setWhatsappSessionName(request.getWhatsappSessionName());
+            site.setEmailFromAddress(request.getEmailFromAddress());
+            site.setEmailFromName(request.getEmailFromName());
+            site.setSendgridApiKey(request.getSendgridApiKey());
+            site.setIsActive(true);
+            site.setIsDeleted(false);
+            site.setUpdatedBy("SYSTEM");
+            log.info("Restored deleted site: {} with ID: {}", site.getSiteName(), site.getId());
+        } else {
+            apiKey = apiKeyService.generateApiKey();
+            String apiKeyHash = apiKeyService.hashApiKey(apiKey);
+            site = new FrappeSite();
+            site.setSiteName(request.getSiteName());
+            site.setApiKey(apiKey);
+            site.setApiKeyHash(apiKeyHash);
+            site.setDescription(request.getDescription());
+            site.setWhatsappSessionName(request.getWhatsappSessionName());
+            site.setEmailFromAddress(request.getEmailFromAddress());
+            site.setEmailFromName(request.getEmailFromName());
+            site.setSendgridApiKey(request.getSendgridApiKey());
+            site.setIsActive(true);
+            site.setCreatedBy("SYSTEM");
+            log.info("Registered new site: {} with ID: {}", site.getSiteName(), site.getId());
+        }
 
         site = siteRepository.save(site);
-
-        log.info("Registered new site: {} with ID: {}", site.getSiteName(), site.getId());
 
         return new SiteRegistrationResponse(
             site.getId(),
