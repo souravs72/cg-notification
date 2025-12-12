@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: email-worker
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/notification_db
+    username: notification_user
+    password: notification_pass
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+
+sendgrid:
+  api:
+    key: ${SENDGRID_API_KEY:your-sendgrid-api-key}
+  from:
+    email: ${SENDGRID_FROM_EMAIL:noreply@example.com}
+    name: ${SENDGRID_FROM_NAME:Notification Service}
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.clapgrow.notification: DEBUG
+    org.springframework.kafka: INFO
+

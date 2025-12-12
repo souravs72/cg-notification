@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Notification System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .stat-card {
+            border-left: 4px solid;
+            transition: transform 0.2s;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .stat-card.total { border-left-color: #0d6efd; }
+        .stat-card.success { border-left-color: #198754; }
+        .stat-card.failed { border-left-color: #dc3545; }
+        .stat-card.sites { border-left-color: #6c757d; }
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .table-responsive {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .success-rate-badge {
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+        }
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+        .message-table {
+            font-size: 0.9rem;
+        }
+        .status-badge {
+            font-size: 0.85rem;
+        }
+        .modal-content {
+            border-radius: 0.5rem;
+        }
+        .qr-code-container {
+            text-align: center;
+            padding: 2rem;
+        }
+        .qr-code-container img {
+            max-width: 300px;
+            border: 2px solid #dee2e6;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-graph-up"></i> Admin Dashboard
+            </span>
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-sm btn-outline-light" onclick="showCreateSiteModal()">
+                    <i class="bi bi-plus-circle"></i> Create Site
+                </button>
+                <button class="btn btn-sm btn-outline-light" onclick="showWhatsAppQRModal()">
+                    <i class="bi bi-qr-code"></i> Connect WhatsApp
+                </button>
+                <span class="text-light">
+                    <i class="bi bi-clock"></i> <span id="currentTime"></span>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card sites">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-2">Total Sites</h6>
+                                <div class="metric-value" th:text="${metrics.totalSites}">0</div>
+                            </div>
+                            <i class="bi bi-building fs-1 text-muted"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card total">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-2">Total Messages Sent</h6>
+                                <div class="metric-value" th:text="${metrics.totalMessagesSent}">0</div>
+                            </div>
+                            <i class="bi bi-send fs-1 text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card success">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-2">Successful</h6>
+                                <div class="metric-value text-success" th:text="${metrics.totalMessagesSuccess}">0</div>
+                            </div>
+                            <i class="bi bi-check-circle fs-1 text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card failed">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted mb-2">Failed</h6>
+                                <div class="metric-value text-danger" th:text="${metrics.totalMessagesFailed}">0</div>
+                            </div>
+                            <i class="bi bi-x-circle fs-1 text-danger"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overall Success Rate -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Overall Success Rate</h5>
+                        <div class="display-4 fw-bold" 
+                             th:classappend="${metrics.overallSuccessRate >= 95} ? 'text-success' : (${metrics.overallSuccessRate >= 80} ? 'text-warning' : 'text-danger')"
+                             th:text="${metrics.overallSuccessRate} + '%'">0%</div>
+                        <p class="text-muted mt-2">
+                            <span th:text="${metrics.totalMessagesSuccess}">0</span> successful out of 
+                            <span th:text="${metrics.totalMessagesSent}">0</span> total messages
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Messages by Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Messages by Channel</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="channelChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Message Details Table -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-envelope"></i> Recent Messages</h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-danger me-2" onclick="loadFailedMessages()">
+                                <i class="bi bi-exclamation-triangle"></i> Show Failed
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="loadRecentMessages()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover message-table" id="messagesTable">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Message ID</th>
+                                        <th>Site</th>
+                                        <th>Channel</th>
+                                        <th>Recipient</th>
+                                        <th>Status</th>
+                                        <th>Subject/Body</th>
+                                        <th>Error</th>
+                                        <th>Sent At</th>
+                                        <th>Delivered At</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="messagesTableBody">
+                                    <tr>
+                                        <td colspan="9" class="text-center text-muted">Loading messages...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sites Table -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-table"></i> Site-wise Metrics</h5>
+                        <button class="btn btn-sm btn-outline-primary" onclick="refreshDashboard()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Site Name</th>
+                                        <th>Total Sent</th>
+                                        <th>Successful</th>
+                                        <th>Failed</th>
+                                        <th>Success Rate</th>
+                                        <th>Email</th>
+                                        <th>WhatsApp</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="site : ${metrics.siteMetrics}">
+                                        <td><strong th:text="${site.siteName}">Site Name</strong></td>
+                                        <td th:text="${site.totalSent}">0</td>
+                                        <td class="text-success" th:text="${site.totalSuccess}">0</td>
+                                        <td class="text-danger" th:text="${site.totalFailed}">0</td>
+                                        <td>
+                                            <span class="badge success-rate-badge"
+                                                  th:classappend="${site.successRate >= 95} ? 'bg-success' : (${site.successRate >= 80} ? 'bg-warning' : 'bg-danger')"
+                                                  th:text="${site.successRate} + '%'">0%</span>
+                                        </td>
+                                        <td>
+                                            <span th:if="${site.channelMetrics.EMAIL != null}">
+                                                <span class="badge bg-info" th:text="${site.channelMetrics.EMAIL.totalSent}">0</span>
+                                            </span>
+                                            <span th:if="${site.channelMetrics.EMAIL == null}">-</span>
+                                        </td>
+                                        <td>
+                                            <span th:if="${site.channelMetrics.WHATSAPP != null}">
+                                                <span class="badge bg-success" th:text="${site.channelMetrics.WHATSAPP.totalSent}">0</span>
+                                            </span>
+                                            <span th:if="${site.channelMetrics.WHATSAPP == null}">-</span>
+                                        </td>
+                                    </tr>
+                                    <tr th:if="${#lists.isEmpty(metrics.siteMetrics)}">
+                                        <td colspan="7" class="text-center text-muted">No sites registered yet</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Site Modal -->
+    <div class="modal fade" id="createSiteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-building-add"></i> Create New Site</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createSiteForm">
+                        <div class="mb-3">
+                            <label for="siteName" class="form-label">Site Name</label>
+                            <input type="text" class="form-control" id="siteName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="siteDescription" class="form-label">Description (Optional)</label>
+                            <textarea class="form-control" id="siteDescription" rows="3"></textarea>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> An API key will be generated automatically after creation.
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="createSite()">Create Site</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WhatsApp QR Code Modal -->
+    <div class="modal fade" id="whatsappQRModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-qr-code"></i> Connect WhatsApp Number</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="whatsappSession" class="form-label">WhatsApp Session Name</label>
+                        <input type="text" class="form-control" id="whatsappSession" placeholder="e.g., my-whatsapp-session">
+                        <small class="form-text text-muted">Enter a unique name for this WhatsApp session</small>
+                    </div>
+                    <div class="qr-code-container" id="qrCodeContainer">
+                        <p class="text-muted">Click "Get QR Code" to generate QR code for WhatsApp connection</p>
+                    </div>
+                    <div id="qrCodeStatus" class="alert" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="getWhatsAppQRCode()">Get QR Code</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script th:inline="javascript">
+        // Update current time
+        function updateTime() {
+            document.getElementById('currentTime').textContent = new Date().toLocaleString();
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // Status Chart
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        const statusChart = new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Successful', 'Failed'],
+                datasets: [{
+                    data: [
+                        /*[[${metrics.totalMessagesSuccess}]]*/ 0,
+                        /*[[${metrics.totalMessagesFailed}]]*/ 0
+                    ],
+                    backgroundColor: ['#198754', '#dc3545']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 10,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Channel Chart Data
+        const channelData = {
+            EMAIL: 0,
+            WHATSAPP: 0
+        };
+        
+        /*[# th:each="site : ${metrics.siteMetrics}"]*/
+            /*[# th:if="${site.channelMetrics.EMAIL != null}"]*/
+                channelData.EMAIL += /*[[${site.channelMetrics.EMAIL.totalSent}]]*/ 0;
+            /*[/]*/
+            /*[# th:if="${site.channelMetrics.WHATSAPP != null}"]*/
+                channelData.WHATSAPP += /*[[${site.channelMetrics.WHATSAPP.totalSent}]]*/ 0;
+            /*[/]*/
+        /*[/]*/
+
+        // Channel Chart
+        const channelCtx = document.getElementById('channelChart').getContext('2d');
+        const channelChart = new Chart(channelCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Email', 'WhatsApp'],
+                datasets: [{
+                    label: 'Messages Sent',
+                    data: [channelData.EMAIL, channelData.WHATSAPP],
+                    backgroundColor: ['#0d6efd', '#198754']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                aspectRatio: 1.5,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        function refreshDashboard() {
+            location.reload();
+        }
+
+        function loadRecentMessages() {
+            fetch('/admin/api/messages/recent?limit=50')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('messagesTableBody');
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = data.map(msg => `
+                        <tr>
+                            <td><code>${msg.messageId}</code></td>
+                            <td>${msg.siteName}</td>
+                            <td><span class="badge ${msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info'}">${msg.channel}</span></td>
+                            <td>${msg.recipient}</td>
+                            <td>
+                                <span class="badge status-badge ${
+                                    msg.status === 'DELIVERED' ? 'bg-success' :
+                                    msg.status === 'SENT' ? 'bg-primary' :
+                                    msg.status === 'FAILED' ? 'bg-danger' :
+                                    msg.status === 'PENDING' ? 'bg-warning' : 'bg-secondary'
+                                }">${msg.status}</span>
+                            </td>
+                            <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
+                            <td><small class="text-danger">${msg.errorMessage || '-'}</small></td>
+                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
+                            <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
+                        </tr>
+                    `).join('');
+                })
+                .catch(error => {
+                    console.error('Error loading messages:', error);
+                    document.getElementById('messagesTableBody').innerHTML = 
+                        '<tr><td colspan="9" class="text-center text-danger">Error loading messages</td></tr>';
+                });
+        }
+
+        function loadFailedMessages() {
+            fetch('/admin/api/messages/failed?limit=50')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('messagesTableBody');
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No failed messages found</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = data.map(msg => `
+                        <tr class="table-danger">
+                            <td><code>${msg.messageId}</code></td>
+                            <td>${msg.siteName}</td>
+                            <td><span class="badge ${msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info'}">${msg.channel}</span></td>
+                            <td>${msg.recipient}</td>
+                            <td><span class="badge bg-danger">${msg.status}</span></td>
+                            <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
+                            <td><small class="text-danger fw-bold">${msg.errorMessage || 'Unknown error'}</small></td>
+                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
+                            <td><small>-</small></td>
+                        </tr>
+                    `).join('');
+                })
+                .catch(error => {
+                    console.error('Error loading failed messages:', error);
+                    document.getElementById('messagesTableBody').innerHTML = 
+                        '<tr><td colspan="9" class="text-center text-danger">Error loading failed messages</td></tr>';
+                });
+        }
+
+        function showCreateSiteModal() {
+            const modal = new bootstrap.Modal(document.getElementById('createSiteModal'));
+            modal.show();
+        }
+
+        function createSite() {
+            const siteName = document.getElementById('siteName').value;
+            const description = document.getElementById('siteDescription').value;
+            
+            if (!siteName.trim()) {
+                alert('Site name is required');
+                return;
+            }
+
+            fetch('/admin/api/sites/create', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    siteName: siteName,
+                    description: description || null
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.apiKey) {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('createSiteModal'));
+                    modal.hide();
+                    alert(`Site created successfully!\n\nAPI Key: ${data.apiKey}\n\nPlease save this API key securely.`);
+                    document.getElementById('createSiteForm').reset();
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to create site'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error creating site: ' + error.message);
+            });
+        }
+
+        function showWhatsAppQRModal() {
+            const modal = new bootstrap.Modal(document.getElementById('whatsappQRModal'));
+            modal.show();
+        }
+
+        function getWhatsAppQRCode() {
+            const sessionName = document.getElementById('whatsappSession').value;
+            if (!sessionName.trim()) {
+                alert('Please enter a session name');
+                return;
+            }
+
+            const container = document.getElementById('qrCodeContainer');
+            const statusDiv = document.getElementById('qrCodeStatus');
+            
+            container.innerHTML = '<div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>';
+            statusDiv.style.display = 'none';
+
+            // First create session, then get QR code
+            fetch('/admin/api/whatsapp/session', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({sessionName: sessionName})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Get QR code
+                    return fetch(`/admin/api/whatsapp/qrcode?sessionName=${encodeURIComponent(sessionName)}`);
+                } else {
+                    throw new Error(data.error || 'Failed to create session');
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.qrCode) {
+                    container.innerHTML = `
+                        <p class="fw-bold">Scan this QR code with WhatsApp:</p>
+                        <img src="data:image/png;base64,${data.qrCode}" alt="QR Code" class="img-fluid">
+                        <p class="mt-3"><small class="text-muted">Session: ${sessionName}</small></p>
+                    `;
+                    statusDiv.className = 'alert alert-success';
+                    statusDiv.innerHTML = '<i class="bi bi-check-circle"></i> QR code generated successfully. Scan with WhatsApp to connect.';
+                    statusDiv.style.display = 'block';
+                } else {
+                    throw new Error(data.error || 'Failed to get QR code');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                container.innerHTML = `
+                    <p class="text-danger"><i class="bi bi-exclamation-triangle"></i> Error loading QR code</p>
+                    <p class="text-muted"><small>${error.message}</small></p>
+                    <p class="text-info mt-3"><i class="bi bi-info-circle"></i> Make sure WASender API key is configured</p>
+                `;
+                statusDiv.className = 'alert alert-danger';
+                statusDiv.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${error.message}`;
+                statusDiv.style.display = 'block';
+            });
+        }
+
+        // Load messages on page load
+        loadRecentMessages();
+
+        // Auto-refresh every 30 seconds
+        setInterval(refreshDashboard, 30000);
+    </script>
+</body>
+</html>
+

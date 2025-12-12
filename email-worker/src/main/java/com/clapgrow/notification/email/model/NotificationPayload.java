@@ -1,0 +1,22 @@
+package com.clapgrow.notification.email.model;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import lombok.Data;
+
+import java.util.Map;
+
+@Data
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class NotificationPayload {
+    private String messageId;
+    private String siteId;
+    private String channel;
+    private String recipient;
+    private String subject;
+    private String body;
+    private String fromEmail;
+    private String fromName;
+    private Boolean isHtml;
+    private Map<String, String> metadata;
+}
+

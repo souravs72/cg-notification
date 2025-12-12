@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: whatsapp-worker
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/notification_db
+    username: notification_user
+    password: notification_pass
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+
+wasender:
+  api:
+    base-url: https://wasenderapi.com/api
+    key: ${WASENDER_API_KEY:your-wasender-api-key}
+
+server:
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.clapgrow.notification: DEBUG
+    org.springframework.kafka: INFO
+

@@ -1,0 +1,10 @@
+#!/bin/bash
+echo "Starting Notification System Services..."
+echo ""
+echo "NOTE: Docker daemon needs to be running for infrastructure."
+echo "Please start Docker Desktop or run: sudo systemctl start docker"
+echo ""
+echo "Once Docker is running, execute:"
+echo "  docker-compose up -d postgres zookeeper kafka"
+echo ""
+echo "Then you can start the Spring Boot services manually."

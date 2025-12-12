@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package com.clapgrow.notification.proto;
+
+option java_multiple_files = true;
+option java_package = "com.clapgrow.notification.proto";
+option java_outer_classname = "NotificationProto";
+
+// Notification Service for inter-service communication
+service NotificationService {
+    rpc ReportDeliveryStatus (DeliveryStatusRequest) returns (DeliveryStatusResponse);
+    rpc GetMetrics (MetricsRequest) returns (MetricsResponse);
+}
+
+// Delivery Status Request
+message DeliveryStatusRequest {
+    string message_id = 1;
+    string site_id = 2;
+    NotificationChannel channel = 3;
+    DeliveryStatus status = 4;
+    string error_message = 5;
+    int64 timestamp = 6;
+    map<string, string> metadata = 7;
+}
+
+// Delivery Status Response
+message DeliveryStatusResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// Metrics Request
+message MetricsRequest {
+    string site_id = 1;
+    int64 start_timestamp = 2;
+    int64 end_timestamp = 3;
+    NotificationChannel channel = 4;
+}
+
+// Metrics Response
+message MetricsResponse {
+    string site_id = 1;
+    int64 total_sent = 2;
+    int64 total_success = 3;
+    int64 total_failed = 4;
+    map<string, ChannelMetrics> channel_metrics = 5;
+    repeated DailyMetrics daily_metrics = 6;
+}
+
+// Channel Metrics
+message ChannelMetrics {
+    NotificationChannel channel = 1;
+    int64 total_sent = 2;
+    int64 total_success = 3;
+    int64 total_failed = 4;
+}
+
+// Daily Metrics
+message DailyMetrics {
+    string date = 1;
+    int64 total_sent = 2;
+    int64 total_success = 3;
+    int64 total_failed = 4;
+    map<string, ChannelMetrics> channel_metrics = 5;
+}
+
+// Notification Channel Enum
+enum NotificationChannel {
+    EMAIL = 0;
+    WHATSAPP = 1;
+    SMS = 2;
+    PUSH = 3;
+}
+
+// Delivery Status Enum
+enum DeliveryStatus {
+    PENDING = 0;
+    SENT = 1;
+    DELIVERED = 2;
+    FAILED = 3;
+    BOUNCED = 4;
+    REJECTED = 5;
+}
