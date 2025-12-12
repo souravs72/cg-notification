@@ -20,7 +20,10 @@ import java.io.IOException;
 @Slf4j
 public class SendGridService {
     
-    private final SendGrid sendGrid;
+    private final SendGrid defaultSendGrid;
+    
+    @Value("${sendgrid.api.key}")
+    private String defaultSendGridApiKey;
     
     @Value("${sendgrid.from.email: noreply@example.com}")
     private String defaultFromEmail;
@@ -30,6 +33,8 @@ public class SendGridService {
 
     public boolean sendEmail(NotificationPayload payload) {
         try {
+            SendGrid sendGrid = getSendGridForPayload(payload);
+            
             Email from = new Email(
                 payload.getFromEmail() != null ? payload.getFromEmail() : defaultFromEmail,
                 payload.getFromName() != null ? payload.getFromName() : defaultFromName
@@ -65,6 +70,13 @@ public class SendGridService {
             log.error("Error sending email via SendGrid", e);
             return false;
         }
+    }
+    
+    private SendGrid getSendGridForPayload(NotificationPayload payload) {
+        if (payload.getSendgridApiKey() != null && !payload.getSendgridApiKey().trim().isEmpty()) {
+            return new SendGrid(payload.getSendgridApiKey());
+        }
+        return defaultSendGrid;
     }
 }
 

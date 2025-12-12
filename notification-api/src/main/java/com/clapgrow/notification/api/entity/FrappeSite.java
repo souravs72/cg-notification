@@ -41,5 +41,14 @@ public class FrappeSite extends BaseAuditableEntity {
 
     @Column(name = "whatsapp_session_name", length = 255)
     private String whatsappSessionName;
+
+    @Column(name = "email_from_address", length = 255)
+    private String emailFromAddress;
+
+    @Column(name = "email_from_name", length = 255)
+    private String emailFromName;
+
+    @Column(name = "sendgrid_api_key", length = 255)
+    private String sendgridApiKey;
 }
 
