@@ -5,19 +5,33 @@ A production-grade, multi-tenant notification platform built with Spring Boot, K
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐
-│  Notification   │
-│      API        │ ← REST Gateway + Auth + Kafka Producer
-└────────┬────────┘
-         │
-         ├─── Kafka Topics ───┐
-         │                    │
-    ┌────▼────┐         ┌────▼────┐
-    │  Email  │         │ WhatsApp │
-    │ Worker │         │  Worker  │
-    └─────────┘         └─────────┘
-         │                    │
-         └─────── PostgreSQL ─┘
+┌─────────────────────────────────────────────────────────────┐
+│                    External Clients                          │
+│              (Frappe, External Systems)                     │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ HTTPS/REST
+┌──────────────────────▼──────────────────────────────────────┐
+│                  Notification API                           │
+│  ┌────────────────────────────────────────────────────┐   │
+│  │  REST Controllers + Authentication + Kafka Producer│   │
+│  └────────────────────────────────────────────────────┘   │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ Kafka Topics
+        ┌──────────────┴──────────────┐
+        │                             │
+┌───────▼────────┐          ┌────────▼────────┐
+│  Email Worker  │          │ WhatsApp Worker  │
+│  (SendGrid)    │          │  (WASender)      │
+└───────┬────────┘          └────────┬────────┘
+        │                             │
+        └──────────────┬──────────────┘
+                       │ JDBC
+        ┌──────────────▼──────────────┐
+        │      PostgreSQL Database     │
+        │  - frappe_sites             │
+        │  - message_logs             │
+        │  - site_metrics_daily       │
+        └──────────────────────────────┘
 ```
 
 ### Components
@@ -26,6 +40,20 @@ A production-grade, multi-tenant notification platform built with Spring Boot, K
 2. **email-worker**: Kafka consumer that sends emails via SendGrid
 3. **whatsapp-worker**: Kafka consumer that sends WhatsApp messages via WASender
 4. **common-proto**: Shared gRPC protocol buffer definitions
+
+### Data Flow
+
+1. **Client** sends notification request to API with `X-Site-Key` header
+2. **API** validates API key, creates message log (status: PENDING), publishes to Kafka topic
+3. **Worker** consumes from Kafka, sends via provider (SendGrid/WASender)
+4. **Worker** updates message log status (SENT → DELIVERED or FAILED)
+5. **Metrics** are automatically aggregated daily via database triggers
+
+### Security
+
+- **API Key Authentication**: BCrypt hashed keys (12 rounds)
+- **Site Isolation**: Each site can only access its own data
+- **One-time Key Generation**: API keys shown only once during registration
 
 ## 🚀 Quick Start
 
@@ -90,115 +118,35 @@ cd whatsapp-worker
 mvn spring-boot:run
 ```
 
-## 📡 API Endpoints
+## 📚 Documentation
 
-### Site Registration
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete deployment guide (Docker, local, production)
+- **[API.md](API.md)** - Complete API reference documentation
+- **[GITFLOW.md](GITFLOW.md)** - GitFlow workflow guide
 
-**Register a new Frappe site:**
+## 📡 Quick API Examples
+
+See [API.md](API.md) for complete API documentation.
+
+### Register Site
 
 ```bash
-POST /api/v1/site/register
-Content-Type: application/json
-
-{
-  "siteName": "my-frappe-site",
-  "description": "Production site"
-}
+curl -X POST http://localhost:8080/api/v1/site/register \
+  -H "Content-Type: application/json" \
+  -d '{"siteName": "my-site"}'
 ```
-
-**Response:**
-```json
-{
-  "siteId": "uuid",
-  "siteName": "my-frappe-site",
-  "apiKey": "generated-api-key",
-  "message": "Site registered successfully..."
-}
-```
-
-**⚠️ IMPORTANT**: Save the `apiKey` securely - it's only shown once!
 
 ### Send Notification
 
-**Single notification:**
-
 ```bash
-POST /api/v1/notifications/send
-X-Site-Key: your-api-key
-Content-Type: application/json
-
-{
-  "channel": "EMAIL",
-  "recipient": "user@example.com",
-  "subject": "Welcome!",
-  "body": "Welcome to our service",
-  "isHtml": true
-}
-```
-
-**WhatsApp notification:**
-
-```bash
-POST /api/v1/notifications/send
-X-Site-Key: your-api-key
-Content-Type: application/json
-
-{
-  "channel": "WHATSAPP",
-  "recipient": "1234567890@s.whatsapp.net",
-  "body": "Hello from WhatsApp!"
-}
-```
-
-**WhatsApp with image:**
-
-```bash
-{
-  "channel": "WHATSAPP",
-  "recipient": "1234567890@s.whatsapp.net",
-  "imageUrl": "https://example.com/image.jpg",
-  "caption": "Check out this image!"
-}
-```
-
-**Bulk notifications:**
-
-```bash
-POST /api/v1/notifications/send/bulk
-X-Site-Key: your-api-key
-Content-Type: application/json
-
-{
-  "notifications": [
-    {
-      "channel": "EMAIL",
-      "recipient": "user1@example.com",
-      "subject": "Hello",
-      "body": "Message 1"
-    },
-    {
-      "channel": "WHATSAPP",
-      "recipient": "1234567890@s.whatsapp.net",
-      "body": "Message 2"
-    }
-  ]
-}
-```
-
-### Metrics
-
-**Get site summary:**
-
-```bash
-GET /api/v1/metrics/site/summary
-X-Site-Key: your-api-key
-```
-
-**Get daily metrics:**
-
-```bash
-GET /api/v1/metrics/site/daily?startDate=2024-01-01&endDate=2024-01-31
-X-Site-Key: your-api-key
+curl -X POST http://localhost:8080/api/v1/notifications/send \
+  -H "Content-Type: application/json" \
+  -H "X-Site-Key: your-api-key" \
+  -d '{
+    "channel": "WHATSAPP",
+    "recipient": "+1234567890",
+    "body": "Hello!"
+  }'
 ```
 
 ## 🔐 Security
