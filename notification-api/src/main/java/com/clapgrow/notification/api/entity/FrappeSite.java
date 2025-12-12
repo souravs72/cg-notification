@@ -38,5 +38,8 @@ public class FrappeSite extends BaseAuditableEntity {
 
     @Column(name = "description", length = 500)
     private String description;
+
+    @Column(name = "whatsapp_session_name", length = 255)
+    private String whatsappSessionName;
 }
 

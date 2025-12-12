@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -19,6 +20,7 @@ public class SiteService {
     
     private final FrappeSiteRepository siteRepository;
     private final ApiKeyService apiKeyService;
+    private final WasenderQRService wasenderQRService;
 
     @Transactional
     public SiteRegistrationResponse registerSite(SiteRegistrationRequest request) {
@@ -28,18 +30,28 @@ public class SiteService {
 
         String apiKey = apiKeyService.generateApiKey();
         String apiKeyHash = apiKeyService.hashApiKey(apiKey);
+        
+        String whatsappSessionName = generateWhatsAppSessionName(request.getSiteName());
+        Map<String, Object> sessionResult = wasenderQRService.createSession(whatsappSessionName);
+        
+        if (!Boolean.TRUE.equals(sessionResult.get("success"))) {
+            log.warn("Failed to create WhatsApp session for site {}, continuing without session", 
+                request.getSiteName());
+        }
 
         FrappeSite site = new FrappeSite();
         site.setSiteName(request.getSiteName());
         site.setApiKey(apiKey);
         site.setApiKeyHash(apiKeyHash);
         site.setDescription(request.getDescription());
+        site.setWhatsappSessionName(whatsappSessionName);
         site.setIsActive(true);
         site.setCreatedBy("SYSTEM");
 
         site = siteRepository.save(site);
 
-        log.info("Registered new site: {} with ID: {}", site.getSiteName(), site.getId());
+        log.info("Registered new site: {} with ID: {} and WhatsApp session: {}", 
+            site.getSiteName(), site.getId(), whatsappSessionName);
 
         return new SiteRegistrationResponse(
             site.getId(),
@@ -47,6 +59,13 @@ public class SiteService {
             apiKey,
             "Site registered successfully. Please save your API key securely."
         );
+    }
+    
+    private String generateWhatsAppSessionName(String siteName) {
+        return "site-" + siteName.toLowerCase()
+            .replaceAll("[^a-z0-9]", "-")
+            .replaceAll("-+", "-")
+            .replaceAll("^-|-$", "");
     }
 
     public FrappeSite validateApiKey(String apiKey) {
