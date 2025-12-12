@@ -270,6 +270,7 @@
                                         <th>Success Rate</th>
                                         <th>Email</th>
                                         <th>WhatsApp</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -295,9 +296,16 @@
                                             </span>
                                             <span th:if="${site.channelMetrics.WHATSAPP == null}">-</span>
                                         </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-danger" 
+                                                    th:onclick="'deleteSite(\'' + ${site.siteId} + '\', \'' + ${site.siteName} + '\')'"
+                                                    title="Delete Site">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
                                     </tr>
                                     <tr th:if="${#lists.isEmpty(metrics.siteMetrics)}">
-                                        <td colspan="7" class="text-center text-muted">No sites registered yet</td>
+                                        <td colspan="8" class="text-center text-muted">No sites registered yet</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -577,6 +585,34 @@
         function showCreateSiteModal() {
             const modal = new bootstrap.Modal(document.getElementById('createSiteModal'));
             modal.show();
+        }
+
+        function deleteSite(siteId, siteName) {
+            if (!confirm(`Are you sure you want to delete site "${siteName}"?\n\nThis will deactivate the site and prevent it from sending notifications.`)) {
+                return;
+            }
+
+            const adminKey = document.querySelector('meta[name="admin-api-key"]').content;
+            
+            fetch(`/admin/api/sites/${siteId}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-Admin-Key': adminKey
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Site "${siteName}" deleted successfully.`);
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to delete site'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error deleting site: ' + error.message);
+            });
         }
 
         function createSite() {

@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -68,7 +69,19 @@ public class SiteService {
     }
 
     public List<FrappeSite> getAllSites() {
-        return siteRepository.findAll();
+        return siteRepository.findAll().stream()
+            .filter(site -> !Boolean.TRUE.equals(site.getIsDeleted()))
+            .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void deleteSite(UUID siteId) {
+        FrappeSite site = getSiteById(siteId);
+        site.setIsActive(false);
+        site.setIsDeleted(true);
+        site.setUpdatedBy("ADMIN");
+        siteRepository.save(site);
+        log.info("Deleted site: {} with ID: {}", site.getSiteName(), siteId);
     }
 }
 
