@@ -298,8 +298,9 @@
                                             <span th:if="${site.channelMetrics.WHATSAPP == null}">-</span>
                                         </td>
                                         <td>
-                                            <button class="btn btn-sm btn-danger" 
-                                                    th:onclick="'deleteSite(\'' + ${site.siteId} + '\', \'' + ${site.siteName} + '\')'"
+                                            <button class="btn btn-sm btn-danger delete-site-btn" 
+                                                    th:data-site-id="${site.siteId}"
+                                                    th:data-site-name="${site.siteName}"
                                                     title="Delete Site">
                                                 <i class="bi bi-trash"></i>
                                             </button>
@@ -587,6 +588,17 @@
             const modal = new bootstrap.Modal(document.getElementById('createSiteModal'));
             modal.show();
         }
+
+        // Add event listeners for delete buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.delete-site-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const siteId = this.getAttribute('data-site-id');
+                    const siteName = this.getAttribute('data-site-name');
+                    deleteSite(siteId, siteName);
+                });
+            });
+        });
 
         function deleteSite(siteId, siteName) {
             if (!confirm(`Are you sure you want to delete site "${siteName}"?\n\nThis will deactivate the site and prevent it from sending notifications.`)) {

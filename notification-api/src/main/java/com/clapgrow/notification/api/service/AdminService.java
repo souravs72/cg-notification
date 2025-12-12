@@ -29,9 +29,10 @@ public class AdminService {
     private final FrappeSiteRepository siteRepository;
     private final MessageLogRepository messageLogRepository;
     private final MetricsService metricsService;
+    private final SiteService siteService;
 
     public AdminDashboardResponse getDashboardMetrics() {
-        List<FrappeSite> allSites = siteRepository.findAll();
+        List<FrappeSite> allSites = siteService.getAllSites();
         
         List<AdminSiteMetrics> siteMetricsList = allSites.stream()
             .map(site -> {
@@ -85,7 +86,7 @@ public class AdminService {
         Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
         List<MessageLog> messages = messageLogRepository.findAll(pageable).getContent();
         
-        Map<java.util.UUID, String> siteNameMap = siteRepository.findAll().stream()
+        Map<java.util.UUID, String> siteNameMap = siteService.getAllSites().stream()
             .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
         
         return messages.stream()
@@ -117,7 +118,7 @@ public class AdminService {
             .limit(limit)
             .collect(Collectors.toList());
         
-        Map<java.util.UUID, String> siteNameMap = siteRepository.findAll().stream()
+        Map<java.util.UUID, String> siteNameMap = siteService.getAllSites().stream()
             .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
         
         return messages.stream()
@@ -147,7 +148,7 @@ public class AdminService {
         );
         List<MessageLog> messages = messagePage.getContent();
         
-        Map<java.util.UUID, String> siteNameMap = siteRepository.findAll().stream()
+        Map<java.util.UUID, String> siteNameMap = siteService.getAllSites().stream()
             .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
         
         return messages.stream()

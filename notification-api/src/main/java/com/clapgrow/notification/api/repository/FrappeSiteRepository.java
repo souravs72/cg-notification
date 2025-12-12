@@ -12,5 +12,6 @@ public interface FrappeSiteRepository extends JpaRepository<FrappeSite, UUID> {
     Optional<FrappeSite> findBySiteName(String siteName);
     Optional<FrappeSite> findByApiKeyHash(String apiKeyHash);
     boolean existsBySiteName(String siteName);
+    boolean existsBySiteNameAndIsDeletedFalse(String siteName);
 }
 

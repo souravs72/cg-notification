@@ -23,7 +23,7 @@ public class SiteService {
 
     @Transactional
     public SiteRegistrationResponse registerSite(SiteRegistrationRequest request) {
-        if (siteRepository.existsBySiteName(request.getSiteName())) {
+        if (siteRepository.existsBySiteNameAndIsDeletedFalse(request.getSiteName())) {
             throw new IllegalArgumentException("Site with name '" + request.getSiteName() + "' already exists");
         }
 

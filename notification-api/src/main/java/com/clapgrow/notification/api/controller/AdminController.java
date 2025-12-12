@@ -76,8 +76,8 @@ public class AdminController {
 
     @DeleteMapping("/api/sites/{siteId}")
     public ResponseEntity<?> deleteSite(
-            @RequestHeader("X-Admin-Key") String adminKey,
-            @PathVariable String siteId) {
+            @RequestHeader(name = "X-Admin-Key", required = true) String adminKey,
+            @PathVariable(name = "siteId") String siteId) {
         try {
             adminAuthService.validateAdminKey(adminKey);
             siteService.deleteSite(java.util.UUID.fromString(siteId));
