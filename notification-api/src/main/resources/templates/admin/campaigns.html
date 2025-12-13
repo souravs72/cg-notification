@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="admin-api-key" th:content="${adminApiKey}">
+    <title>Campaign Management - Notification System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        .campaign-form {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .media-preview {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .recipient-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            background: white;
+        }
+        .recipient-item {
+            padding: 5px;
+            margin: 2px 0;
+            background: #e9ecef;
+            border-radius: 3px;
+        }
+        .status-badge {
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-megaphone"></i> Campaign Management
+            </span>
+            <a href="/admin/dashboard" class="btn btn-outline-light">
+                <i class="bi bi-speedometer2"></i> Dashboard
+            </a>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <ul class="nav nav-tabs mb-4" id="campaignTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="single-tab" data-bs-toggle="tab" data-bs-target="#single" type="button">
+                    <i class="bi bi-send"></i> Send Single Message
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="bulk-tab" data-bs-toggle="tab" data-bs-target="#bulk" type="button">
+                    <i class="bi bi-send-fill"></i> Send Bulk Messages
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="schedule-tab" data-bs-toggle="tab" data-bs-target="#schedule" type="button">
+                    <i class="bi bi-clock"></i> Schedule Single Message
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="campaign-tab" data-bs-toggle="tab" data-bs-target="#campaign" type="button">
+                    <i class="bi bi-calendar-event"></i> Create Campaign
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="campaignTabContent">
+            <!-- Single Message Tab -->
+            <div class="tab-pane fade show active" id="single" role="tabpanel">
+                <div class="campaign-form">
+                    <h5><i class="bi bi-send"></i> Send Single Message</h5>
+                    <form id="singleMessageForm">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Site</label>
+                                <select class="form-select" id="singleSiteId" required>
+                                    <option value="">Select Site</option>
+                                    <option th:each="site : ${sites}" th:value="${site.id}" th:text="${site.siteName}"></option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Channel</label>
+                                <select class="form-select" id="singleChannel" required>
+                                    <option value="WHATSAPP">WhatsApp</option>
+                                    <option value="EMAIL">Email</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Recipient</label>
+                            <input type="text" class="form-control" id="singleRecipient" placeholder="+1234567890 or email@example.com" required>
+                        </div>
+                        <div class="mb-3" id="singleSubjectGroup" style="display: none;">
+                            <label class="form-label">Subject</label>
+                            <input type="text" class="form-control" id="singleSubject" placeholder="Email subject">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Message Body</label>
+                            <textarea class="form-control" id="singleBody" rows="4" placeholder="Enter your message" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Media (Optional)</label>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="singleImageUrl" placeholder="Image URL">
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="singleVideoUrl" placeholder="Video URL">
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="singleDocumentUrl" placeholder="Document URL">
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="singleFileName" placeholder="File Name (for document)">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="singleCaption" placeholder="Caption">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-send"></i> Send Message
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Bulk Messages Tab -->
+            <div class="tab-pane fade" id="bulk" role="tabpanel">
+                <div class="campaign-form">
+                    <h5><i class="bi bi-send-fill"></i> Send Bulk Messages</h5>
+                    <form id="bulkMessageForm">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Site</label>
+                                <select class="form-select" id="bulkSiteId" required>
+                                    <option value="">Select Site</option>
+                                    <option th:each="site : ${sites}" th:value="${site.id}" th:text="${site.siteName}"></option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Channel</label>
+                                <select class="form-select" id="bulkChannel" required>
+                                    <option value="WHATSAPP">WhatsApp</option>
+                                    <option value="EMAIL">Email</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Recipients (one per line)</label>
+                            <textarea class="form-control" id="bulkRecipients" rows="6" placeholder="+1234567890&#10;+9876543210&#10;email@example.com" required></textarea>
+                            <small class="form-text text-muted">Enter one recipient per line</small>
+                        </div>
+                        <div class="mb-3" id="bulkSubjectGroup" style="display: none;">
+                            <label class="form-label">Subject</label>
+                            <input type="text" class="form-control" id="bulkSubject" placeholder="Email subject">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Message Body</label>
+                            <textarea class="form-control" id="bulkBody" rows="4" placeholder="Enter your message" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Media (Optional - Applied to all messages)</label>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="bulkImageUrl" placeholder="Image URL">
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="bulkVideoUrl" placeholder="Video URL">
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="bulkDocumentUrl" placeholder="Document URL">
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="bulkFileName" placeholder="File Name (for document)">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="bulkCaption" placeholder="Caption">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-send-fill"></i> Send Bulk Messages
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Schedule Single Message Tab -->
+            <div class="tab-pane fade" id="schedule" role="tabpanel">
+                <div class="campaign-form">
+                    <h5><i class="bi bi-clock"></i> Schedule Single Message</h5>
+                    <form id="scheduleMessageForm">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Site</label>
+                                <select class="form-select" id="scheduleSiteId" required>
+                                    <option value="">Select Site</option>
+                                    <option th:each="site : ${sites}" th:value="${site.id}" th:text="${site.siteName}"></option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Channel</label>
+                                <select class="form-select" id="scheduleChannel" required>
+                                    <option value="WHATSAPP">WhatsApp</option>
+                                    <option value="EMAIL">Email</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Recipient</label>
+                            <input type="text" class="form-control" id="scheduleRecipient" placeholder="+1234567890 or email@example.com" required>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Scheduled Date</label>
+                                <input type="date" class="form-control" id="scheduleDate" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Scheduled Time</label>
+                                <input type="time" class="form-control" id="scheduleTime" required>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="scheduleSubjectGroup" style="display: none;">
+                            <label class="form-label">Subject</label>
+                            <input type="text" class="form-control" id="scheduleSubject" placeholder="Email subject">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Message Body</label>
+                            <textarea class="form-control" id="scheduleBody" rows="4" placeholder="Enter your message" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Media (Optional)</label>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="scheduleImageUrl" placeholder="Image URL">
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="scheduleVideoUrl" placeholder="Video URL">
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="scheduleDocumentUrl" placeholder="Document URL">
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="scheduleFileName" placeholder="File Name (for document)">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="scheduleCaption" placeholder="Caption">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-clock"></i> Schedule Message
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Campaign Tab -->
+            <div class="tab-pane fade" id="campaign" role="tabpanel">
+                <div class="campaign-form">
+                    <h5><i class="bi bi-calendar-event"></i> Create Campaign (Scheduled Bulk Messages)</h5>
+                    <form id="campaignForm">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Site</label>
+                                <select class="form-select" id="campaignSiteId" required>
+                                    <option value="">Select Site</option>
+                                    <option th:each="site : ${sites}" th:value="${site.id}" th:text="${site.siteName}"></option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Channel</label>
+                                <select class="form-select" id="campaignChannel" required>
+                                    <option value="WHATSAPP">WhatsApp</option>
+                                    <option value="EMAIL">Email</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Recipients (one per line)</label>
+                            <textarea class="form-control" id="campaignRecipients" rows="6" placeholder="+1234567890&#10;+9876543210&#10;email@example.com" required></textarea>
+                            <small class="form-text text-muted">Enter one recipient per line</small>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Scheduled Date</label>
+                                <input type="date" class="form-control" id="campaignDate" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Scheduled Time</label>
+                                <input type="time" class="form-control" id="campaignTime" required>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="campaignSubjectGroup" style="display: none;">
+                            <label class="form-label">Subject</label>
+                            <input type="text" class="form-control" id="campaignSubject" placeholder="Email subject">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Message Body</label>
+                            <textarea class="form-control" id="campaignBody" rows="4" placeholder="Enter your message" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Media (Optional - Applied to all messages)</label>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="campaignImageUrl" placeholder="Image URL">
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="campaignVideoUrl" placeholder="Video URL">
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="url" class="form-control" id="campaignDocumentUrl" placeholder="Document URL">
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="campaignFileName" placeholder="File Name (for document)">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="campaignCaption" placeholder="Caption">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-calendar-event"></i> Create Campaign
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="mt-4" style="display: none;">
+            <div class="alert alert-info">
+                <h5><i class="bi bi-info-circle"></i> Results</h5>
+                <div id="resultsContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Set today's date as minimum for date inputs
+        document.getElementById('scheduleDate').min = new Date().toISOString().split('T')[0];
+        document.getElementById('campaignDate').min = new Date().toISOString().split('T')[0];
+
+        // Show/hide subject field based on channel
+        function toggleSubject(channelId, subjectGroupId) {
+            const channel = document.getElementById(channelId);
+            const subjectGroup = document.getElementById(subjectGroupId);
+            if (channel.value === 'EMAIL') {
+                subjectGroup.style.display = 'block';
+            } else {
+                subjectGroup.style.display = 'none';
+            }
+        }
+
+        ['singleChannel', 'bulkChannel', 'scheduleChannel', 'campaignChannel'].forEach(channelId => {
+            document.getElementById(channelId).addEventListener('change', function() {
+                const subjectGroupId = channelId.replace('Channel', 'SubjectGroup');
+                toggleSubject(channelId, subjectGroupId);
+            });
+        });
+
+        // Single Message Form
+        document.getElementById('singleMessageForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const siteId = document.getElementById('singleSiteId').value;
+            const payload = {
+                channel: document.getElementById('singleChannel').value,
+                recipient: document.getElementById('singleRecipient').value,
+                body: document.getElementById('singleBody').value,
+                imageUrl: document.getElementById('singleImageUrl').value || null,
+                videoUrl: document.getElementById('singleVideoUrl').value || null,
+                documentUrl: document.getElementById('singleDocumentUrl').value || null,
+                fileName: document.getElementById('singleFileName').value || null,
+                caption: document.getElementById('singleCaption').value || null
+            };
+            if (document.getElementById('singleChannel').value === 'EMAIL') {
+                payload.subject = document.getElementById('singleSubject').value || null;
+            }
+
+            try {
+                const adminKey = document.querySelector('meta[name="admin-api-key"]').content;
+                const response = await fetch(`/admin/campaigns/api/send?siteId=${siteId}`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Admin-Key': adminKey
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                showResults(result, result.success);
+                if (result.success) {
+                    this.reset();
+                }
+            } catch (error) {
+                showResults({ error: error.message }, false);
+            }
+        });
+
+        // Bulk Messages Form
+        document.getElementById('bulkMessageForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const siteId = document.getElementById('bulkSiteId').value;
+            const recipients = document.getElementById('bulkRecipients').value.split('\n').filter(r => r.trim());
+            const notifications = recipients.map(recipient => {
+                const notif = {
+                    channel: document.getElementById('bulkChannel').value,
+                    recipient: recipient.trim(),
+                    body: document.getElementById('bulkBody').value,
+                    imageUrl: document.getElementById('bulkImageUrl').value || null,
+                    videoUrl: document.getElementById('bulkVideoUrl').value || null,
+                    documentUrl: document.getElementById('bulkDocumentUrl').value || null,
+                    fileName: document.getElementById('bulkFileName').value || null,
+                    caption: document.getElementById('bulkCaption').value || null
+                };
+                if (document.getElementById('bulkChannel').value === 'EMAIL') {
+                    notif.subject = document.getElementById('bulkSubject').value || null;
+                }
+                return notif;
+            });
+
+            try {
+                const adminKey = document.querySelector('meta[name="admin-api-key"]').content;
+                const response = await fetch(`/admin/campaigns/api/send/bulk?siteId=${siteId}`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Admin-Key': adminKey
+                    },
+                    body: JSON.stringify({ notifications })
+                });
+                const result = await response.json();
+                showResults(result, result.success);
+                if (result.success) {
+                    this.reset();
+                }
+            } catch (error) {
+                showResults({ error: error.message }, false);
+            }
+        });
+
+        // Schedule Single Message Form
+        document.getElementById('scheduleMessageForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const siteId = document.getElementById('scheduleSiteId').value;
+            const date = document.getElementById('scheduleDate').value;
+            const time = document.getElementById('scheduleTime').value;
+            const scheduledAt = `${date}T${time}:00`;
+
+            const payload = {
+                channel: document.getElementById('scheduleChannel').value,
+                recipient: document.getElementById('scheduleRecipient').value,
+                body: document.getElementById('scheduleBody').value,
+                scheduledAt: scheduledAt,
+                imageUrl: document.getElementById('scheduleImageUrl').value || null,
+                videoUrl: document.getElementById('scheduleVideoUrl').value || null,
+                documentUrl: document.getElementById('scheduleDocumentUrl').value || null,
+                fileName: document.getElementById('scheduleFileName').value || null,
+                caption: document.getElementById('scheduleCaption').value || null
+            };
+            if (document.getElementById('scheduleChannel').value === 'EMAIL') {
+                payload.subject = document.getElementById('scheduleSubject').value || null;
+            }
+
+            try {
+                const adminKey = document.querySelector('meta[name="admin-api-key"]').content;
+                const response = await fetch(`/admin/campaigns/api/schedule?siteId=${siteId}`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Admin-Key': adminKey
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                showResults(result, result.success);
+                if (result.success) {
+                    this.reset();
+                }
+            } catch (error) {
+                showResults({ error: error.message }, false);
+            }
+        });
+
+        // Campaign Form
+        document.getElementById('campaignForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const siteId = document.getElementById('campaignSiteId').value;
+            const recipients = document.getElementById('campaignRecipients').value.split('\n').filter(r => r.trim());
+            const date = document.getElementById('campaignDate').value;
+            const time = document.getElementById('campaignTime').value;
+            const scheduledAt = `${date}T${time}:00`;
+
+            const notifications = recipients.map(recipient => {
+                const notif = {
+                    channel: document.getElementById('campaignChannel').value,
+                    recipient: recipient.trim(),
+                    body: document.getElementById('campaignBody').value,
+                    scheduledAt: scheduledAt,
+                    imageUrl: document.getElementById('campaignImageUrl').value || null,
+                    videoUrl: document.getElementById('campaignVideoUrl').value || null,
+                    documentUrl: document.getElementById('campaignDocumentUrl').value || null,
+                    fileName: document.getElementById('campaignFileName').value || null,
+                    caption: document.getElementById('campaignCaption').value || null
+                };
+                if (document.getElementById('campaignChannel').value === 'EMAIL') {
+                    notif.subject = document.getElementById('campaignSubject').value || null;
+                }
+                return notif;
+            });
+
+            try {
+                const adminKey = document.querySelector('meta[name="admin-api-key"]').content;
+                const response = await fetch(`/admin/campaigns/api/schedule/bulk?siteId=${siteId}`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Admin-Key': adminKey
+                    },
+                    body: JSON.stringify({ notifications })
+                });
+                const result = await response.json();
+                showResults(result, result.success);
+                if (result.success) {
+                    this.reset();
+                }
+            } catch (error) {
+                showResults({ error: error.message }, false);
+            }
+        });
+
+        function showResults(result, success) {
+            const resultsSection = document.getElementById('resultsSection');
+            const resultsContent = document.getElementById('resultsContent');
+            resultsSection.style.display = 'block';
+            
+            if (success) {
+                resultsSection.className = 'mt-4';
+                resultsContent.innerHTML = `
+                    <div class="alert alert-success">
+                        <strong>Success!</strong><br>
+                        ${result.messageId ? `Message ID: <code>${result.messageId}</code><br>` : ''}
+                        ${result.totalScheduled ? `Total Scheduled: ${result.totalScheduled}<br>` : ''}
+                        ${result.totalAccepted ? `Total Accepted: ${result.totalAccepted}<br>` : ''}
+                        ${result.message || result.status || ''}
+                    </div>
+                `;
+            } else {
+                resultsSection.className = 'mt-4';
+                resultsContent.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error!</strong><br>
+                        ${result.error || 'Unknown error occurred'}
+                    </div>
+                `;
+            }
+            
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
+

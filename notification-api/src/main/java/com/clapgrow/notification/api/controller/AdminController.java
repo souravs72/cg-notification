@@ -3,10 +3,12 @@ package com.clapgrow.notification.api.controller;
 import com.clapgrow.notification.api.dto.AdminDashboardResponse;
 import com.clapgrow.notification.api.dto.MessageDetailResponse;
 import com.clapgrow.notification.api.dto.SiteRegistrationRequest;
+import com.clapgrow.notification.api.service.AdminAuthService;
 import com.clapgrow.notification.api.service.AdminService;
 import com.clapgrow.notification.api.service.SiteService;
 import com.clapgrow.notification.api.service.WasenderQRService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -24,11 +26,13 @@ public class AdminController {
     private final AdminService adminService;
     private final SiteService siteService;
     private final WasenderQRService wasenderQRService;
+    private final AdminAuthService adminAuthService;
 
     @GetMapping("/dashboard")
-    public String dashboard(Model model) {
+    public String dashboard(Model model, @Value("${admin.api-key:}") String adminApiKey) {
         AdminDashboardResponse metrics = adminService.getDashboardMetrics();
         model.addAttribute("metrics", metrics);
+        model.addAttribute("adminApiKey", adminApiKey);
         return "admin/dashboard";
     }
 
@@ -52,6 +56,13 @@ public class AdminController {
         return ResponseEntity.ok(messages);
     }
 
+    @GetMapping("/api/messages/scheduled")
+    public ResponseEntity<List<MessageDetailResponse>> getScheduledMessages(
+            @RequestParam(name = "limit", defaultValue = "50") int limit) {
+        List<MessageDetailResponse> messages = adminService.getScheduledMessages(limit);
+        return ResponseEntity.ok(messages);
+    }
+
     @PostMapping("/api/sites/create")
     public ResponseEntity<?> createSite(@RequestBody SiteRegistrationRequest request) {
         try {
@@ -60,6 +71,28 @@ public class AdminController {
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+
+    @DeleteMapping("/api/sites/{siteId}")
+    public ResponseEntity<?> deleteSite(
+            @RequestHeader(name = "X-Admin-Key", required = true) String adminKey,
+            @PathVariable(name = "siteId") String siteId) {
+        try {
+            adminAuthService.validateAdminKey(adminKey);
+            siteService.deleteSite(java.util.UUID.fromString(siteId));
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Site deleted successfully");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (SecurityException e) {
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(401).body(errorResponse);
         }
     }
 

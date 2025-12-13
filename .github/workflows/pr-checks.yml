@@ -1,0 +1,64 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR title format
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          scopes: |
+            api
+            worker
+            proto
+            docker
+            ci
+            docs
+
+      - name: Check for large files
+        run: |
+          MAX_SIZE=10485760
+          large_files=$(find . -type f -size +${MAX_SIZE}c -not -path './.git/*' -not -path './target/*' -not -path './node_modules/*')
+          if [ -n "$large_files" ]; then
+            echo "❌ Large files detected:"
+            echo "$large_files"
+            exit 1
+          fi
+
+      - name: Check for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+        continue-on-error: true
+
+      - name: Validate commit messages
+        uses: wagoid/commitlint-github-action@v5
+        continue-on-error: true

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="admin-api-key" th:content="${adminApiKey}">
     <title>Admin Dashboard - Notification System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
@@ -63,6 +64,9 @@
                 <i class="bi bi-graph-up"></i> Admin Dashboard
             </span>
             <div class="d-flex align-items-center gap-3">
+                <a href="/admin/campaigns" class="btn btn-sm btn-outline-light" style="text-decoration: none;">
+                    <i class="bi bi-megaphone"></i> Campaigns
+                </a>
                 <button class="btn btn-sm btn-outline-light" onclick="showCreateSiteModal()">
                     <i class="bi bi-plus-circle"></i> Create Site
                 </button>
@@ -77,6 +81,25 @@
     </nav>
 
     <div class="container-fluid mt-4">
+        <!-- Quick Actions Card -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-primary">
+                    <div class="card-body bg-primary bg-opacity-10">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="card-title mb-1"><i class="bi bi-megaphone"></i> Send Messages & Create Campaigns</h5>
+                                <p class="card-text text-muted mb-0">Send WhatsApp messages, emails, or schedule bulk campaigns</p>
+                            </div>
+                            <a href="/admin/campaigns" class="btn btn-primary btn-lg">
+                                <i class="bi bi-arrow-right-circle"></i> Go to Campaigns
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Summary Cards -->
         <div class="row mb-4">
             <div class="col-md-3 mb-3">
@@ -186,6 +209,9 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><i class="bi bi-envelope"></i> Recent Messages</h5>
                         <div>
+                            <button class="btn btn-sm btn-outline-info me-2" onclick="loadScheduledMessages()">
+                                <i class="bi bi-clock"></i> Show Scheduled
+                            </button>
                             <button class="btn btn-sm btn-outline-danger me-2" onclick="loadFailedMessages()">
                                 <i class="bi bi-exclamation-triangle"></i> Show Failed
                             </button>
@@ -206,13 +232,14 @@
                                         <th>Status</th>
                                         <th>Subject/Body</th>
                                         <th>Error</th>
+                                        <th>Scheduled At</th>
                                         <th>Sent At</th>
                                         <th>Delivered At</th>
                                     </tr>
                                 </thead>
                                 <tbody id="messagesTableBody">
                                     <tr>
-                                        <td colspan="9" class="text-center text-muted">Loading messages...</td>
+                                        <td colspan="10" class="text-center text-muted">Loading messages...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -244,6 +271,7 @@
                                         <th>Success Rate</th>
                                         <th>Email</th>
                                         <th>WhatsApp</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -269,9 +297,17 @@
                                             </span>
                                             <span th:if="${site.channelMetrics.WHATSAPP == null}">-</span>
                                         </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-danger delete-site-btn" 
+                                                    th:data-site-id="${site.siteId}"
+                                                    th:data-site-name="${site.siteName}"
+                                                    title="Delete Site">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
                                     </tr>
                                     <tr th:if="${#lists.isEmpty(metrics.siteMetrics)}">
-                                        <td colspan="7" class="text-center text-muted">No sites registered yet</td>
+                                        <td colspan="8" class="text-center text-muted">No sites registered yet</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -293,12 +329,36 @@
                 <div class="modal-body">
                     <form id="createSiteForm">
                         <div class="mb-3">
-                            <label for="siteName" class="form-label">Site Name</label>
+                            <label for="siteName" class="form-label">Site Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="siteName" required>
                         </div>
                         <div class="mb-3">
                             <label for="siteDescription" class="form-label">Description (Optional)</label>
-                            <textarea class="form-control" id="siteDescription" rows="3"></textarea>
+                            <textarea class="form-control" id="siteDescription" rows="2"></textarea>
+                        </div>
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-whatsapp"></i> WhatsApp Configuration (Optional)</h6>
+                        <div class="mb-3">
+                            <label for="whatsappSessionName" class="form-label">WhatsApp Session Name</label>
+                            <input type="text" class="form-control" id="whatsappSessionName" placeholder="e.g., shared-session or site-specific-session">
+                            <small class="form-text text-muted">Leave empty if not using WhatsApp. Multiple sites can share the same session name.</small>
+                        </div>
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-envelope"></i> Email Configuration (Optional)</h6>
+                        <div class="mb-3">
+                            <label for="emailFromAddress" class="form-label">From Email Address</label>
+                            <input type="email" class="form-control" id="emailFromAddress" placeholder="noreply@example.com">
+                            <small class="form-text text-muted">Default sender email for this site.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="emailFromName" class="form-label">From Name</label>
+                            <input type="text" class="form-control" id="emailFromName" placeholder="Company Name">
+                            <small class="form-text text-muted">Display name for email sender.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sendgridApiKey" class="form-label">SendGrid API Key</label>
+                            <input type="password" class="form-control" id="sendgridApiKey" placeholder="SG.xxx">
+                            <small class="form-text text-muted">Optional. Uses default SendGrid key if not provided.</small>
                         </div>
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle"></i> An API key will be generated automatically after creation.
@@ -429,7 +489,7 @@
                 .then(data => {
                     const tbody = document.getElementById('messagesTableBody');
                     if (data.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No messages found</td></tr>';
                         return;
                     }
                     tbody.innerHTML = data.map(msg => `
@@ -443,11 +503,13 @@
                                     msg.status === 'DELIVERED' ? 'bg-success' :
                                     msg.status === 'SENT' ? 'bg-primary' :
                                     msg.status === 'FAILED' ? 'bg-danger' :
-                                    msg.status === 'PENDING' ? 'bg-warning' : 'bg-secondary'
+                                    msg.status === 'PENDING' ? 'bg-warning' :
+                                    msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
                                 }">${msg.status}</span>
                             </td>
                             <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
                             <td><small class="text-danger">${msg.errorMessage || '-'}</small></td>
+                            <td><small>${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
                         </tr>
@@ -456,7 +518,38 @@
                 .catch(error => {
                     console.error('Error loading messages:', error);
                     document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="9" class="text-center text-danger">Error loading messages</td></tr>';
+                        '<tr><td colspan="10" class="text-center text-danger">Error loading messages</td></tr>';
+                });
+        }
+
+        function loadScheduledMessages() {
+            fetch('/admin/api/messages/scheduled?limit=50')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('messagesTableBody');
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No scheduled messages found</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = data.map(msg => `
+                        <tr class="table-info">
+                            <td><code>${msg.messageId}</code></td>
+                            <td>${msg.siteName}</td>
+                            <td><span class="badge ${msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info'}">${msg.channel}</span></td>
+                            <td>${msg.recipient}</td>
+                            <td><span class="badge bg-info">${msg.status}</span></td>
+                            <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
+                            <td><small class="text-danger">${msg.errorMessage || '-'}</small></td>
+                            <td><small class="fw-bold">${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
+                            <td><small>-</small></td>
+                            <td><small>-</small></td>
+                        </tr>
+                    `).join('');
+                })
+                .catch(error => {
+                    console.error('Error loading scheduled messages:', error);
+                    document.getElementById('messagesTableBody').innerHTML = 
+                        '<tr><td colspan="10" class="text-center text-danger">Error loading scheduled messages</td></tr>';
                 });
         }
 
@@ -466,7 +559,7 @@
                 .then(data => {
                     const tbody = document.getElementById('messagesTableBody');
                     if (data.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No failed messages found</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No failed messages found</td></tr>';
                         return;
                     }
                     tbody.innerHTML = data.map(msg => `
@@ -478,6 +571,7 @@
                             <td><span class="badge bg-danger">${msg.status}</span></td>
                             <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
                             <td><small class="text-danger fw-bold">${msg.errorMessage || 'Unknown error'}</small></td>
+                            <td><small>${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
                             <td><small>-</small></td>
                         </tr>
@@ -486,7 +580,7 @@
                 .catch(error => {
                     console.error('Error loading failed messages:', error);
                     document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="9" class="text-center text-danger">Error loading failed messages</td></tr>';
+                        '<tr><td colspan="10" class="text-center text-danger">Error loading failed messages</td></tr>';
                 });
         }
 
@@ -495,22 +589,80 @@
             modal.show();
         }
 
+        // Add event listeners for delete buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.delete-site-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const siteId = this.getAttribute('data-site-id');
+                    const siteName = this.getAttribute('data-site-name');
+                    deleteSite(siteId, siteName);
+                });
+            });
+        });
+
+        function deleteSite(siteId, siteName) {
+            if (!confirm(`Are you sure you want to delete site "${siteName}"?\n\nThis will deactivate the site and prevent it from sending notifications.`)) {
+                return;
+            }
+
+            const adminKey = document.querySelector('meta[name="admin-api-key"]').content;
+            
+            fetch(`/admin/api/sites/${siteId}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-Admin-Key': adminKey
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Site "${siteName}" deleted successfully.`);
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to delete site'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error deleting site: ' + error.message);
+            });
+        }
+
         function createSite() {
             const siteName = document.getElementById('siteName').value;
             const description = document.getElementById('siteDescription').value;
+            const whatsappSessionName = document.getElementById('whatsappSessionName').value;
+            const emailFromAddress = document.getElementById('emailFromAddress').value;
+            const emailFromName = document.getElementById('emailFromName').value;
+            const sendgridApiKey = document.getElementById('sendgridApiKey').value;
             
             if (!siteName.trim()) {
                 alert('Site name is required');
                 return;
             }
 
+            const requestBody = {
+                siteName: siteName,
+                description: description || null
+            };
+            
+            if (whatsappSessionName.trim()) {
+                requestBody.whatsappSessionName = whatsappSessionName.trim();
+            }
+            if (emailFromAddress.trim()) {
+                requestBody.emailFromAddress = emailFromAddress.trim();
+            }
+            if (emailFromName.trim()) {
+                requestBody.emailFromName = emailFromName.trim();
+            }
+            if (sendgridApiKey.trim()) {
+                requestBody.sendgridApiKey = sendgridApiKey.trim();
+            }
+
             fetch('/admin/api/sites/create', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    siteName: siteName,
-                    description: description || null
-                })
+                body: JSON.stringify(requestBody)
             })
             .then(response => response.json())
             .then(data => {

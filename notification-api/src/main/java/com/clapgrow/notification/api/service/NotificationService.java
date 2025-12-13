@@ -44,7 +44,7 @@ public class NotificationService {
 
             // Publish to Kafka
             String topic = getTopicForChannel(request.getChannel());
-            String payload = serializeNotificationPayload(messageId, request, site.getId());
+            String payload = serializeNotificationPayload(messageId, request, site);
             
             kafkaTemplate.send(topic, messageId, payload)
                 .whenComplete((result, ex) -> {
@@ -120,12 +120,12 @@ public class NotificationService {
         return messageLog;
     }
 
-    private String serializeNotificationPayload(String messageId, NotificationRequest request, UUID siteId) {
+    private String serializeNotificationPayload(String messageId, NotificationRequest request, FrappeSite site) {
         try {
             com.clapgrow.notification.api.model.NotificationPayload payload = 
                 new com.clapgrow.notification.api.model.NotificationPayload();
             payload.setMessageId(messageId);
-            payload.setSiteId(siteId.toString());
+            payload.setSiteId(site.getId().toString());
             payload.setChannel(request.getChannel().name());
             payload.setRecipient(request.getRecipient());
             payload.setSubject(request.getSubject());
@@ -135,8 +135,10 @@ public class NotificationService {
             payload.setDocumentUrl(request.getDocumentUrl());
             payload.setFileName(request.getFileName());
             payload.setCaption(request.getCaption());
-            payload.setFromEmail(request.getFromEmail());
-            payload.setFromName(request.getFromName());
+            payload.setWhatsappSessionName(site.getWhatsappSessionName());
+            payload.setSendgridApiKey(site.getSendgridApiKey());
+            payload.setFromEmail(request.getFromEmail() != null ? request.getFromEmail() : site.getEmailFromAddress());
+            payload.setFromName(request.getFromName() != null ? request.getFromName() : site.getEmailFromName());
             payload.setIsHtml(request.getIsHtml());
             payload.setMetadata(request.getMetadata());
             

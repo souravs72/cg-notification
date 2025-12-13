@@ -80,5 +80,11 @@ public interface MessageLogRepository extends JpaRepository<MessageLog, UUID> {
         @Param("status") DeliveryStatus status,
         @Param("now") LocalDateTime now
     );
+    
+    @Query("SELECT m FROM MessageLog m WHERE m.status = :status ORDER BY m.scheduledAt ASC")
+    Page<MessageLog> findByStatusOrderByScheduledAtAsc(
+        @Param("status") DeliveryStatus status,
+        Pageable pageable
+    );
 }
 

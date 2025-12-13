@@ -11,6 +11,7 @@ import com.clapgrow.notification.api.repository.FrappeSiteRepository;
 import com.clapgrow.notification.api.repository.MessageLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -28,9 +29,10 @@ public class AdminService {
     private final FrappeSiteRepository siteRepository;
     private final MessageLogRepository messageLogRepository;
     private final MetricsService metricsService;
+    private final SiteService siteService;
 
     public AdminDashboardResponse getDashboardMetrics() {
-        List<FrappeSite> allSites = siteRepository.findAll();
+        List<FrappeSite> allSites = siteService.getAllSites();
         
         List<AdminSiteMetrics> siteMetricsList = allSites.stream()
             .map(site -> {
@@ -84,7 +86,7 @@ public class AdminService {
         Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
         List<MessageLog> messages = messageLogRepository.findAll(pageable).getContent();
         
-        Map<java.util.UUID, String> siteNameMap = siteRepository.findAll().stream()
+        Map<java.util.UUID, String> siteNameMap = siteService.getAllSites().stream()
             .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
         
         return messages.stream()
@@ -100,6 +102,7 @@ public class AdminService {
                 detail.setErrorMessage(msg.getErrorMessage());
                 detail.setSentAt(msg.getSentAt());
                 detail.setDeliveredAt(msg.getDeliveredAt());
+                detail.setScheduledAt(msg.getScheduledAt());
                 detail.setCreatedAt(msg.getCreatedAt());
                 return detail;
             })
@@ -115,7 +118,7 @@ public class AdminService {
             .limit(limit)
             .collect(Collectors.toList());
         
-        Map<java.util.UUID, String> siteNameMap = siteRepository.findAll().stream()
+        Map<java.util.UUID, String> siteNameMap = siteService.getAllSites().stream()
             .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
         
         return messages.stream()
@@ -131,6 +134,37 @@ public class AdminService {
                 detail.setErrorMessage(msg.getErrorMessage());
                 detail.setSentAt(msg.getSentAt());
                 detail.setDeliveredAt(msg.getDeliveredAt());
+                detail.setScheduledAt(msg.getScheduledAt());
+                detail.setCreatedAt(msg.getCreatedAt());
+                return detail;
+            })
+            .collect(Collectors.toList());
+    }
+
+    public List<MessageDetailResponse> getScheduledMessages(int limit) {
+        Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.ASC, "scheduledAt"));
+        Page<MessageLog> messagePage = messageLogRepository.findByStatusOrderByScheduledAtAsc(
+            DeliveryStatus.SCHEDULED, pageable
+        );
+        List<MessageLog> messages = messagePage.getContent();
+        
+        Map<java.util.UUID, String> siteNameMap = siteService.getAllSites().stream()
+            .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
+        
+        return messages.stream()
+            .map(msg -> {
+                MessageDetailResponse detail = new MessageDetailResponse();
+                detail.setMessageId(msg.getMessageId());
+                detail.setSiteName(siteNameMap.getOrDefault(msg.getSiteId(), "Unknown"));
+                detail.setChannel(msg.getChannel());
+                detail.setStatus(msg.getStatus());
+                detail.setRecipient(msg.getRecipient());
+                detail.setSubject(msg.getSubject());
+                detail.setBody(msg.getBody());
+                detail.setErrorMessage(msg.getErrorMessage());
+                detail.setSentAt(msg.getSentAt());
+                detail.setDeliveredAt(msg.getDeliveredAt());
+                detail.setScheduledAt(msg.getScheduledAt());
                 detail.setCreatedAt(msg.getCreatedAt());
                 return detail;
             })

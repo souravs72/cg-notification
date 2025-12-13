@@ -11,6 +11,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deployment/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./deployment/migration-add-whatsapp-session.sql:/docker-entrypoint-initdb.d/migration-add-whatsapp-session.sql
+      - ./deployment/migration-add-email-config.sql:/docker-entrypoint-initdb.d/migration-add-email-config.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U notification_user -d notification_db"]
       interval: 10s
@@ -82,6 +84,7 @@ services:
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
     volumes:
       - ./notification-api/src/main/resources:/app/config
     healthcheck:
