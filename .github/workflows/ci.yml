@@ -249,7 +249,7 @@ jobs:
           cache: "maven"
 
       - name: Run integration tests
-        run: mvn verify -Dtest=*IT -DfailIfNoTests=false
+        run: mvn verify -DskipTests=false
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
           SPRING_DATASOURCE_USERNAME: notification_user
