@@ -1,5 +1,6 @@
 package com.clapgrow.notification.api.integration;
 
+import com.clapgrow.notification.api.NotificationApiApplication;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -9,7 +10,7 @@ import org.springframework.test.context.DynamicPropertySource;
  * Uses environment variables for database and Kafka configuration (provided by CI services).
  * For local development, ensure PostgreSQL and Kafka are running or use Testcontainers.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(classes = NotificationApiApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public abstract class BaseIntegrationTest {
 
     @DynamicPropertySource
