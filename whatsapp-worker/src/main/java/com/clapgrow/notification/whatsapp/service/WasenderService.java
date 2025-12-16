@@ -2,6 +2,7 @@ package com.clapgrow.notification.whatsapp.service;
 
 import com.clapgrow.notification.whatsapp.model.NotificationPayload;
 import com.clapgrow.notification.whatsapp.model.WasenderMessageRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,22 +19,39 @@ import java.time.Duration;
 public class WasenderService {
     
     private final WebClient webClient;
+    private final ObjectMapper objectMapper;
     
     @Value("${wasender.api.base-url:https://wasenderapi.com/api}")
     private String wasenderBaseUrl;
 
     public boolean sendMessage(NotificationPayload payload) {
+        String originalRecipient = payload.getRecipient();
+        String apiKey = payload.getWasenderApiKey();
+        WasenderMessageRequest request = null;
+        String requestUrl = wasenderBaseUrl + "/send-message";
+        
         try {
             // Get API key from payload, fallback to environment variable for backward compatibility
-            String apiKey = payload.getWasenderApiKey();
             if (apiKey == null || apiKey.trim().isEmpty()) {
+                log.error("WASender API key is not provided in the payload for recipient: {}", originalRecipient);
                 throw new IllegalStateException("WASender API key is not provided in the payload. Please configure it first.");
             }
             
-            WasenderMessageRequest request = buildWasenderRequest(payload);
+            request = buildWasenderRequest(payload);
+            
+            // Log request details (without sensitive data)
+            try {
+                String requestJson = objectMapper.writeValueAsString(request);
+                log.info("Sending WhatsApp message to WASender API. URL: {}, Recipient: {}, Request: {}", 
+                    requestUrl, request.getTo(), requestJson);
+            } catch (Exception e) {
+                log.warn("Failed to serialize request for logging: {}", e.getMessage());
+                log.info("Sending WhatsApp message to WASender API. URL: {}, Recipient: {}", 
+                    requestUrl, request.getTo() != null ? request.getTo() : originalRecipient);
+            }
             
             String response = webClient.post()
-                .uri(wasenderBaseUrl + "/send-message")
+                .uri(requestUrl)
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                 .bodyValue(request)
@@ -42,27 +60,57 @@ public class WasenderService {
                 .timeout(Duration.ofSeconds(30))
                 .block();
             
-            log.info("WhatsApp message sent successfully to {}: {}", payload.getRecipient(), response);
+            log.info("WhatsApp message sent successfully to {}. WASender API response: {}", 
+                request.getTo(), response != null ? (response.length() > 500 ? response.substring(0, 500) + "..." : response) : "null");
             return true;
             
         } catch (org.springframework.web.reactive.function.client.WebClientResponseException.TooManyRequests e) {
-            log.warn("Rate limit exceeded (429) for WhatsApp message to {}. Retry after delay.", 
-                payload.getRecipient());
+            String errorBody = e.getResponseBodyAsString();
+            String recipient = request != null && request.getTo() != null ? request.getTo() : originalRecipient;
+            log.warn("Rate limit exceeded (429) for WhatsApp message to {}. Response body: {}", 
+                recipient, errorBody);
             // Return false to trigger retry with backoff
             return false;
         } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
-            log.error("HTTP error {} sending WhatsApp message to {}: {}", 
-                e.getStatusCode(), payload.getRecipient(), e.getResponseBodyAsString());
+            String errorBody = e.getResponseBodyAsString();
+            String recipient = request != null && request.getTo() != null ? request.getTo() : originalRecipient;
+            log.error("HTTP error {} sending WhatsApp message to {} via WASender API ({}). " +
+                    "Response body: {}. Request details: to={}, session={}, hasText={}, hasImage={}, hasVideo={}, hasDocument={}",
+                e.getStatusCode(), 
+                recipient,
+                requestUrl,
+                errorBody != null ? errorBody : "null",
+                request != null ? request.getTo() : originalRecipient,
+                request != null ? request.getWhatsappSession() : "N/A",
+                request != null && request.getText() != null,
+                request != null && request.getImageUrl() != null,
+                request != null && request.getVideoUrl() != null,
+                request != null && request.getDocumentUrl() != null);
             return false;
         } catch (Exception e) {
-            log.error("Error sending WhatsApp message via WASender to {}", payload.getRecipient(), e);
+            String recipient = request != null && request.getTo() != null ? request.getTo() : originalRecipient;
+            log.error("Unexpected error sending WhatsApp message via WASender to {}: {}. " +
+                    "Error class: {}, Message: {}",
+                recipient,
+                e.getClass().getSimpleName(),
+                e.getClass().getName(),
+                e.getMessage(),
+                e);
             return false;
         }
     }
 
     private WasenderMessageRequest buildWasenderRequest(NotificationPayload payload) {
         WasenderMessageRequest request = new WasenderMessageRequest();
-        request.setTo(payload.getRecipient());
+        // Clean recipient phone number/email - remove control characters and trim
+        String originalRecipient = payload.getRecipient();
+        String cleanedRecipient = cleanRecipient(originalRecipient);
+        
+        if (!originalRecipient.equals(cleanedRecipient)) {
+            log.debug("Cleaned recipient from '{}' to '{}'", originalRecipient, cleanedRecipient);
+        }
+        
+        request.setTo(cleanedRecipient);
         
         // Set WhatsApp session name if provided
         if (payload.getWhatsappSessionName() != null && !payload.getWhatsappSessionName().trim().isEmpty()) {
@@ -138,6 +186,22 @@ public class WasenderService {
         }
         
         return request;
+    }
+    
+    /**
+     * Cleans recipient phone number or email by removing control characters and trimming.
+     * This handles cases where line endings (\r\n or \r) or other control characters
+     * might have been included in the recipient field.
+     */
+    private String cleanRecipient(String recipient) {
+        if (recipient == null) {
+            return null;
+        }
+        return recipient
+            .replaceAll("\\r\\n", "")  // Remove Windows line endings
+            .replaceAll("\\r", "")     // Remove carriage returns
+            .replaceAll("[\\x00-\\x1F\\x7F-\\x9F]", "")  // Remove all control characters
+            .trim();                    // Remove leading/trailing whitespace
     }
 }
 

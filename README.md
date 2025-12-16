@@ -136,11 +136,13 @@ curl -X POST http://localhost:8080/api/v1/notifications/send \
 ## 📡 API Documentation
 
 **OpenAPI/Swagger UI:**
+
 - **Notification API**: http://localhost:8080/swagger-ui.html
 - **Email Worker**: http://localhost:8081/swagger-ui.html
 - **WhatsApp Worker**: http://localhost:8083/swagger-ui.html
 
 **API Docs (JSON):**
+
 - http://localhost:8080/api-docs
 - http://localhost:8081/api-docs
 - http://localhost:8083/api-docs

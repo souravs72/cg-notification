@@ -19,3 +19,5 @@ COMMENT ON TABLE sendgrid_config IS 'Stores global SendGrid API key configuratio
 COMMENT ON COLUMN sendgrid_config.sendgrid_api_key IS 'Global SendGrid API key used for sending emails from all sites';
 
 
+
+

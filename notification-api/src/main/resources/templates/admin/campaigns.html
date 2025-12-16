@@ -548,6 +548,22 @@
         document.getElementById('scheduleDate').min = new Date().toISOString().split('T')[0];
         document.getElementById('campaignDate').min = new Date().toISOString().split('T')[0];
 
+        // Helper function to clean recipients from textarea (handles line endings and control characters)
+        function parseRecipientsFromTextarea(textareaValue) {
+            const cleanRecipient = (recipient) => {
+                return recipient
+                    .replace(/\r\n/g, '\n')  // Normalize Windows line endings
+                    .replace(/\r/g, '')      // Remove remaining carriage returns
+                    .replace(/[\x00-\x1F\x7F-\x9F]/g, '')  // Remove all control characters
+                    .trim();                 // Remove leading/trailing whitespace
+            };
+            // Split by various line ending formats and filter out empty lines
+            return textareaValue
+                .split(/\r?\n|\r/)
+                .map(cleanRecipient)
+                .filter(r => r.length > 0);
+        }
+
         // Show/hide subject field based on channel
         function toggleSubject(channelId, subjectGroupId) {
             const channel = document.getElementById(channelId);
@@ -692,11 +708,11 @@
         document.getElementById('bulkMessageForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const siteId = document.getElementById('bulkSiteId').value;
-            const recipients = document.getElementById('bulkRecipients').value.split('\n').filter(r => r.trim());
+            const recipients = parseRecipientsFromTextarea(document.getElementById('bulkRecipients').value);
             const notifications = recipients.map(recipient => {
                 const notif = {
                     channel: document.getElementById('bulkChannel').value,
-                    recipient: recipient.trim(),
+                    recipient: recipient,
                     body: document.getElementById('bulkBody').value,
                     imageUrl: document.getElementById('bulkImageUrl').value || null,
                     videoUrl: document.getElementById('bulkVideoUrl').value || null,
@@ -777,7 +793,7 @@
         document.getElementById('campaignForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const siteId = document.getElementById('campaignSiteId').value;
-            const recipients = document.getElementById('campaignRecipients').value.split('\n').filter(r => r.trim());
+            const recipients = parseRecipientsFromTextarea(document.getElementById('campaignRecipients').value);
             const date = document.getElementById('campaignDate').value;
             const time = document.getElementById('campaignTime').value;
             const scheduledAt = `${date}T${time}:00`;
@@ -785,7 +801,7 @@
             const notifications = recipients.map(recipient => {
                 const notif = {
                     channel: document.getElementById('campaignChannel').value,
-                    recipient: recipient.trim(),
+                    recipient: recipient,
                     body: document.getElementById('campaignBody').value,
                     scheduledAt: scheduledAt,
                     imageUrl: document.getElementById('campaignImageUrl').value || null,

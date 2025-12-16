@@ -4,16 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.util.Map;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -37,9 +33,6 @@ class WasenderQRServiceTest {
     @Mock
     private WebClient.ResponseSpec responseSpec;
 
-    @Mock
-    private WasenderConfigService wasenderConfigService;
-
     private WasenderQRService wasenderQRService;
     
     private ObjectMapper objectMapper;
@@ -52,10 +45,9 @@ class WasenderQRServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        wasenderQRService = new WasenderQRService(webClientBuilder, objectMapper, wasenderConfigService);
+        wasenderQRService = new WasenderQRService(webClientBuilder, objectMapper);
         ReflectionTestUtils.setField(wasenderQRService, "wasenderBaseUrl", wasenderBaseUrl);
         when(webClientBuilder.build()).thenReturn(webClient);
-        when(wasenderConfigService.getApiKey()).thenReturn(Optional.of(testApiKey));
     }
 
     @Test
@@ -85,7 +77,7 @@ class WasenderQRServiceTest {
     @Test
     void testGetQRCode_WithNullSessionIdentifier_ReturnsError() {
         // Act
-        Map<String, Object> result = wasenderQRService.getQRCode(null);
+        Map<String, Object> result = wasenderQRService.getQRCode(null, testApiKey);
 
         // Assert
         assertFalse((Boolean) result.get("success"));
@@ -95,7 +87,7 @@ class WasenderQRServiceTest {
     @Test
     void testGetQRCode_WithEmptySessionIdentifier_ReturnsError() {
         // Act
-        Map<String, Object> result = wasenderQRService.getQRCode("");
+        Map<String, Object> result = wasenderQRService.getQRCode("", testApiKey);
 
         // Assert
         assertFalse((Boolean) result.get("success"));
@@ -105,7 +97,7 @@ class WasenderQRServiceTest {
     @Test
     void testGetQRCode_WithWhitespaceSessionIdentifier_ReturnsError() {
         // Act
-        Map<String, Object> result = wasenderQRService.getQRCode("   ");
+        Map<String, Object> result = wasenderQRService.getQRCode("   ", testApiKey);
 
         // Assert
         assertFalse((Boolean) result.get("success"));
@@ -113,14 +105,13 @@ class WasenderQRServiceTest {
     }
 
     @Test
-    void testGetQRCode_WhenApiKeyNotConfigured_ThrowsException() {
-        // Arrange
-        when(wasenderConfigService.getApiKey()).thenReturn(Optional.empty());
+    void testGetQRCode_WithNullApiKey_ReturnsError() {
+        // Act
+        Map<String, Object> result = wasenderQRService.getQRCode(testSessionId, null);
 
-        // Act & Assert
-        assertThrows(IllegalStateException.class, () -> {
-            wasenderQRService.getQRCode(testSessionId);
-        });
+        // Assert
+        assertFalse((Boolean) result.get("success"));
+        assertEquals("WASender API key is required", result.get("error"));
     }
 
     @Test

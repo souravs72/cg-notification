@@ -7,3 +7,5 @@ ADD COLUMN IF NOT EXISTS email_from_name VARCHAR(255);
 COMMENT ON COLUMN sendgrid_config.email_from_address IS 'Default sender email address for all sites';
 COMMENT ON COLUMN sendgrid_config.email_from_name IS 'Default sender name for all sites';
 
+
+

@@ -93,3 +93,5 @@ public class PostgreSQLDeliveryStatusType implements UserType<DeliveryStatus> {
 
 
 
+
+
