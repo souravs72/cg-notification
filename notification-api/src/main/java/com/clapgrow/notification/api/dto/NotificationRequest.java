@@ -26,6 +26,7 @@ public class NotificationRequest {
     private String documentUrl;
     private String fileName;
     private String caption;
+    private String whatsappSessionName; // Specific WhatsApp session to use
 
     // Email specific fields
     private String fromEmail;

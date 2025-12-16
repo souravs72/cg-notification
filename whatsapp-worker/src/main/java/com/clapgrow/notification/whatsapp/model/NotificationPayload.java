@@ -24,6 +24,7 @@ public class NotificationPayload {
     private Boolean isHtml;
     private String whatsappSessionName;
     private String sendgridApiKey;
+    private String wasenderApiKey;
     private Map<String, String> metadata;
 }
 

@@ -2,12 +2,13 @@ package com.clapgrow.notification.api.service;
 
 import com.clapgrow.notification.api.dto.AdminDashboardResponse;
 import com.clapgrow.notification.api.dto.AdminSiteMetrics;
+import com.clapgrow.notification.api.dto.ChannelMetrics;
 import com.clapgrow.notification.api.dto.MessageDetailResponse;
 import com.clapgrow.notification.api.dto.MetricsSummaryResponse;
 import com.clapgrow.notification.api.entity.FrappeSite;
 import com.clapgrow.notification.api.entity.MessageLog;
 import com.clapgrow.notification.api.enums.DeliveryStatus;
-import com.clapgrow.notification.api.repository.FrappeSiteRepository;
+import com.clapgrow.notification.api.enums.NotificationChannel;
 import com.clapgrow.notification.api.repository.MessageLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -26,7 +28,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AdminService {
     
-    private final FrappeSiteRepository siteRepository;
     private final MessageLogRepository messageLogRepository;
     private final MetricsService metricsService;
     private final SiteService siteService;
@@ -34,6 +35,7 @@ public class AdminService {
     public AdminDashboardResponse getDashboardMetrics() {
         List<FrappeSite> allSites = siteService.getAllSites();
         
+        // Get metrics for all sites
         List<AdminSiteMetrics> siteMetricsList = allSites.stream()
             .map(site -> {
                 MetricsSummaryResponse summary = metricsService.getSiteSummary(site.getId());
@@ -55,6 +57,60 @@ public class AdminService {
             })
             .collect(Collectors.toList());
         
+        // Get metrics for messages without sites (siteId is null)
+        long noSiteTotalSent = messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.SENT.name()) +
+                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.DELIVERED.name()) +
+                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.FAILED.name()) +
+                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.BOUNCED.name()) +
+                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.REJECTED.name());
+        
+        long noSiteTotalSuccess = messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.DELIVERED.name());
+        
+        long noSiteTotalFailed = messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.FAILED.name()) +
+                                messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.BOUNCED.name()) +
+                                messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.REJECTED.name());
+        
+        // Add "No Site" entry if there are messages without sites
+        if (noSiteTotalSent > 0) {
+            Map<String, ChannelMetrics> noSiteChannelMetrics = new HashMap<>();
+            for (NotificationChannel channel : NotificationChannel.values()) {
+                Long channelSent = messageLogRepository.countByNullSiteIdAndChannel(channel.name());
+                Long channelSuccess = messageLogRepository.countByNullSiteIdAndChannelAndStatus(
+                    channel.name(), DeliveryStatus.DELIVERED.name()
+                );
+                Long channelFailed = messageLogRepository.countByNullSiteIdAndChannelAndStatus(
+                    channel.name(), DeliveryStatus.FAILED.name()
+                ) + messageLogRepository.countByNullSiteIdAndChannelAndStatus(
+                    channel.name(), DeliveryStatus.BOUNCED.name()
+                ) + messageLogRepository.countByNullSiteIdAndChannelAndStatus(
+                    channel.name(), DeliveryStatus.REJECTED.name()
+                );
+                
+                ChannelMetrics metrics = new ChannelMetrics();
+                metrics.setChannel(channel.name());
+                metrics.setTotalSent(channelSent);
+                metrics.setTotalSuccess(channelSuccess);
+                metrics.setTotalFailed(channelFailed);
+                
+                noSiteChannelMetrics.put(channel.name(), metrics);
+            }
+            
+            AdminSiteMetrics noSiteMetrics = new AdminSiteMetrics();
+            noSiteMetrics.setSiteId(null);
+            noSiteMetrics.setSiteName("No Site");
+            noSiteMetrics.setTotalSent(noSiteTotalSent);
+            noSiteMetrics.setTotalSuccess(noSiteTotalSuccess);
+            noSiteMetrics.setTotalFailed(noSiteTotalFailed);
+            double noSiteSuccessRate = noSiteTotalSent > 0 
+                ? Math.round((double) noSiteTotalSuccess * 10000.0 / noSiteTotalSent) / 100.0
+                : 0.0;
+            noSiteMetrics.setSuccessRate(noSiteSuccessRate);
+            noSiteMetrics.setChannelMetrics(noSiteChannelMetrics);
+            
+            siteMetricsList.add(noSiteMetrics);
+        }
+        
+        // Calculate totals including messages without sites
         long totalSent = siteMetricsList.stream()
             .mapToLong(AdminSiteMetrics::getTotalSent)
             .sum();
@@ -93,7 +149,9 @@ public class AdminService {
             .map(msg -> {
                 MessageDetailResponse detail = new MessageDetailResponse();
                 detail.setMessageId(msg.getMessageId());
-                detail.setSiteName(siteNameMap.getOrDefault(msg.getSiteId(), "Unknown"));
+                detail.setSiteName(msg.getSiteId() != null 
+                    ? siteNameMap.getOrDefault(msg.getSiteId(), "Unknown") 
+                    : "No Site");
                 detail.setChannel(msg.getChannel());
                 detail.setStatus(msg.getStatus());
                 detail.setRecipient(msg.getRecipient());
@@ -125,7 +183,9 @@ public class AdminService {
             .map(msg -> {
                 MessageDetailResponse detail = new MessageDetailResponse();
                 detail.setMessageId(msg.getMessageId());
-                detail.setSiteName(siteNameMap.getOrDefault(msg.getSiteId(), "Unknown"));
+                detail.setSiteName(msg.getSiteId() != null 
+                    ? siteNameMap.getOrDefault(msg.getSiteId(), "Unknown") 
+                    : "No Site");
                 detail.setChannel(msg.getChannel());
                 detail.setStatus(msg.getStatus());
                 detail.setRecipient(msg.getRecipient());
@@ -144,7 +204,7 @@ public class AdminService {
     public List<MessageDetailResponse> getScheduledMessages(int limit) {
         Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.ASC, "scheduledAt"));
         Page<MessageLog> messagePage = messageLogRepository.findByStatusOrderByScheduledAtAsc(
-            DeliveryStatus.SCHEDULED, pageable
+            DeliveryStatus.SCHEDULED.name(), pageable
         );
         List<MessageLog> messages = messagePage.getContent();
         
@@ -155,7 +215,9 @@ public class AdminService {
             .map(msg -> {
                 MessageDetailResponse detail = new MessageDetailResponse();
                 detail.setMessageId(msg.getMessageId());
-                detail.setSiteName(siteNameMap.getOrDefault(msg.getSiteId(), "Unknown"));
+                detail.setSiteName(msg.getSiteId() != null 
+                    ? siteNameMap.getOrDefault(msg.getSiteId(), "Unknown") 
+                    : "No Site");
                 detail.setChannel(msg.getChannel());
                 detail.setStatus(msg.getStatus());
                 detail.setRecipient(msg.getRecipient());

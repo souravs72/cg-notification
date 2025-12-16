@@ -6,9 +6,15 @@ import com.clapgrow.notification.api.service.AdminAuthService;
 import com.clapgrow.notification.api.service.NotificationService;
 import com.clapgrow.notification.api.service.ScheduledMessageService;
 import com.clapgrow.notification.api.service.SiteService;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -21,6 +27,7 @@ import java.util.Map;
 @Controller
 @RequestMapping("/admin/campaigns")
 @RequiredArgsConstructor
+@Tag(name = "Admin Campaigns", description = "Administrative API endpoints for sending and scheduling campaign messages")
 public class AdminCampaignController {
     
     private final NotificationService notificationService;
@@ -29,22 +36,57 @@ public class AdminCampaignController {
     private final AdminAuthService adminAuthService;
 
     @GetMapping
-    public String campaignsPage(Model model, @Value("${admin.api-key:}") String adminApiKey) {
+    public String campaignsPage(Model model) {
         List<FrappeSite> sites = siteService.getAllSites();
         model.addAttribute("sites", sites);
-        model.addAttribute("adminApiKey", adminApiKey);
         return "admin/campaigns";
     }
 
     @PostMapping("/api/send")
+    @Operation(
+            summary = "Send a campaign message",
+            description = "Sends a notification message from the admin interface. Supports both session-based and API key authentication."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Message sent successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid request data"),
+            @ApiResponse(responseCode = "401", description = "Authentication required")
+    })
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> sendMessage(
-            @RequestHeader("X-Admin-Key") String adminKey,
-            @RequestParam String siteId,
-            @Valid @RequestBody NotificationRequest request) {
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            @Parameter(description = "Site ID (optional for WhatsApp messages)")
+            @RequestParam(name = "siteId", required = false) String siteId,
+            @Valid @RequestBody NotificationRequest request,
+            HttpSession session) {
         
-        adminAuthService.validateAdminKey(adminKey);
-        FrappeSite site = siteService.getSiteById(java.util.UUID.fromString(siteId));
-        NotificationResponse response = notificationService.sendNotification(request, site);
+        // For authenticated dashboard users, session authentication is sufficient
+        // Admin API key is only required for external API calls
+        if (session.getAttribute("userId") == null) {
+            if (adminKey == null || adminKey.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "Authentication required");
+                return ResponseEntity.status(401).body(error);
+            }
+            adminAuthService.validateAdminKey(adminKey);
+        }
+        
+        FrappeSite site = null;
+        if (siteId != null && !siteId.trim().isEmpty()) {
+            try {
+                site = siteService.getSiteById(java.util.UUID.fromString(siteId));
+            } catch (Exception e) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "Invalid site ID: " + e.getMessage());
+                return ResponseEntity.badRequest().body(error);
+            }
+        }
+        
+        // If no site provided, use user's session info for WhatsApp messages
+        NotificationResponse response = notificationService.sendNotification(request, site, session);
         
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
@@ -56,12 +98,34 @@ public class AdminCampaignController {
     }
 
     @PostMapping("/api/send/bulk")
+    @Operation(
+            summary = "Send bulk campaign messages",
+            description = "Sends multiple notification messages in a single request from the admin interface."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Messages sent successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid request data"),
+            @ApiResponse(responseCode = "401", description = "Authentication required")
+    })
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> sendBulkMessages(
-            @RequestHeader("X-Admin-Key") String adminKey,
-            @RequestParam String siteId,
-            @Valid @RequestBody BulkNotificationRequest request) {
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            @Parameter(description = "Site ID", required = true)
+            @RequestParam(name = "siteId") String siteId,
+            @Valid @RequestBody BulkNotificationRequest request,
+            HttpSession session) {
         
-        adminAuthService.validateAdminKey(adminKey);
+        // For authenticated dashboard users, session authentication is sufficient
+        if (session.getAttribute("userId") == null) {
+            if (adminKey == null || adminKey.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "Authentication required");
+                return ResponseEntity.status(401).body(error);
+            }
+            adminAuthService.validateAdminKey(adminKey);
+        }
         FrappeSite site = siteService.getSiteById(java.util.UUID.fromString(siteId));
         List<NotificationResponse> responses = notificationService.sendBulkNotifications(request, site);
         
@@ -75,12 +139,34 @@ public class AdminCampaignController {
     }
 
     @PostMapping("/api/schedule")
+    @Operation(
+            summary = "Schedule a campaign message",
+            description = "Schedules a notification message for future delivery from the admin interface."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Message scheduled successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid request data"),
+            @ApiResponse(responseCode = "401", description = "Authentication required")
+    })
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> scheduleMessage(
-            @RequestHeader("X-Admin-Key") String adminKey,
-            @RequestParam String siteId,
-            @Valid @RequestBody ScheduledNotificationRequest request) {
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            @Parameter(description = "Site ID", required = true)
+            @RequestParam(name = "siteId") String siteId,
+            @Valid @RequestBody ScheduledNotificationRequest request,
+            HttpSession session) {
         
-        adminAuthService.validateAdminKey(adminKey);
+        // For authenticated dashboard users, session authentication is sufficient
+        if (session.getAttribute("userId") == null) {
+            if (adminKey == null || adminKey.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "Authentication required");
+                return ResponseEntity.status(401).body(error);
+            }
+            adminAuthService.validateAdminKey(adminKey);
+        }
         FrappeSite site = siteService.getSiteById(java.util.UUID.fromString(siteId));
         NotificationResponse response = scheduledMessageService.scheduleNotification(request, site);
         
@@ -94,12 +180,34 @@ public class AdminCampaignController {
     }
 
     @PostMapping("/api/schedule/bulk")
+    @Operation(
+            summary = "Schedule bulk campaign messages",
+            description = "Schedules multiple notification messages for future delivery from the admin interface."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Messages scheduled successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid request data"),
+            @ApiResponse(responseCode = "401", description = "Authentication required")
+    })
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> scheduleBulkMessages(
-            @RequestHeader("X-Admin-Key") String adminKey,
-            @RequestParam String siteId,
-            @Valid @RequestBody BulkScheduledNotificationRequest request) {
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            @Parameter(description = "Site ID", required = true)
+            @RequestParam(name = "siteId") String siteId,
+            @Valid @RequestBody BulkScheduledNotificationRequest request,
+            HttpSession session) {
         
-        adminAuthService.validateAdminKey(adminKey);
+        // For authenticated dashboard users, session authentication is sufficient
+        if (session.getAttribute("userId") == null) {
+            if (adminKey == null || adminKey.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "Authentication required");
+                return ResponseEntity.status(401).body(error);
+            }
+            adminAuthService.validateAdminKey(adminKey);
+        }
         FrappeSite site = siteService.getSiteById(java.util.UUID.fromString(siteId));
         List<NotificationResponse> responses = scheduledMessageService.scheduleBulkNotifications(
             request.getNotifications(), site

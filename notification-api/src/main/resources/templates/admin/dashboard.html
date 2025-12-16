@@ -3,19 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="admin-api-key" th:content="${adminApiKey}">
     <title>Admin Dashboard - Notification System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
+        :root {
+            --sidebar-width: 250px;
+            --primary-color: #25D366;
+            --sidebar-bg: #2c3e50;
+            --sidebar-hover: #34495e;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f7fa;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            color: white;
+            padding: 20px 0;
+            z-index: 1000;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar-brand {
+            padding: 0 20px 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 20px;
+        }
+
+        .sidebar-brand h4 {
+            margin: 0;
+            color: white;
+            font-weight: 600;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar-menu li {
+            margin: 0;
+        }
+
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar-menu a:hover {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+
+        .sidebar-menu a.active {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+
+        .sidebar-menu a i {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 30px;
+            min-height: 100vh;
+        }
+
         .stat-card {
             border-left: 4px solid;
             transition: transform 0.2s;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }
         .stat-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.12);
         }
         .stat-card.total { border-left-color: #0d6efd; }
         .stat-card.success { border-left-color: #198754; }
@@ -55,45 +141,146 @@
             border: 2px solid #dee2e6;
             border-radius: 0.5rem;
         }
+
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-header {
+            background-color: white;
+            border-bottom: 1px solid #e9ecef;
+            padding: 15px 20px;
+            font-weight: 600;
+        }
+
+        /* Ensure equal height cards in rows */
+        .row > [class*='col-'] {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .row > [class*='col-'] > .card {
+            flex: 1;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s;
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+        }
     </style>
 </head>
 <body class="bg-light">
-    <nav class="navbar navbar-dark bg-dark">
-        <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">
-                <i class="bi bi-graph-up"></i> Admin Dashboard
-            </span>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="sidebar-brand">
+            <h4><i class="fi fi-ts-social-media-notification"></i>CG Notification</h4>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="/admin/dashboard" class="active"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+            <li><a href="/admin/sites"><i class="bi bi-building"></i> Sites</a></li>
+            <li><a href="/admin/campaigns"><i class="bi bi-megaphone"></i> Campaigns</a></li>
+            <li><a href="/admin/sessions"><i class="bi bi-whatsapp"></i> WhatsApp Sessions</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Page Header -->
+        <div class="d-flex justify-content-end align-items-center mb-4">
             <div class="d-flex align-items-center gap-3">
-                <a href="/admin/campaigns" class="btn btn-sm btn-outline-light" style="text-decoration: none;">
-                    <i class="bi bi-megaphone"></i> Campaigns
+                <span class="text-muted">
+                    <i class="bi bi-person-circle"></i> <span th:text="${user?.email}">User</span>
+                </span>
+                <a href="/auth/logout" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-box-arrow-right"></i> Logout
                 </a>
-                <button class="btn btn-sm btn-outline-light" onclick="showCreateSiteModal()">
-                    <i class="bi bi-plus-circle"></i> Create Site
-                </button>
-                <button class="btn btn-sm btn-outline-light" onclick="showWhatsAppQRModal()">
-                    <i class="bi bi-qr-code"></i> Connect WhatsApp
-                </button>
-                <span class="text-light">
+                <span class="text-muted">
                     <i class="bi bi-clock"></i> <span id="currentTime"></span>
                 </span>
             </div>
         </div>
-    </nav>
-
-    <div class="container-fluid mt-4">
-        <!-- Quick Actions Card -->
+        
+        <!-- Subscription Summary & Session Stats Row -->
         <div class="row mb-4">
-            <div class="col-12">
-                <div class="card border-primary">
-                    <div class="card-body bg-primary bg-opacity-10">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h5 class="card-title mb-1"><i class="bi bi-megaphone"></i> Send Messages & Create Campaigns</h5>
-                                <p class="card-text text-muted mb-0">Send WhatsApp messages, emails, or schedule bulk campaigns</p>
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-credit-card"></i> Subscription Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="subscriptionSummary">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-muted">Plan:</span>
+                                <span class="fw-bold" id="subscriptionPlan" th:text="${user?.subscriptionType ?: 'FREE_TRIAL'}">Free Trial</span>
                             </div>
-                            <a href="/admin/campaigns" class="btn btn-primary btn-lg">
-                                <i class="bi bi-arrow-right-circle"></i> Go to Campaigns
-                            </a>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-muted">Status:</span>
+                                <span class="badge" id="subscriptionStatus" 
+                                      th:classappend="${user?.subscriptionStatus == 'ACTIVE'} ? 'bg-success' : 'bg-warning'"
+                                      th:text="${user?.subscriptionStatus ?: 'ACTIVE'}">Active</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-muted">Sessions Used:</span>
+                                <span class="fw-bold" id="sessionsUsed" th:text="${user?.sessionsUsed ?: 0}">0</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Sessions Allowed:</span>
+                                <span class="fw-bold" id="sessionsAllowed" th:text="${user?.sessionsAllowed ?: 10}">10</span>
+                            </div>
+                            <div class="progress mt-3" style="height: 8px;">
+                                <div class="progress-bar" id="sessionsProgress" role="progressbar" 
+                                     th:style="'width: ' + ${user?.sessionsAllowed != null && user?.sessionsAllowed > 0 ? (user.sessionsUsed * 100 / user.sessionsAllowed) : 0} + '%'"
+                                     style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-whatsapp"></i> Session Stats</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="sessionStats">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-muted">Total Sessions:</span>
+                                <span class="fw-bold" id="totalSessions">-</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Connected:</span>
+                                <span class="badge bg-success" id="connectedSessions">0</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Disconnected:</span>
+                                <span class="badge bg-danger" id="disconnectedSessions">0</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Needs QR Scan:</span>
+                                <span class="badge bg-warning" id="needsScanSessions">0</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -174,9 +361,24 @@
             </div>
         </div>
 
-        <!-- Charts Row -->
+        <!-- Recent Activity & Message Charts Row -->
         <div class="row mb-4">
-            <div class="col-md-6 mb-3">
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Activity</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="recentActivity" style="height: 300px; overflow-y: auto;">
+                            <div class="text-center text-muted py-3">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                <p class="mt-2 mb-0">Loading activity...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Messages by Status</h5>
@@ -188,7 +390,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-4 mb-3">
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Messages by Channel</h5>
@@ -196,6 +398,22 @@
                     <div class="card-body">
                         <div class="chart-container">
                             <canvas id="channelChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Message Activity Chart -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Message Activity Chart</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 400px;">
+                            <canvas id="messageActivityChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -276,7 +494,10 @@
                                 </thead>
                                 <tbody>
                                     <tr th:each="site : ${metrics.siteMetrics}">
-                                        <td><strong th:text="${site.siteName}">Site Name</strong></td>
+                                        <td>
+                                            <strong th:text="${site.siteName}">Site Name</strong>
+                                            <span th:if="${site.siteId == null}" class="badge bg-secondary ms-2">No Site</span>
+                                        </td>
                                         <td th:text="${site.totalSent}">0</td>
                                         <td class="text-success" th:text="${site.totalSuccess}">0</td>
                                         <td class="text-danger" th:text="${site.totalFailed}">0</td>
@@ -286,28 +507,30 @@
                                                   th:text="${site.successRate} + '%'">0%</span>
                                         </td>
                                         <td>
-                                            <span th:if="${site.channelMetrics.EMAIL != null}">
+                                            <span th:if="${site.channelMetrics.EMAIL != null && site.channelMetrics.EMAIL.totalSent > 0}">
                                                 <span class="badge bg-info" th:text="${site.channelMetrics.EMAIL.totalSent}">0</span>
                                             </span>
-                                            <span th:if="${site.channelMetrics.EMAIL == null}">-</span>
+                                            <span th:if="${site.channelMetrics.EMAIL == null || site.channelMetrics.EMAIL.totalSent == 0}">-</span>
                                         </td>
                                         <td>
-                                            <span th:if="${site.channelMetrics.WHATSAPP != null}">
+                                            <span th:if="${site.channelMetrics.WHATSAPP != null && site.channelMetrics.WHATSAPP.totalSent > 0}">
                                                 <span class="badge bg-success" th:text="${site.channelMetrics.WHATSAPP.totalSent}">0</span>
                                             </span>
-                                            <span th:if="${site.channelMetrics.WHATSAPP == null}">-</span>
+                                            <span th:if="${site.channelMetrics.WHATSAPP == null || site.channelMetrics.WHATSAPP.totalSent == 0}">-</span>
                                         </td>
                                         <td>
-                                            <button class="btn btn-sm btn-danger delete-site-btn" 
+                                            <button th:if="${site.siteId != null}" 
+                                                    class="btn btn-sm btn-danger delete-site-btn" 
                                                     th:data-site-id="${site.siteId}"
                                                     th:data-site-name="${site.siteName}"
                                                     title="Delete Site">
                                                 <i class="bi bi-trash"></i>
                                             </button>
+                                            <span th:if="${site.siteId == null}" class="text-muted">-</span>
                                         </td>
                                     </tr>
                                     <tr th:if="${#lists.isEmpty(metrics.siteMetrics)}">
-                                        <td colspan="8" class="text-center text-muted">No sites registered yet</td>
+                                        <td colspan="8" class="text-center text-muted">No messages found</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -402,6 +625,21 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script th:inline="javascript">
+        // Secure admin key storage - uses sessionStorage instead of HTML meta tag
+        function getAdminKey() {
+            let adminKey = sessionStorage.getItem('adminApiKey');
+            if (!adminKey) {
+                adminKey = prompt('Please enter your Admin API Key:');
+                if (adminKey && adminKey.trim()) {
+                    sessionStorage.setItem('adminApiKey', adminKey.trim());
+                    return adminKey.trim();
+                } else {
+                    throw new Error('Admin API key is required');
+                }
+            }
+            return adminKey;
+        }
+
         // Update current time
         function updateTime() {
             document.getElementById('currentTime').textContent = new Date().toLocaleString();
@@ -411,15 +649,14 @@
 
         // Status Chart
         const statusCtx = document.getElementById('statusChart').getContext('2d');
+        const statusSuccess = /*[[${metrics.totalMessagesSuccess}]]*/ 0;
+        const statusFailed = /*[[${metrics.totalMessagesFailed}]]*/ 0;
         const statusChart = new Chart(statusCtx, {
             type: 'doughnut',
             data: {
                 labels: ['Successful', 'Failed'],
                 datasets: [{
-                    data: [
-                        /*[[${metrics.totalMessagesSuccess}]]*/ 0,
-                        /*[[${metrics.totalMessagesFailed}]]*/ 0
-                    ],
+                    data: [statusSuccess, statusFailed],
                     backgroundColor: ['#198754', '#dc3545']
                 }]
             },
@@ -435,22 +672,41 @@
                                 size: 12
                             }
                         }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = statusSuccess + statusFailed;
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return label + ': ' + value + ' (' + percentage + '%)';
+                            }
+                        }
                     }
                 }
             }
         });
+        
+        // Show message if no data
+        if (statusSuccess === 0 && statusFailed === 0) {
+            statusChart.data.labels = ['No messages'];
+            statusChart.data.datasets[0].data = [1];
+            statusChart.data.datasets[0].backgroundColor = ['#e9ecef'];
+            statusChart.update();
+        }
 
-        // Channel Chart Data
+        // Channel Chart Data - Aggregate from all sites (including "No Site")
         const channelData = {
             EMAIL: 0,
             WHATSAPP: 0
         };
         
         /*[# th:each="site : ${metrics.siteMetrics}"]*/
-            /*[# th:if="${site.channelMetrics.EMAIL != null}"]*/
+            /*[# th:if="${site.channelMetrics.EMAIL != null && site.channelMetrics.EMAIL.totalSent != null}"]*/
                 channelData.EMAIL += /*[[${site.channelMetrics.EMAIL.totalSent}]]*/ 0;
             /*[/]*/
-            /*[# th:if="${site.channelMetrics.WHATSAPP != null}"]*/
+            /*[# th:if="${site.channelMetrics.WHATSAPP != null && site.channelMetrics.WHATSAPP.totalSent != null}"]*/
                 channelData.WHATSAPP += /*[[${site.channelMetrics.WHATSAPP.totalSent}]]*/ 0;
             /*[/]*/
         /*[/]*/
@@ -473,11 +729,32 @@
                 aspectRatio: 1.5,
                 scales: {
                     y: {
-                        beginAtZero: true
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y || 0;
+                                return label + ': ' + value;
+                            }
+                        }
                     }
                 }
             }
         });
+        
+        // Show message if no data
+        if (channelData.EMAIL === 0 && channelData.WHATSAPP === 0) {
+            channelChart.data.labels = ['No messages'];
+            channelChart.data.datasets[0].data = [0];
+            channelChart.update();
+        }
 
         function refreshDashboard() {
             location.reload();
@@ -605,7 +882,7 @@
                 return;
             }
 
-            const adminKey = document.querySelector('meta[name="admin-api-key"]').content;
+            const adminKey = getAdminKey();
             
             fetch(`/admin/api/sites/${siteId}`, {
                 method: 'DELETE',
@@ -745,9 +1022,182 @@
 
         // Load messages on page load
         loadRecentMessages();
+        loadSessionStats();
+        loadRecentActivity();
 
         // Auto-refresh every 30 seconds
         setInterval(refreshDashboard, 30000);
+        setInterval(loadSessionStats, 30000);
+        setInterval(loadRecentActivity, 30000);
+
+        // Load session stats
+        function loadSessionStats() {
+            fetch('/admin/api/whatsapp/sessions', {
+                credentials: 'same-origin'
+            })
+                .then(response => {
+                    if (response.status === 401 || response.redirected) {
+                        window.location.href = '/auth/login';
+                        return null;
+                    }
+                    if (response.status === 428) {
+                        document.getElementById('totalSessions').textContent = '0';
+                        document.getElementById('connectedSessions').textContent = '0';
+                        document.getElementById('disconnectedSessions').textContent = '0';
+                        document.getElementById('needsScanSessions').textContent = '0';
+                        return null;
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data) return;
+                    
+                    if (data.success && data.data) {
+                        const sessions = Array.isArray(data.data) ? data.data : (data.data.sessions || []);
+                        const total = sessions.length;
+                        let connected = 0, disconnected = 0, needsScan = 0;
+                        
+                        sessions.forEach(session => {
+                            const status = (session.status || session.state || '').toLowerCase();
+                            if (status === 'connected') connected++;
+                            else if (status === 'disconnected' || status === 'logged_out' || status === 'expired') disconnected++;
+                            else if (status === 'needs_scan' || status === 'connecting') needsScan++;
+                        });
+                        
+                        document.getElementById('totalSessions').textContent = total;
+                        document.getElementById('connectedSessions').textContent = connected;
+                        document.getElementById('disconnectedSessions').textContent = disconnected;
+                        document.getElementById('needsScanSessions').textContent = needsScan;
+                        
+                        // Update subscription summary
+                        document.getElementById('sessionsUsed').textContent = total;
+                        document.getElementById('sessionsAllowed').textContent = '10'; // Default, can be made dynamic
+                        const progress = Math.min((total / 10) * 100, 100);
+                        document.getElementById('sessionsProgress').style.width = progress + '%';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading session stats:', error);
+                });
+        }
+
+        // Load recent activity
+        function loadRecentActivity() {
+            fetch('/admin/api/messages/recent?limit=5')
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('recentActivity');
+                    if (!data || data.length === 0) {
+                        container.innerHTML = '<p class="text-center text-muted py-3">No recent activity</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.map(msg => {
+                        const time = msg.sentAt ? new Date(msg.sentAt).toLocaleString() : 
+                                    (msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : 'N/A');
+                        const statusClass = msg.status === 'DELIVERED' ? 'success' : 
+                                          msg.status === 'FAILED' ? 'danger' : 
+                                          msg.status === 'PENDING' ? 'warning' : 'info';
+                        return `
+                            <div class="d-flex justify-content-between align-items-start mb-3 pb-3 border-bottom">
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold">${escapeHtml(msg.siteName || 'Unknown')}</div>
+                                    <small class="text-muted">${escapeHtml(msg.channel || 'N/A')} • ${escapeHtml(msg.recipient || 'N/A')}</small>
+                                    <div class="mt-1">
+                                        <span class="badge bg-${statusClass}">${escapeHtml(msg.status || 'N/A')}</span>
+                                    </div>
+                                </div>
+                                <small class="text-muted">${time}</small>
+                            </div>
+                        `;
+                    }).join('');
+                })
+                .catch(error => {
+                    console.error('Error loading recent activity:', error);
+                    document.getElementById('recentActivity').innerHTML = 
+                        '<p class="text-center text-danger py-3">Error loading activity</p>';
+                });
+        }
+
+        // Message Activity Chart
+        const messageActivityCtx = document.getElementById('messageActivityChart');
+        if (messageActivityCtx) {
+            const messageActivityChart = new Chart(messageActivityCtx.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Messages Sent',
+                        data: [],
+                        borderColor: '#25D366',
+                        backgroundColor: 'rgba(37, 211, 102, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+
+            // Load message activity data (last 7 days)
+            fetch('/admin/api/messages/recent?limit=100')
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        // Group by date
+                        const dateMap = new Map();
+                        const today = new Date();
+                        for (let i = 6; i >= 0; i--) {
+                            const date = new Date(today);
+                            date.setDate(date.getDate() - i);
+                            const dateStr = date.toISOString().split('T')[0];
+                            dateMap.set(dateStr, 0);
+                        }
+                        
+                        data.forEach(msg => {
+                            if (msg.sentAt) {
+                                const dateStr = new Date(msg.sentAt).toISOString().split('T')[0];
+                                if (dateMap.has(dateStr)) {
+                                    dateMap.set(dateStr, dateMap.get(dateStr) + 1);
+                                }
+                            }
+                        });
+                        
+                        const labels = Array.from(dateMap.keys()).map(d => {
+                            const date = new Date(d);
+                            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        });
+                        const values = Array.from(dateMap.values());
+                        
+                        messageActivityChart.data.labels = labels;
+                        messageActivityChart.data.datasets[0].data = values;
+                        messageActivityChart.update();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading message activity:', error);
+                });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
     </script>
 </body>
 </html>
