@@ -47,7 +47,7 @@ class WasenderQRServiceTest {
         objectMapper = new ObjectMapper();
         wasenderQRService = new WasenderQRService(webClientBuilder, objectMapper);
         ReflectionTestUtils.setField(wasenderQRService, "wasenderBaseUrl", wasenderBaseUrl);
-        when(webClientBuilder.build()).thenReturn(webClient);
+        lenient().when(webClientBuilder.build()).thenReturn(webClient);
     }
 
     @Test
@@ -63,10 +63,10 @@ class WasenderQRServiceTest {
             }
             """;
 
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.header(anyString(), anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        lenient().when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        lenient().when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
+        lenient().when(requestHeadersSpec.header(anyString(), anyString())).thenReturn(requestHeadersSpec);
+        lenient().when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         // Note: Proper mocking of WebClient reactive chain requires more complex setup
         // This test structure validates the logic flow
 
