@@ -610,13 +610,41 @@
             }
         }
 
+        // Update recipient placeholder based on channel
+        function updateRecipientPlaceholder(channelId, recipientId) {
+            const channel = document.getElementById(channelId);
+            const recipient = document.getElementById(recipientId);
+            if (recipient) {
+                if (channel.value === 'WHATSAPP') {
+                    recipient.placeholder = '+1234567890';
+                } else if (channel.value === 'EMAIL') {
+                    recipient.placeholder = 'email@example.com';
+                }
+            }
+        }
+
+        // Update recipient textarea placeholder based on channel
+        function updateRecipientTextareaPlaceholder(channelId, recipientId) {
+            const channel = document.getElementById(channelId);
+            const recipient = document.getElementById(recipientId);
+            if (recipient) {
+                if (channel.value === 'WHATSAPP') {
+                    recipient.placeholder = '+1234567890\n+9876543210';
+                } else if (channel.value === 'EMAIL') {
+                    recipient.placeholder = 'email1@example.com\nemail2@example.com';
+                }
+            }
+        }
+
         ['singleChannel', 'bulkChannel', 'scheduleChannel', 'campaignChannel'].forEach(channelId => {
             document.getElementById(channelId).addEventListener('change', function() {
                 const subjectGroupId = channelId.replace('Channel', 'SubjectGroup');
                 toggleSubject(channelId, subjectGroupId);
                 
-                // Show/hide WhatsApp session selector
+                // Update recipient placeholder based on channel
                 if (channelId === 'singleChannel') {
+                    updateRecipientPlaceholder('singleChannel', 'singleRecipient');
+                    // Show/hide WhatsApp session selector
                     const whatsappSessionGroup = document.getElementById('singleWhatsAppSessionGroup');
                     if (this.value === 'WHATSAPP') {
                         whatsappSessionGroup.style.display = 'block';
@@ -624,9 +652,21 @@
                     } else {
                         whatsappSessionGroup.style.display = 'none';
                     }
+                } else if (channelId === 'scheduleChannel') {
+                    updateRecipientPlaceholder('scheduleChannel', 'scheduleRecipient');
+                } else if (channelId === 'bulkChannel') {
+                    updateRecipientTextareaPlaceholder('bulkChannel', 'bulkRecipients');
+                } else if (channelId === 'campaignChannel') {
+                    updateRecipientTextareaPlaceholder('campaignChannel', 'campaignRecipients');
                 }
             });
         });
+        
+        // Initialize placeholders on page load
+        updateRecipientPlaceholder('singleChannel', 'singleRecipient');
+        updateRecipientPlaceholder('scheduleChannel', 'scheduleRecipient');
+        updateRecipientTextareaPlaceholder('bulkChannel', 'bulkRecipients');
+        updateRecipientTextareaPlaceholder('campaignChannel', 'campaignRecipients');
         
         // Load WhatsApp sessions for dropdown
         async function loadWhatsAppSessions(selectId) {

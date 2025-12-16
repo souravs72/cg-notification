@@ -343,7 +343,6 @@
         </div>
         <ul class="sidebar-menu">
             <li><a href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-            <li><a href="/admin/sites"><i class="bi bi-building"></i> Sites</a></li>
             <li><a href="/admin/campaigns"><i class="bi bi-megaphone"></i> Campaigns</a></li>
             <li><a href="/admin/sessions" class="active"><i class="bi bi-whatsapp"></i> WhatsApp Sessions</a></li>
         </ul>
@@ -525,6 +524,39 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-outline-primary" onclick="refreshQRCode()">
                         <i class="bi bi-arrow-clockwise"></i> Refresh QR Code
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key Modal -->
+    <div class="modal fade" id="apiKeyModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-key"></i> Session API Key</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <strong>Keep this API key secure!</strong> This key allows sending messages from this WhatsApp session. 
+                        Do not share it publicly or commit it to version control.
+                    </div>
+                    <div id="apiKeyContent">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading API key...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="copyApiKeyBtn" onclick="copyApiKey()" style="display: none;">
+                        <i class="bi bi-clipboard"></i> Copy API Key
                     </button>
                 </div>
             </div>
@@ -1504,6 +1536,161 @@
         let currentSessionIdentifier = null;
 
         // Show session details modal and fetch details
+        // Show API Key
+        function showApiKey(sessionId, sessionName) {
+            const modal = new bootstrap.Modal(document.getElementById('apiKeyModal'));
+            const contentDiv = document.getElementById('apiKeyContent');
+            const copyBtn = document.getElementById('copyApiKeyBtn');
+            
+            // Reset modal content
+            contentDiv.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading API key...</p>
+                </div>
+            `;
+            copyBtn.style.display = 'none';
+            
+            // Show modal
+            modal.show();
+            
+            // Fetch API key
+            fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}/api-key`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.status === 401 || response.redirected) {
+                    window.location.href = '/auth/login';
+                    return null;
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data) return;
+                
+                if (data.success && data.apiKey) {
+                    const apiKey = data.apiKey;
+                    const sessionNameDisplay = data.sessionName || sessionName || 'Unknown';
+                    
+                    contentDiv.innerHTML = `
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Session Name:</label>
+                            <p class="text-muted">${escapeHtml(sessionNameDisplay)}</p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">API Key:</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control font-monospace" id="apiKeyInput" 
+                                       value="${escapeHtml(apiKey)}" readonly 
+                                       style="background-color: #f8f9fa; font-size: 0.9rem;">
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyApiKey()">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                            <small class="form-text text-muted mt-2 d-block">
+                                Use this API key to integrate with your Frappe Cloud site or other applications.
+                            </small>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> 
+                            <strong>Integration Example:</strong>
+                            <pre class="mt-2 mb-0" style="font-size: 0.85rem;"><code>POST /api/notifications
+{
+  "channel": "WHATSAPP",
+  "recipient": "+1234567890",
+  "body": "Your message here",
+  "whatsappSessionApiKey": "${escapeHtml(apiKey)}"
+}</code></pre>
+                        </div>
+                    `;
+                    copyBtn.style.display = 'inline-block';
+                } else {
+                    contentDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> 
+                            <strong>API Key Not Available</strong>
+                            <p class="mb-0 mt-2">${escapeHtml(data.error || 'The API key is not available for this session. The session may need to be connected first.')}</p>
+                        </div>
+                    `;
+                    copyBtn.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching API key:', error);
+                contentDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <strong>Error</strong>
+                        <p class="mb-0 mt-2">${escapeHtml(error.message || 'Failed to fetch API key')}</p>
+                    </div>
+                `;
+                copyBtn.style.display = 'none';
+            });
+        }
+
+        // Copy API Key to clipboard
+        function copyApiKey() {
+            const apiKeyInput = document.getElementById('apiKeyInput');
+            if (apiKeyInput) {
+                apiKeyInput.select();
+                apiKeyInput.setSelectionRange(0, 99999); // For mobile devices
+                try {
+                    document.execCommand('copy');
+                    // Show success feedback
+                    const copyBtn = document.querySelector('#apiKeyContent button[onclick="copyApiKey()"]') || 
+                                   document.getElementById('copyApiKeyBtn');
+                    if (copyBtn) {
+                        const originalHTML = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="bi bi-check"></i> Copied!';
+                        copyBtn.classList.remove('btn-outline-secondary', 'btn-primary');
+                        copyBtn.classList.add('btn-success');
+                        setTimeout(() => {
+                            copyBtn.innerHTML = originalHTML;
+                            copyBtn.classList.remove('btn-success');
+                            if (copyBtn.id === 'copyApiKeyBtn') {
+                                copyBtn.classList.add('btn-primary');
+                            } else {
+                                copyBtn.classList.add('btn-outline-secondary');
+                            }
+                        }, 2000);
+                    }
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                    // Fallback to modern clipboard API
+                    const apiKeyText = apiKeyInput.value;
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(apiKeyText).then(() => {
+                            alert('API key copied to clipboard!');
+                        }).catch(() => {
+                            alert('Failed to copy. Please select and copy manually.');
+                        });
+                    } else {
+                        alert('Failed to copy. Please select and copy manually.');
+                    }
+                }
+            } else {
+                // Fallback: try to get from modal content
+                const apiKeyText = document.querySelector('#apiKeyContent input[type="text"]')?.value;
+                if (apiKeyText) {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(apiKeyText).then(() => {
+                            alert('API key copied to clipboard!');
+                        }).catch(() => {
+                            alert('Failed to copy. Please select and copy manually.');
+                        });
+                    } else {
+                        alert('Please select and copy the API key manually.');
+                    }
+                }
+            }
+        }
+
         async function showSessionDetails(sessionIdentifier, sessionName) {
             currentSessionIdentifier = sessionIdentifier;
             

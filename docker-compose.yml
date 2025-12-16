@@ -90,6 +90,7 @@ services:
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_CONFIG_LOCATION: classpath:/application.yml,file:/app/config/application.yml
       ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
       WASENDER_API_KEY: ${WASENDER_API_KEY:-}
     volumes:

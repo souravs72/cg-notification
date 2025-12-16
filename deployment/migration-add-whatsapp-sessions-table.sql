@@ -37,3 +37,5 @@ COMMENT ON COLUMN whatsapp_sessions.session_api_key IS 'API key generated for th
 
 
 
+
+

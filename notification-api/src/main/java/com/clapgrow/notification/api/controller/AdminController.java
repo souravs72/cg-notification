@@ -37,6 +37,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 @Controller
 @RequestMapping("/admin")
@@ -974,6 +976,68 @@ public class AdminController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Error updating session status", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+
+    @GetMapping("/api/whatsapp/session/{sessionId}/api-key")
+    public ResponseEntity<Map<String, Object>> getSessionApiKey(
+            @PathVariable(name = "sessionId") String sessionId,
+            HttpSession session) {
+        try {
+            UUID sessionUuid;
+            try {
+                sessionUuid = UUID.fromString(sessionId);
+            } catch (IllegalArgumentException e) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "Invalid session ID format");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            // Get user ID from session to verify authentication
+            String userIdStr = (String) session.getAttribute("userId");
+            if (userIdStr == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "User not authenticated");
+                return ResponseEntity.status(401).body(error);
+            }
+            
+            // Find session by ID - getUserSessions already filters by user
+            Optional<com.clapgrow.notification.api.entity.WhatsAppSession> sessionOpt = 
+                whatsAppSessionService.getUserSessions(session).stream()
+                    .filter(s -> s.getId().equals(sessionUuid))
+                    .findFirst();
+
+            if (sessionOpt.isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "Session not found");
+                return ResponseEntity.status(404).body(error);
+            }
+
+            com.clapgrow.notification.api.entity.WhatsAppSession whatsAppSession = sessionOpt.get();
+            String apiKey = whatsAppSession.getSessionApiKey();
+
+            if (apiKey == null || apiKey.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "API key not available for this session. The session may not be connected yet.");
+                return ResponseEntity.status(404).body(error);
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("apiKey", apiKey);
+            result.put("sessionName", whatsAppSession.getSessionName());
+            result.put("sessionId", whatsAppSession.getSessionId());
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Error getting session API key", e);
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
             error.put("error", e.getMessage());

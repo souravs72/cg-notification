@@ -10,3 +10,5 @@ COMMENT ON COLUMN sendgrid_config.email_from_name IS 'Default sender name for al
 
 
 
+
+

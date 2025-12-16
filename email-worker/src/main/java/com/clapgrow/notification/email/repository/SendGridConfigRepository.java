@@ -1,6 +1,6 @@
-package com.clapgrow.notification.api.repository;
+package com.clapgrow.notification.email.repository;
 
-import com.clapgrow.notification.api.entity.SendGridConfig;
+import com.clapgrow.notification.email.entity.SendGridConfig;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -21,11 +21,6 @@ public interface SendGridConfigRepository extends JpaRepository<SendGridConfig, 
      */
     boolean existsByIsDeletedFalse();
 }
-
-
-
-
-
 
 
 
