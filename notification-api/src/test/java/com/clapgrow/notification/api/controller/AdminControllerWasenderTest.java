@@ -39,6 +39,18 @@ class AdminControllerWasenderTest {
     @MockBean
     private WasenderConfigService wasenderConfigService;
 
+    @MockBean
+    private com.clapgrow.notification.api.service.SendGridConfigService sendGridConfigService;
+
+    @MockBean
+    private com.clapgrow.notification.api.service.UserService userService;
+
+    @MockBean
+    private com.clapgrow.notification.api.service.UserWasenderService userWasenderService;
+
+    @MockBean
+    private com.clapgrow.notification.api.service.WhatsAppSessionService whatsAppSessionService;
+
     @Test
     void testSaveWasenderApiKey_Success() throws Exception {
         WasenderApiKeyRequest request = new WasenderApiKeyRequest();
@@ -48,7 +60,8 @@ class AdminControllerWasenderTest {
 
         mockMvc.perform(post("/admin/api/wasender/api-key")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .content(objectMapper.writeValueAsString(request))
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.configured").value(true))
                 .andExpect(jsonPath("$.message").value("WASender API key saved successfully"));
@@ -66,7 +79,8 @@ class AdminControllerWasenderTest {
 
         mockMvc.perform(post("/admin/api/wasender/api-key")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+                .content(objectMapper.writeValueAsString(request))
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -75,7 +89,8 @@ class AdminControllerWasenderTest {
     void testGetWasenderApiKeyStatus_Configured() throws Exception {
         when(wasenderConfigService.isConfigured()).thenReturn(true);
 
-        mockMvc.perform(get("/admin/api/wasender/api-key/status"))
+        mockMvc.perform(get("/admin/api/wasender/api-key/status")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.configured").value(true))
                 .andExpect(jsonPath("$.message").value("WASender API key is configured"));
@@ -85,15 +100,16 @@ class AdminControllerWasenderTest {
     void testGetWasenderApiKeyStatus_NotConfigured() throws Exception {
         when(wasenderConfigService.isConfigured()).thenReturn(false);
 
-        mockMvc.perform(get("/admin/api/wasender/api-key/status"))
+        mockMvc.perform(get("/admin/api/wasender/api-key/status")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.configured").value(false))
                 .andExpect(jsonPath("$.message").value("WASender API key is not configured. Please configure it first."));
     }
 
     @Test
-    void testCreateSite_WithoutApiKey_ReturnsBadRequest() throws Exception {
-        when(wasenderConfigService.isConfigured()).thenReturn(false);
+    void testCreateSite_WithoutApiKey_Returns428() throws Exception {
+        when(userWasenderService.isConfigured(any())).thenReturn(false);
 
         com.clapgrow.notification.api.dto.SiteRegistrationRequest request = 
             new com.clapgrow.notification.api.dto.SiteRegistrationRequest();
@@ -101,9 +117,10 @@ class AdminControllerWasenderTest {
 
         mockMvc.perform(post("/admin/api/sites/create")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("WASender API key is not configured. Please configure it first before creating sites."));
+                .content(objectMapper.writeValueAsString(request))
+                .sessionAttr("userId", "test-user-id"))
+                .andExpect(status().isPreconditionRequired())
+                .andExpect(jsonPath("$.error").value("WASender API key is not configured"));
 
         verify(siteService, never()).registerSite(any());
     }

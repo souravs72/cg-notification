@@ -58,6 +58,15 @@ class AdminControllerQRCodeTest {
     @MockBean
     private UserWasenderService userWasenderService;
 
+    @MockBean
+    private com.clapgrow.notification.api.service.SendGridConfigService sendGridConfigService;
+
+    @MockBean
+    private com.clapgrow.notification.api.service.UserService userService;
+
+    @MockBean
+    private com.clapgrow.notification.api.service.WhatsAppSessionService whatsAppSessionService;
+
     private String testSessionId = "41276";
     private String testSessionName = "clapgrow-session";
     private String testPhoneNumber = "+1234567890";
@@ -83,7 +92,8 @@ class AdminControllerQRCodeTest {
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionId", testSessionId)
-                .sessionAttr("wasenderApiKey", "test-api-key"))
+                .sessionAttr("wasenderApiKey", "test-api-key")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.qrCode").exists())
@@ -107,7 +117,8 @@ class AdminControllerQRCodeTest {
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionName", testSessionName)
-                .sessionAttr("wasenderApiKey", "test-api-key"))
+                .sessionAttr("wasenderApiKey", "test-api-key")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
@@ -128,7 +139,8 @@ class AdminControllerQRCodeTest {
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionId", testSessionId)
                 .param("sessionName", testSessionName)
-                .sessionAttr("wasenderApiKey", "test-api-key"))
+                .sessionAttr("wasenderApiKey", "test-api-key")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sessionId").value(testSessionId));
 
@@ -140,7 +152,8 @@ class AdminControllerQRCodeTest {
     @Test
     void testGetQRCode_WithoutParameters_ReturnsBadRequest() throws Exception {
         // Act & Assert
-        mockMvc.perform(get("/admin/api/whatsapp/qrcode"))
+        mockMvc.perform(get("/admin/api/whatsapp/qrcode")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Either sessionName or sessionId must be provided"));
 
@@ -160,7 +173,8 @@ class AdminControllerQRCodeTest {
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionId", "")
                 .param("sessionName", testSessionName)
-                .sessionAttr("wasenderApiKey", "test-api-key"))
+                .sessionAttr("wasenderApiKey", "test-api-key")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk());
 
         verify(wasenderQRService).getQRCode(eq(testSessionName), anyString());
@@ -168,12 +182,13 @@ class AdminControllerQRCodeTest {
 
     @Test
     void testGetQRCode_WhenApiKeyNotConfigured_Returns428() throws Exception {
-        // Arrange
-        when(wasenderConfigService.isConfigured()).thenReturn(false);
+        // Arrange - Return empty Optional to simulate no API key in session
+        when(userWasenderService.getApiKeyFromSession(any())).thenReturn(Optional.empty());
 
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
-                .param("sessionId", testSessionId))
+                .param("sessionId", testSessionId)
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isPreconditionRequired())
                 .andExpect(jsonPath("$.requiresApiKey").value(true))
                 .andExpect(jsonPath("$.error").value("WASender API key is not configured"));
@@ -214,7 +229,8 @@ class AdminControllerQRCodeTest {
         // Act & Assert
         mockMvc.perform(post("/admin/api/whatsapp/session")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
+                .content(objectMapper.writeValueAsString(requestBody))
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.sessionId").value(testSessionId));
@@ -246,7 +262,8 @@ class AdminControllerQRCodeTest {
         // Act & Assert
         mockMvc.perform(post("/admin/api/whatsapp/session")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
+                .content(objectMapper.writeValueAsString(requestBody))
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("Phone number")));
 
@@ -285,7 +302,8 @@ class AdminControllerQRCodeTest {
         // Act & Assert
         mockMvc.perform(post("/admin/api/whatsapp/session")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
+                .content(objectMapper.writeValueAsString(requestBody))
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk());
 
         // Verify accountProtection was passed as Boolean
@@ -318,7 +336,8 @@ class AdminControllerQRCodeTest {
 
         // Act & Assert - This tests that @PathVariable with explicit name works
         mockMvc.perform(post("/admin/api/whatsapp/session/{sessionName}/connect", testSessionName)
-                .sessionAttr("wasenderApiKey", "test-api-key"))
+                .sessionAttr("wasenderApiKey", "test-api-key")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.qrCode").exists());
@@ -340,7 +359,8 @@ class AdminControllerQRCodeTest {
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionId", testSessionId)
-                .sessionAttr("wasenderApiKey", "test-api-key"))
+                .sessionAttr("wasenderApiKey", "test-api-key")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk()) // Controller returns 200, error is in response body
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.statusCode").value(404));
@@ -361,7 +381,8 @@ class AdminControllerQRCodeTest {
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionId", testSessionId)
-                .sessionAttr("wasenderApiKey", "test-api-key"))
+                .sessionAttr("wasenderApiKey", "test-api-key")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sessionId").value(testSessionId))
                 .andExpect(jsonPath("$.qrCode").exists());
@@ -381,14 +402,16 @@ class AdminControllerQRCodeTest {
 
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionId", testSessionId)
-                .sessionAttr("wasenderApiKey", "test-api-key"))
+                .sessionAttr("wasenderApiKey", "test-api-key")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk());
 
         // Test sessionName parameter binding
         when(wasenderQRService.getQRCode(eq(testSessionName), anyString())).thenReturn(mockResponse);
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionName", testSessionName)
-                .sessionAttr("wasenderApiKey", "test-api-key"))
+                .sessionAttr("wasenderApiKey", "test-api-key")
+                .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk());
 
         // If we get here without BAD_REQUEST, parameter binding is working
