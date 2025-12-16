@@ -494,8 +494,16 @@
         <div class="row mb-4">
             <div class="col-12">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><i class="bi bi-graph-up"></i> Message Activity Chart</h5>
+                        <div class="d-flex align-items-center gap-2">
+                            <small class="text-muted" id="timezoneDisplay" style="font-size: 0.75rem;"></small>
+                            <select id="activityChartFilter" class="form-select form-select-sm" style="width: auto; display: inline-block;" onchange="updateActivityChart()">
+                                <option value="today" selected>Today</option>
+                                <option value="lastWeek">Last Week</option>
+                                <option value="overall">Overall</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="chart-container" style="height: 400px;">
@@ -537,16 +545,15 @@
                                         <th>Channel</th>
                                         <th>Recipient</th>
                                         <th>Status</th>
-                                        <th>Subject/Body</th>
-                                        <th>Error</th>
                                         <th>Scheduled At</th>
                                         <th>Sent At</th>
                                         <th>Delivered At</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="messagesTableBody">
                                     <tr>
-                                        <td colspan="10" class="text-center text-muted">Loading messages...</td>
+                                        <td colspan="9" class="text-center text-muted">Loading messages...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -775,16 +782,15 @@
                             <th>Channel</th>
                             <th>Recipient</th>
                             <th>Status</th>
-                            <th>Subject/Body</th>
-                            <th>Error</th>
                             <th>Scheduled At</th>
                             <th>Sent At</th>
                             <th>Delivered At</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="maximizedMessagesTableBody">
                         <tr>
-                            <td colspan="10" class="text-center text-muted">Loading messages...</td>
+                            <td colspan="9" class="text-center text-muted">Loading messages...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -853,6 +859,24 @@
                         <!-- Pagination buttons will be inserted here -->
                     </ul>
                 </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Message Details Modal -->
+    <div class="modal fade" id="messageDetailsModal" tabindex="-1" aria-labelledby="messageDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="messageDetailsModalLabel">Message Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="messageDetailsBody">
+                    <!-- Details will be inserted here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1007,7 +1031,7 @@
                     console.error('Error loading messages:', error);
                     messagesData = [];
                     document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="10" class="text-center text-danger">Error loading messages</td></tr>';
+                        '<tr><td colspan="9" class="text-center text-danger">Error loading messages</td></tr>';
                 });
         }
 
@@ -1024,7 +1048,7 @@
                     console.error('Error loading scheduled messages:', error);
                     messagesData = [];
                     document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="10" class="text-center text-danger">Error loading scheduled messages</td></tr>';
+                        '<tr><td colspan="9" class="text-center text-danger">Error loading scheduled messages</td></tr>';
                 });
         }
 
@@ -1041,7 +1065,7 @@
                     console.error('Error loading failed messages:', error);
                     messagesData = [];
                     document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="10" class="text-center text-danger">Error loading failed messages</td></tr>';
+                        '<tr><td colspan="9" class="text-center text-danger">Error loading failed messages</td></tr>';
                 });
         }
 
@@ -1303,18 +1327,136 @@
                 });
         }
 
+        // Timezone utilities for Message Activity Chart
+        function getUserTimezone() {
+            // Check localStorage first
+            let timezone = localStorage.getItem('userTimezone');
+            if (!timezone) {
+                // Auto-detect timezone
+                try {
+                    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    console.log('Detected timezone:', timezone);
+                } catch (e) {
+                    // Fallback to UTC if detection fails
+                    timezone = 'UTC';
+                    console.warn('Timezone detection failed, using UTC');
+                }
+                // Store in localStorage for persistence
+                localStorage.setItem('userTimezone', timezone);
+            }
+            return timezone;
+        }
+        
+        // Initialize timezone on page load and display it
+        // Force re-detection if UTC is stored (likely wrong)
+        let storedTz = localStorage.getItem('userTimezone');
+        if (storedTz === 'UTC') {
+            console.log('Clearing UTC timezone from storage, re-detecting...');
+            localStorage.removeItem('userTimezone');
+        }
+        
+        const userTimezone = getUserTimezone();
+        const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        console.log('Browser timezone:', browserTimezone);
+        console.log('Using timezone:', userTimezone);
+        
+        // Verify timezone is correct
+        if (userTimezone === 'UTC' && browserTimezone !== 'UTC') {
+            console.warn('Timezone detection may have failed. Browser reports:', browserTimezone, 'but using UTC');
+            // Force update
+            localStorage.setItem('userTimezone', browserTimezone);
+        }
+        
+        // Display timezone in the chart header
+        const timezoneDisplay = document.getElementById('timezoneDisplay');
+        if (timezoneDisplay) {
+            timezoneDisplay.textContent = `TZ: ${userTimezone}`;
+            timezoneDisplay.title = `Chart times are displayed in ${userTimezone} timezone. Click to reset.`;
+            timezoneDisplay.style.cursor = 'pointer';
+            timezoneDisplay.onclick = function() {
+                localStorage.removeItem('userTimezone');
+                location.reload();
+            };
+        }
+
+        // Get date parts (year, month, day, hour) in user's timezone
+        function getDatePartsInTimezone(date, includeHour = false) {
+            const timezone = getUserTimezone();
+            const options = {
+                timeZone: timezone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            };
+            if (includeHour) {
+                options.hour = '2-digit';
+                options.hour12 = false;
+            }
+            const formatter = new Intl.DateTimeFormat('en-US', options);
+            const parts = formatter.formatToParts(date);
+            const result = {
+                year: parseInt(parts.find(p => p.type === 'year').value),
+                month: parseInt(parts.find(p => p.type === 'month').value) - 1, // 0-indexed
+                day: parseInt(parts.find(p => p.type === 'day').value)
+            };
+            if (includeHour) {
+                result.hour = parseInt(parts.find(p => p.type === 'hour').value);
+            }
+            return result;
+        }
+
+        // Get date string (YYYY-MM-DD) in user's timezone
+        function getDateStringInTimezone(date) {
+            const parts = getDatePartsInTimezone(date);
+            return `${parts.year}-${String(parts.month + 1).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+        }
+
+        // Get hour (0-23) in user's timezone
+        function getHourInTimezone(date) {
+            const parts = getDatePartsInTimezone(date, true);
+            return parts.hour;
+        }
+
+        // Format time in user's timezone
+        function formatTimeInTimezone(date) {
+            const timezone = getUserTimezone();
+            return new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                hour: 'numeric',
+                hour12: true
+            }).format(date);
+        }
+
+        // Format date in user's timezone
+        function formatDateInTimezone(date) {
+            const timezone = getUserTimezone();
+            return new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                month: 'short',
+                day: 'numeric'
+            }).format(date);
+        }
+
         // Message Activity Chart
+        let messageActivityChart = null;
         const messageActivityCtx = document.getElementById('messageActivityChart');
         if (messageActivityCtx) {
-            const messageActivityChart = new Chart(messageActivityCtx.getContext('2d'), {
+            messageActivityChart = new Chart(messageActivityCtx.getContext('2d'), {
                 type: 'line',
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Messages Sent',
+                        label: 'Successful Messages',
                         data: [],
-                        borderColor: '#25D366',
-                        backgroundColor: 'rgba(37, 211, 102, 0.1)',
+                        borderColor: '#198754',
+                        backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Failed Messages',
+                        data: [],
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
                         tension: 0.4,
                         fill: true
                     }]
@@ -1336,40 +1478,229 @@
                 }
             });
 
-            // Load message activity data (last 7 days)
-            fetch('/admin/api/messages/recent?limit=100')
+            // Initial load with "today" filter
+            updateActivityChart();
+        }
+
+        // Function to update activity chart based on selected filter
+        function updateActivityChart() {
+            if (!messageActivityChart) return;
+            
+            const filter = document.getElementById('activityChartFilter')?.value || 'today';
+            const limit = filter === 'overall' ? 5000 : (filter === 'today' ? 1000 : 100);
+            
+            fetch(`/admin/api/messages/recent?limit=${limit}`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data && data.length > 0) {
-                        // Group by date
-                        const dateMap = new Map();
-                        const today = new Date();
-                        for (let i = 6; i >= 0; i--) {
-                            const date = new Date(today);
-                            date.setDate(date.getDate() - i);
-                            const dateStr = date.toISOString().split('T')[0];
-                            dateMap.set(dateStr, 0);
-                        }
+                    if (!data || data.length === 0) {
+                        messageActivityChart.data.labels = [];
+                        messageActivityChart.data.datasets[0].data = [];
+                        messageActivityChart.data.datasets[1].data = [];
+                        messageActivityChart.update();
+                        return;
+                    }
+
+                    const now = new Date();
+                    const todayDateStr = getDateStringInTimezone(now);
+                    
+                    let dateRange = [];
+                    let startDateStr = null;
+                    
+                    // Determine date range based on filter (all dates in user's timezone)
+                    if (filter === 'today') {
+                        // Today only - group by hours (0-23 in user's timezone)
+                        const timezone = getUserTimezone();
+                        const todayParts = getDatePartsInTimezone(now);
                         
-                        data.forEach(msg => {
-                            if (msg.sentAt) {
-                                const dateStr = new Date(msg.sentAt).toISOString().split('T')[0];
-                                if (dateMap.has(dateStr)) {
-                                    dateMap.set(dateStr, dateMap.get(dateStr) + 1);
+                        // Create hour labels by finding UTC times that represent each hour in user's timezone
+                        // Strategy: Start with a known UTC time (noon today) and calculate offsets
+                        const baseUtcDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day, 12, 0, 0));
+                        const baseHour = getHourInTimezone(baseUtcDate);
+                        
+                        for (let h = 0; h < 24; h++) {
+                            // Calculate how many hours offset from base hour
+                            const hourDiff = h - baseHour;
+                            // Create UTC date for this hour
+                            const hourUtcDate = new Date(baseUtcDate.getTime() + hourDiff * 3600000);
+                            
+                            // Verify the hour is correct (accounting for DST changes)
+                            let actualHour = getHourInTimezone(hourUtcDate);
+                            if (actualHour !== h) {
+                                // Fine-tune: adjust by the difference
+                                const adjustMs = (h - actualHour) * 3600000;
+                                hourUtcDate.setTime(hourUtcDate.getTime() + adjustMs);
+                                // Re-verify
+                                actualHour = getHourInTimezone(hourUtcDate);
+                                // If still wrong, try one more adjustment (for edge cases)
+                                if (actualHour !== h && Math.abs(adjustMs) < 3600000) {
+                                    hourUtcDate.setTime(hourUtcDate.getTime() + (h - actualHour) * 3600000);
                                 }
                             }
-                        });
+                            
+                            dateRange.push({
+                                hour: h,
+                                dateStr: todayDateStr,
+                                label: formatTimeInTimezone(hourUtcDate)
+                            });
+                        }
+                        startDateStr = todayDateStr;
+                    } else if (filter === 'lastWeek') {
+                        // Last 7 days - group by day in user's timezone
+                        const timezone = getUserTimezone();
+                        const todayParts = getDatePartsInTimezone(now);
                         
-                        const labels = Array.from(dateMap.keys()).map(d => {
-                            const date = new Date(d);
-                            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        });
-                        const values = Array.from(dateMap.values());
+                        // Create dates for each of the last 7 days in user's timezone
+                        for (let i = 6; i >= 0; i--) {
+                            // Create a date i days ago by subtracting days from today
+                            // We need to work in UTC and then convert to user's timezone for display
+                            const utcDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day, 12, 0, 0));
+                            utcDate.setUTCDate(utcDate.getUTCDate() - i);
+                            
+                            // Get the date string in user's timezone
+                            const dateStr = getDateStringInTimezone(utcDate);
+                            
+                            dateRange.push({
+                                dateStr: dateStr,
+                                date: utcDate,
+                                label: formatDateInTimezone(utcDate)
+                            });
+                        }
+                        // Get date string for 6 days ago as start
+                        const startUtcDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day, 12, 0, 0));
+                        startUtcDate.setUTCDate(startUtcDate.getUTCDate() - 6);
+                        startDateStr = getDateStringInTimezone(startUtcDate);
+                    } else {
+                        // Overall - group by week (last 12 weeks) in user's timezone
+                        const timezone = getUserTimezone();
+                        const todayParts = getDatePartsInTimezone(now);
                         
-                        messageActivityChart.data.labels = labels;
-                        messageActivityChart.data.datasets[0].data = values;
-                        messageActivityChart.update();
+                        for (let i = 11; i >= 0; i--) {
+                            // Create date i*7 days ago
+                            const utcDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day, 12, 0, 0));
+                            utcDate.setUTCDate(utcDate.getUTCDate() - (i * 7));
+                            
+                            // Get day of week in user's timezone
+                            const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
+                                timeZone: timezone,
+                                weekday: 'short'
+                            });
+                            const weekdayStr = weekdayFormatter.format(utcDate);
+                            const dayOfWeek = weekdayStr === 'Sun' ? 0 : weekdayStr === 'Mon' ? 1 : 
+                                             weekdayStr === 'Tue' ? 2 : weekdayStr === 'Wed' ? 3 :
+                                             weekdayStr === 'Thu' ? 4 : weekdayStr === 'Fri' ? 5 : 6;
+                            const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                            
+                            // Get Monday of that week
+                            const mondayUtcDate = new Date(utcDate);
+                            mondayUtcDate.setUTCDate(utcDate.getUTCDate() - daysToMonday);
+                            const mondayDateStr = getDateStringInTimezone(mondayUtcDate);
+                            
+                            dateRange.push({
+                                dateStr: mondayDateStr,
+                                date: mondayUtcDate,
+                                label: formatDateInTimezone(mondayUtcDate)
+                            });
+                        }
                     }
+                    
+                    // Initialize maps for success and failed counts
+                    const successMap = new Map();
+                    const failedMap = new Map();
+                    
+                    dateRange.forEach(range => {
+                        const key = filter === 'today' 
+                            ? range.hour.toString()
+                            : range.dateStr;
+                        successMap.set(key, 0);
+                        failedMap.set(key, 0);
+                    });
+                    
+                    // Process messages and categorize by status
+                    const successStatuses = ['DELIVERED'];
+                    const failedStatuses = ['FAILED', 'BOUNCED', 'REJECTED'];
+                    
+                    data.forEach(msg => {
+                        if (!msg.sentAt) return;
+                        
+                        const msgDate = new Date(msg.sentAt);
+                        let key;
+                        
+                        if (filter === 'today') {
+                            // Check if message is from today in user's timezone
+                            const msgDateStr = getDateStringInTimezone(msgDate);
+                            if (msgDateStr !== todayDateStr) {
+                                return; // Not today, skip
+                            }
+                            const hour = getHourInTimezone(msgDate);
+                            key = hour.toString();
+                            if (!successMap.has(key) && !failedMap.has(key)) {
+                                return; // Hour not in range
+                            }
+                        } else if (filter === 'lastWeek') {
+                            // Check if message is within the last 7 days in user's timezone
+                            const msgDateStr = getDateStringInTimezone(msgDate);
+                            if (msgDateStr < startDateStr) {
+                                return; // Too old, skip
+                            }
+                            if (!successMap.has(msgDateStr) && !failedMap.has(msgDateStr)) {
+                                return; // Date not in range
+                            }
+                            key = msgDateStr;
+                        } else {
+                            // Overall - group by week in user's timezone
+                            const msgDateStr = getDateStringInTimezone(msgDate);
+                            // Get Monday of the week for this date in user's timezone
+                            const timezone = getUserTimezone();
+                            const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
+                                timeZone: timezone,
+                                weekday: 'short'
+                            });
+                            const weekdayStr = weekdayFormatter.format(msgDate);
+                            const dayOfWeek = weekdayStr === 'Sun' ? 0 : weekdayStr === 'Mon' ? 1 : 
+                                             weekdayStr === 'Tue' ? 2 : weekdayStr === 'Wed' ? 3 :
+                                             weekdayStr === 'Thu' ? 4 : weekdayStr === 'Fri' ? 5 : 6;
+                            const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                            const mondayDate = new Date(msgDate);
+                            mondayDate.setDate(msgDate.getDate() - daysToMonday);
+                            const mondayDateStr = getDateStringInTimezone(mondayDate);
+                            key = mondayDateStr;
+                            
+                            // Check if this week is in our dateRange
+                            if (!successMap.has(key) && !failedMap.has(key)) {
+                                return; // Week not in range
+                            }
+                        }
+                        
+                        // Categorize message
+                        const status = msg.status || '';
+                        if (successStatuses.includes(status)) {
+                            const current = successMap.get(key) || 0;
+                            successMap.set(key, current + 1);
+                        } else if (failedStatuses.includes(status)) {
+                            const current = failedMap.get(key) || 0;
+                            failedMap.set(key, current + 1);
+                        }
+                    });
+                    
+                    // Build labels and data arrays
+                    const labels = dateRange.map(r => r.label);
+                    const successData = dateRange.map(r => {
+                        const key = filter === 'today' 
+                            ? r.hour.toString()
+                            : r.dateStr;
+                        return successMap.get(key) || 0;
+                    });
+                    const failedData = dateRange.map(r => {
+                        const key = filter === 'today' 
+                            ? r.hour.toString()
+                            : r.dateStr;
+                        return failedMap.get(key) || 0;
+                    });
+                    
+                    messageActivityChart.data.labels = labels;
+                    messageActivityChart.data.datasets[0].data = successData;
+                    messageActivityChart.data.datasets[1].data = failedData;
+                    messageActivityChart.update();
                 })
                 .catch(error => {
                     console.error('Error loading message activity:', error);
@@ -1423,15 +1754,16 @@
             const tbody = document.getElementById('messagesTableBody');
             if (tbody) {
                 if (pageData.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No messages found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
                     // Fill remaining rows to maintain fixed height
                     for (let i = 1; i < messagesPageSize; i++) {
-                        tbody.innerHTML += '<tr><td colspan="10" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
+                        tbody.innerHTML += '<tr><td colspan="9" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
                     }
                 } else {
-                    let html = pageData.map(msg => {
+                    let html = pageData.map((msg, index) => {
                         const rowClass = messagesCurrentFilter === 'scheduled' ? 'table-info' : 
                                        messagesCurrentFilter === 'failed' ? 'table-danger' : '';
+                        const msgIndex = start + index;
                         return `
                         <tr class="${rowClass}">
                             <td><code>${msg.messageId}</code></td>
@@ -1447,11 +1779,14 @@
                                     msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
                                 }">${msg.status}</span>
                             </td>
-                            <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
-                            <td><small class="text-danger ${messagesCurrentFilter === 'failed' ? 'fw-bold' : ''}">${msg.errorMessage || '-'}</small></td>
                             <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="showMessageDetails(${msgIndex})" title="View Details">
+                                    <i class="bi bi-eye"></i> Details
+                                </button>
+                            </td>
                         </tr>
                     `;
                     }).join('');
@@ -1459,7 +1794,7 @@
                     // Fill remaining rows to maintain fixed height
                     const remainingRows = messagesPageSize - pageData.length;
                     for (let i = 0; i < remainingRows; i++) {
-                        html += '<tr><td colspan="10" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
+                        html += '<tr><td colspan="9" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
                     }
                     
                     tbody.innerHTML = html;
@@ -1504,6 +1839,97 @@
             } else if (pagination) {
                 pagination.innerHTML = '';
             }
+        }
+
+        function showMessageDetails(index) {
+            if (index < 0 || index >= messagesData.length) {
+                console.error('Invalid message index:', index);
+                return;
+            }
+            
+            const msg = messagesData[index];
+            const modalBody = document.getElementById('messageDetailsBody');
+            const modal = new bootstrap.Modal(document.getElementById('messageDetailsModal'));
+            
+            if (modalBody) {
+                const statusBadgeClass = 
+                    msg.status === 'DELIVERED' ? 'bg-success' :
+                    msg.status === 'SENT' ? 'bg-primary' :
+                    msg.status === 'FAILED' ? 'bg-danger' :
+                    msg.status === 'PENDING' ? 'bg-warning' :
+                    msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary';
+                
+                const channelBadgeClass = msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info';
+                
+                modalBody.innerHTML = `
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Message ID:</strong><br>
+                            <code>${escapeHtml(msg.messageId)}</code>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Status:</strong><br>
+                            <span class="badge ${statusBadgeClass}">${escapeHtml(msg.status)}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Site:</strong><br>
+                            ${escapeHtml(msg.siteName || 'N/A')}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Channel:</strong><br>
+                            <span class="badge ${channelBadgeClass}">${escapeHtml(msg.channel)}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Recipient:</strong><br>
+                            ${escapeHtml(msg.recipient)}
+                        </div>
+                    </div>
+                    ${msg.subject ? `
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Subject:</strong><br>
+                            <div class="p-2 bg-light rounded">${escapeHtml(msg.subject)}</div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${msg.body ? `
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Body:</strong><br>
+                            <div class="p-2 bg-light rounded" style="white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(msg.body)}</div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${msg.errorMessage ? `
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Error Message:</strong><br>
+                            <div class="p-2 bg-danger bg-opacity-10 text-danger rounded" style="white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(msg.errorMessage)}</div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <strong>Scheduled At:</strong><br>
+                            ${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Sent At:</strong><br>
+                            ${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Delivered At:</strong><br>
+                            ${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            modal.show();
         }
 
         function goToMessagesPage(page) {
@@ -1620,11 +2046,12 @@
             const tbody = document.getElementById('maximizedMessagesTableBody');
             if (tbody) {
                 if (pageData.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No messages found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
                 } else {
-                    tbody.innerHTML = pageData.map(msg => {
+                    tbody.innerHTML = pageData.map((msg, index) => {
                         const rowClass = messagesCurrentFilter === 'scheduled' ? 'table-info' : 
                                        messagesCurrentFilter === 'failed' ? 'table-danger' : '';
+                        const msgIndex = start + index;
                         return `
                         <tr class="${rowClass}">
                             <td><code>${msg.messageId}</code></td>
@@ -1640,11 +2067,14 @@
                                     msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
                                 }">${msg.status}</span>
                             </td>
-                            <td><small>${escapeHtml((msg.subject || msg.body || '').substring(0, 100))}${(msg.subject || msg.body || '').length > 100 ? '...' : ''}</small></td>
-                            <td><small class="text-danger ${messagesCurrentFilter === 'failed' ? 'fw-bold' : ''}">${escapeHtml(msg.errorMessage || '-')}</small></td>
                             <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
                             <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="showMessageDetails(${msgIndex})" title="View Details">
+                                    <i class="bi bi-eye"></i> Details
+                                </button>
+                            </td>
                         </tr>
                     `;
                     }).join('');

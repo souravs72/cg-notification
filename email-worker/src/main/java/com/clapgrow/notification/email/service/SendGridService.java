@@ -31,7 +31,7 @@ public class SendGridService {
     @Value("${sendgrid.from.name:Notification Service}")
     private String defaultFromName;
 
-    public boolean sendEmail(NotificationPayload payload) {
+    public SendEmailResult sendEmail(NotificationPayload payload) {
         try {
             SendGrid sendGrid = getSendGridForPayload(payload);
             
@@ -59,16 +59,24 @@ public class SendGridService {
             if (response.getStatusCode() >= 200 && response.getStatusCode() < 300) {
                 log.info("Email sent successfully to {} with status code {}", 
                     payload.getRecipient(), response.getStatusCode());
-                return true;
+                return SendEmailResult.success();
             } else {
-                log.error("Failed to send email to {}: Status {} - {}", 
-                    payload.getRecipient(), response.getStatusCode(), response.getBody());
-                return false;
+                String errorMessage = String.format("SendGrid API error: Status %d - %s", 
+                    response.getStatusCode(), 
+                    response.getBody() != null ? response.getBody() : "No response body");
+                log.error("Failed to send email to {}: {}", 
+                    payload.getRecipient(), errorMessage);
+                return SendEmailResult.failure(errorMessage);
             }
             
         } catch (IOException e) {
-            log.error("Error sending email via SendGrid", e);
-            return false;
+            String errorMessage = String.format("SendGrid API IOException: %s", e.getMessage());
+            log.error("Error sending email via SendGrid to {}", payload.getRecipient(), e);
+            return SendEmailResult.failure(errorMessage);
+        } catch (Exception e) {
+            String errorMessage = String.format("Unexpected error sending email: %s", e.getMessage());
+            log.error("Unexpected error sending email via SendGrid to {}", payload.getRecipient(), e);
+            return SendEmailResult.failure(errorMessage);
         }
     }
     

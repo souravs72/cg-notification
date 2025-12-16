@@ -271,7 +271,7 @@
                         <div class="mb-3">
                             <label class="form-label">Recipients (one per line)</label>
                             <textarea class="form-control" id="bulkRecipients" rows="6" placeholder="+1234567890&#10;+9876543210&#10;email@example.com" required></textarea>
-                            <small class="form-text text-muted">Enter one recipient per line</small>
+                            <small class="form-text text-muted">Enter one recipient per line. Phone numbers and emails can be mixed - the system will automatically detect the type and route accordingly.</small>
                         </div>
                         <div class="mb-3" id="bulkSubjectGroup" style="display: none;">
                             <label class="form-label">Subject</label>
@@ -406,7 +406,7 @@
                         <div class="mb-3">
                             <label class="form-label">Recipients (one per line)</label>
                             <textarea class="form-control" id="campaignRecipients" rows="6" placeholder="+1234567890&#10;+9876543210&#10;email@example.com" required></textarea>
-                            <small class="form-text text-muted">Enter one recipient per line</small>
+                            <small class="form-text text-muted">Enter one recipient per line. Phone numbers and emails can be mixed - the system will automatically detect the type and route accordingly.</small>
                         </div>
                         <div class="row mb-3">
                             <div class="col-md-6">
@@ -564,6 +564,41 @@
                 .filter(r => r.length > 0);
         }
 
+        // Helper function to detect if recipient is a phone number or email
+        function detectRecipientType(recipient) {
+            if (!recipient || recipient.trim().length === 0) {
+                return null;
+            }
+            
+            const trimmed = recipient.trim();
+            
+            // Email pattern: contains @ and has valid email format
+            const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (emailPattern.test(trimmed)) {
+                return 'EMAIL';
+            }
+            
+            // Phone number pattern: starts with + followed by digits, or just digits
+            // Remove common phone number formatting characters
+            const phoneOnly = trimmed.replace(/[\s\-\(\)\.]/g, '');
+            const phonePattern = /^\+?\d{10,15}$/;
+            if (phonePattern.test(phoneOnly)) {
+                return 'WHATSAPP';
+            }
+            
+            // Default: if it looks like it could be a phone (has + or starts with digit), assume WhatsApp
+            // Otherwise, if it has @, assume email (even if format is slightly off)
+            if (trimmed.includes('@')) {
+                return 'EMAIL';
+            }
+            if (trimmed.startsWith('+') || /^\d/.test(trimmed)) {
+                return 'WHATSAPP';
+            }
+            
+            // If we can't determine, return null (will use the selected channel)
+            return null;
+        }
+
         // Show/hide subject field based on channel
         function toggleSubject(channelId, subjectGroupId) {
             const channel = document.getElementById(channelId);
@@ -709,9 +744,17 @@
             e.preventDefault();
             const siteId = document.getElementById('bulkSiteId').value;
             const recipients = parseRecipientsFromTextarea(document.getElementById('bulkRecipients').value);
+            const defaultChannel = document.getElementById('bulkChannel').value;
+            const bulkSubject = document.getElementById('bulkSubject').value || null;
+            
             const notifications = recipients.map(recipient => {
+                // Auto-detect channel based on recipient type (phone number vs email)
+                const detectedChannel = detectRecipientType(recipient);
+                // Use detected channel if available, otherwise fall back to selected channel
+                const channel = detectedChannel || defaultChannel;
+                
                 const notif = {
-                    channel: document.getElementById('bulkChannel').value,
+                    channel: channel,
                     recipient: recipient,
                     body: document.getElementById('bulkBody').value,
                     imageUrl: document.getElementById('bulkImageUrl').value || null,
@@ -720,8 +763,9 @@
                     fileName: document.getElementById('bulkFileName').value || null,
                     caption: document.getElementById('bulkCaption').value || null
                 };
-                if (document.getElementById('bulkChannel').value === 'EMAIL') {
-                    notif.subject = document.getElementById('bulkSubject').value || null;
+                // Add subject for email messages
+                if (channel === 'EMAIL') {
+                    notif.subject = bulkSubject;
                 }
                 return notif;
             });
@@ -797,10 +841,17 @@
             const date = document.getElementById('campaignDate').value;
             const time = document.getElementById('campaignTime').value;
             const scheduledAt = `${date}T${time}:00`;
+            const defaultChannel = document.getElementById('campaignChannel').value;
+            const campaignSubject = document.getElementById('campaignSubject').value || null;
 
             const notifications = recipients.map(recipient => {
+                // Auto-detect channel based on recipient type (phone number vs email)
+                const detectedChannel = detectRecipientType(recipient);
+                // Use detected channel if available, otherwise fall back to selected channel
+                const channel = detectedChannel || defaultChannel;
+                
                 const notif = {
-                    channel: document.getElementById('campaignChannel').value,
+                    channel: channel,
                     recipient: recipient,
                     body: document.getElementById('campaignBody').value,
                     scheduledAt: scheduledAt,
@@ -810,8 +861,9 @@
                     fileName: document.getElementById('campaignFileName').value || null,
                     caption: document.getElementById('campaignCaption').value || null
                 };
-                if (document.getElementById('campaignChannel').value === 'EMAIL') {
-                    notif.subject = document.getElementById('campaignSubject').value || null;
+                // Add subject for email messages
+                if (channel === 'EMAIL') {
+                    notif.subject = campaignSubject;
                 }
                 return notif;
             });

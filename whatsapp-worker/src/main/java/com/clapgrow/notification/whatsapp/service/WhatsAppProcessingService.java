@@ -40,15 +40,39 @@ public class WhatsAppProcessingService {
             whatsAppLogService.updateStatus(messageId, "SENT", null);
             
             // Send WhatsApp message via WASender
-            boolean success = wasenderService.sendMessage(notification);
+            WasenderSendResult result = wasenderService.sendMessage(notification);
             
-            if (success) {
+            if (result.isSuccess()) {
                 whatsAppLogService.updateStatus(messageId, "DELIVERED", null);
                 log.info("WhatsApp notification {} processed successfully", messageId);
             } else {
                 // Get retry count from database to track retries properly
                 int currentRetryCount = whatsAppLogService.getRetryCount(messageId);
-                handleFailure(messageId, payload, currentRetryCount, "WASender API returned error");
+                // Build detailed error message
+                String errorMessage = result.getErrorMessage();
+                String errorDetails = result.getErrorDetails();
+                
+                // Create comprehensive error message for logging and storage
+                StringBuilder fullErrorMessage = new StringBuilder();
+                fullErrorMessage.append(errorMessage != null ? errorMessage : "WASender API returned error");
+                
+                if (errorDetails != null && !errorDetails.isEmpty()) {
+                    fullErrorMessage.append("\n\nDetailed Error Information:\n");
+                    fullErrorMessage.append(errorDetails);
+                }
+                
+                if (result.getHttpStatusCode() != null) {
+                    fullErrorMessage.append(String.format("\nHTTP Status Code: %d", result.getHttpStatusCode()));
+                }
+                
+                if (result.getResponseBody() != null && !result.getResponseBody().isEmpty()) {
+                    fullErrorMessage.append(String.format("\nAPI Response Body: %s", result.getResponseBody()));
+                }
+                
+                log.error("Failed to send WhatsApp message {} to recipient {}. Error: {}\nDetails: {}", 
+                    messageId, notification.getRecipient(), errorMessage, errorDetails);
+                
+                handleFailure(messageId, payload, currentRetryCount, fullErrorMessage.toString());
             }
             
             acknowledgment.acknowledge();

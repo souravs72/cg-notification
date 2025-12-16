@@ -122,6 +122,81 @@ public class AdminController {
         return ResponseEntity.ok(messages);
     }
 
+    @GetMapping("/api/messages/failed/export")
+    @Operation(
+            summary = "Export failed messages error log",
+            description = "Downloads a detailed error log file containing all failed messages with their error details."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Error log file downloaded successfully"),
+            @ApiResponse(responseCode = "401", description = "Authentication required")
+    })
+    public ResponseEntity<org.springframework.core.io.Resource> exportFailedMessagesLog(
+            @Parameter(description = "Maximum number of messages to include", example = "1000")
+            @RequestParam(name = "limit", defaultValue = "1000") int limit) {
+        try {
+            List<MessageDetailResponse> messages = adminService.getFailedMessages(limit);
+            
+            // Build detailed error log content
+            StringBuilder logContent = new StringBuilder();
+            logContent.append("=".repeat(80)).append("\n");
+            logContent.append("FAILED MESSAGES ERROR LOG\n");
+            logContent.append("Generated: ").append(java.time.LocalDateTime.now()).append("\n");
+            logContent.append("Total Failed Messages: ").append(messages.size()).append("\n");
+            logContent.append("=".repeat(80)).append("\n\n");
+            
+            for (int i = 0; i < messages.size(); i++) {
+                MessageDetailResponse msg = messages.get(i);
+                logContent.append(String.format("Message #%d\n", i + 1));
+                logContent.append("-".repeat(80)).append("\n");
+                logContent.append(String.format("Message ID: %s\n", msg.getMessageId()));
+                logContent.append(String.format("Site: %s\n", msg.getSiteName() != null ? msg.getSiteName() : "N/A"));
+                logContent.append(String.format("Channel: %s\n", msg.getChannel()));
+                logContent.append(String.format("Recipient: %s\n", msg.getRecipient()));
+                logContent.append(String.format("Status: %s\n", msg.getStatus()));
+                logContent.append(String.format("Created At: %s\n", msg.getCreatedAt() != null ? msg.getCreatedAt() : "N/A"));
+                logContent.append(String.format("Sent At: %s\n", msg.getSentAt() != null ? msg.getSentAt() : "N/A"));
+                
+                if (msg.getSubject() != null && !msg.getSubject().isEmpty()) {
+                    logContent.append(String.format("Subject: %s\n", msg.getSubject()));
+                }
+                
+                if (msg.getBody() != null && !msg.getBody().isEmpty()) {
+                    logContent.append(String.format("Body: %s\n", msg.getBody()));
+                }
+                
+                // Detailed error message
+                if (msg.getErrorMessage() != null && !msg.getErrorMessage().isEmpty()) {
+                    logContent.append("\nERROR DETAILS:\n");
+                    logContent.append(msg.getErrorMessage()).append("\n");
+                } else {
+                    logContent.append("\nERROR DETAILS: No error message available\n");
+                }
+                
+                logContent.append("\n").append("=".repeat(80)).append("\n\n");
+            }
+            
+            // Create a resource from the log content
+            byte[] logBytes = logContent.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            org.springframework.core.io.InputStreamResource resource = 
+                new org.springframework.core.io.InputStreamResource(new java.io.ByteArrayInputStream(logBytes));
+            
+            String filename = String.format("error-log-%s.txt", 
+                java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")));
+            
+            return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, 
+                    "attachment; filename=\"" + filename + "\"")
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "text/plain; charset=utf-8")
+                .contentLength(logBytes.length)
+                .body(resource);
+                
+        } catch (Exception e) {
+            log.error("Error exporting failed messages log", e);
+            throw new RuntimeException("Failed to export error log: " + e.getMessage(), e);
+        }
+    }
+
     @GetMapping("/api/messages/scheduled")
     @Operation(
             summary = "Get scheduled messages",

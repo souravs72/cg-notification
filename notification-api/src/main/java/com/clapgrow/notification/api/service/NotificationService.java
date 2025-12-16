@@ -78,11 +78,16 @@ public class NotificationService {
 
     @Transactional
     public List<NotificationResponse> sendBulkNotifications(BulkNotificationRequest request, FrappeSite site) {
+        return sendBulkNotifications(request, site, null);
+    }
+    
+    @Transactional
+    public List<NotificationResponse> sendBulkNotifications(BulkNotificationRequest request, FrappeSite site, jakarta.servlet.http.HttpSession session) {
         List<NotificationResponse> responses = new ArrayList<>();
         
         for (NotificationRequest notificationRequest : request.getNotifications()) {
             try {
-                NotificationResponse response = sendNotification(notificationRequest, site);
+                NotificationResponse response = sendNotification(notificationRequest, site, session);
                 responses.add(response);
             } catch (Exception e) {
                 log.error("Error processing bulk notification", e);
@@ -178,10 +183,14 @@ public class NotificationService {
             
             // Include WASender API key for WhatsApp messages
             if (request.getChannel() == NotificationChannel.WHATSAPP) {
-                // Check if a specific session is requested
+                // Check if a specific session is requested (from request or site)
                 String requestedSessionName = request.getWhatsappSessionName();
+                if ((requestedSessionName == null || requestedSessionName.trim().isEmpty()) && site != null && site.getWhatsappSessionName() != null) {
+                    // Use site's session name if request doesn't specify one
+                    requestedSessionName = site.getWhatsappSessionName();
+                }
                 
-                // If a session is explicitly chosen, we MUST use that session's API key
+                // If a session is specified (from request or site), we MUST use that session's API key
                 if (requestedSessionName != null && !requestedSessionName.trim().isEmpty()) {
                     String sessionApiKey = null;
                     boolean sessionApiKeyFound = false;

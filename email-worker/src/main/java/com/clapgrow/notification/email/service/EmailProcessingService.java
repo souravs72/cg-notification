@@ -40,13 +40,13 @@ public class EmailProcessingService {
             emailLogService.updateStatus(messageId, "SENT", null);
             
             // Send email via SendGrid
-            boolean success = sendGridService.sendEmail(notification);
+            SendEmailResult result = sendGridService.sendEmail(notification);
             
-            if (success) {
+            if (result.isSuccess()) {
                 emailLogService.updateStatus(messageId, "DELIVERED", null);
                 log.info("Email notification {} processed successfully", messageId);
             } else {
-                handleFailure(messageId, payload, 0, "SendGrid API returned error");
+                handleFailure(messageId, payload, 0, result.getErrorMessage());
             }
             
             acknowledgment.acknowledge();

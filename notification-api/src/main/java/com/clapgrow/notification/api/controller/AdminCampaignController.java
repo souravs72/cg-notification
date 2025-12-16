@@ -127,7 +127,7 @@ public class AdminCampaignController {
             adminAuthService.validateAdminKey(adminKey);
         }
         FrappeSite site = siteService.getSiteById(java.util.UUID.fromString(siteId));
-        List<NotificationResponse> responses = notificationService.sendBulkNotifications(request, site);
+        List<NotificationResponse> responses = notificationService.sendBulkNotifications(request, site, session);
         
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);

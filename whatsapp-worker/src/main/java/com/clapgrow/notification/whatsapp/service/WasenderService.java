@@ -24,7 +24,7 @@ public class WasenderService {
     @Value("${wasender.api.base-url:https://wasenderapi.com/api}")
     private String wasenderBaseUrl;
 
-    public boolean sendMessage(NotificationPayload payload) {
+    public WasenderSendResult sendMessage(NotificationPayload payload) {
         String originalRecipient = payload.getRecipient();
         String apiKey = payload.getWasenderApiKey();
         WasenderMessageRequest request = null;
@@ -33,8 +33,10 @@ public class WasenderService {
         try {
             // Get API key from payload, fallback to environment variable for backward compatibility
             if (apiKey == null || apiKey.trim().isEmpty()) {
+                String errorMsg = "WASender API key is not provided in the payload. Please configure it first.";
                 log.error("WASender API key is not provided in the payload for recipient: {}", originalRecipient);
-                throw new IllegalStateException("WASender API key is not provided in the payload. Please configure it first.");
+                return WasenderSendResult.failure(errorMsg, 
+                    String.format("Missing API key for recipient: %s. URL: %s", originalRecipient, requestUrl));
             }
             
             request = buildWasenderRequest(payload);
@@ -62,18 +64,50 @@ public class WasenderService {
             
             log.info("WhatsApp message sent successfully to {}. WASender API response: {}", 
                 request.getTo(), response != null ? (response.length() > 500 ? response.substring(0, 500) + "..." : response) : "null");
-            return true;
+            return WasenderSendResult.success();
             
         } catch (org.springframework.web.reactive.function.client.WebClientResponseException.TooManyRequests e) {
             String errorBody = e.getResponseBodyAsString();
             String recipient = request != null && request.getTo() != null ? request.getTo() : originalRecipient;
+            String errorMsg = String.format("Rate limit exceeded (429 Too Many Requests) for recipient: %s", recipient);
+            String errorDetails = String.format(
+                "HTTP Status: 429 Too Many Requests%n" +
+                "URL: %s%n" +
+                "Recipient: %s%n" +
+                "Response Body: %s%n" +
+                "Request Details: to=%s, session=%s",
+                requestUrl,
+                recipient,
+                errorBody != null ? errorBody : "null",
+                request != null ? request.getTo() : originalRecipient,
+                request != null ? request.getWhatsappSession() : "N/A"
+            );
             log.warn("Rate limit exceeded (429) for WhatsApp message to {}. Response body: {}", 
                 recipient, errorBody);
-            // Return false to trigger retry with backoff
-            return false;
+            return WasenderSendResult.failure(errorMsg, errorDetails, 429, errorBody);
         } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
             String errorBody = e.getResponseBodyAsString();
             String recipient = request != null && request.getTo() != null ? request.getTo() : originalRecipient;
+            String errorMsg = String.format("HTTP error %s sending WhatsApp message to %s via WASender API", 
+                e.getStatusCode(), recipient);
+            String errorDetails = String.format(
+                "HTTP Status: %s (%s)%n" +
+                "URL: %s%n" +
+                "Recipient: %s%n" +
+                "Response Body: %s%n" +
+                "Request Details: to=%s, session=%s, hasText=%s, hasImage=%s, hasVideo=%s, hasDocument=%s",
+                e.getStatusCode(),
+                e.getStatusCode().toString(),
+                requestUrl,
+                recipient,
+                errorBody != null ? errorBody : "null",
+                request != null ? request.getTo() : originalRecipient,
+                request != null ? request.getWhatsappSession() : "N/A",
+                request != null && request.getText() != null,
+                request != null && request.getImageUrl() != null,
+                request != null && request.getVideoUrl() != null,
+                request != null && request.getDocumentUrl() != null
+            );
             log.error("HTTP error {} sending WhatsApp message to {} via WASender API ({}). " +
                     "Response body: {}. Request details: to={}, session={}, hasText={}, hasImage={}, hasVideo={}, hasDocument={}",
                 e.getStatusCode(), 
@@ -86,9 +120,24 @@ public class WasenderService {
                 request != null && request.getImageUrl() != null,
                 request != null && request.getVideoUrl() != null,
                 request != null && request.getDocumentUrl() != null);
-            return false;
+            return WasenderSendResult.failure(errorMsg, errorDetails, e.getStatusCode().value(), errorBody);
         } catch (Exception e) {
             String recipient = request != null && request.getTo() != null ? request.getTo() : originalRecipient;
+            String errorMsg = String.format("Unexpected error sending WhatsApp message via WASender to %s: %s", 
+                recipient, e.getClass().getSimpleName());
+            String errorDetails = String.format(
+                "Error Class: %s%n" +
+                "Error Message: %s%n" +
+                "URL: %s%n" +
+                "Recipient: %s%n" +
+                "Request Details: to=%s, session=%s",
+                e.getClass().getName(),
+                e.getMessage() != null ? e.getMessage() : "null",
+                requestUrl,
+                recipient,
+                request != null ? request.getTo() : originalRecipient,
+                request != null ? request.getWhatsappSession() : "N/A"
+            );
             log.error("Unexpected error sending WhatsApp message via WASender to {}: {}. " +
                     "Error class: {}, Message: {}",
                 recipient,
@@ -96,7 +145,7 @@ public class WasenderService {
                 e.getClass().getName(),
                 e.getMessage(),
                 e);
-            return false;
+            return WasenderSendResult.failure(errorMsg, errorDetails);
         }
     }
 

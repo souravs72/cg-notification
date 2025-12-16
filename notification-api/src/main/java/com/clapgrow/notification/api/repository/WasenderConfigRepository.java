@@ -32,3 +32,4 @@ public interface WasenderConfigRepository extends JpaRepository<WasenderConfig, 
 
 
 
+

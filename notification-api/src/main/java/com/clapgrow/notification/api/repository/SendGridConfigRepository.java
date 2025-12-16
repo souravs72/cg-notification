@@ -26,3 +26,4 @@ public interface SendGridConfigRepository extends JpaRepository<SendGridConfig, 
 
 
 
+
