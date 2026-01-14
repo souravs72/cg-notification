@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Management - Notification System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+            --primary-color: #25D366;
+            --sidebar-bg: #2c3e50;
+            --sidebar-hover: #34495e;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f7fa;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            color: white;
+            padding: 20px 0;
+            z-index: 1000;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar-brand {
+            padding: 0 20px 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 20px;
+        }
+
+        .sidebar-brand h4 {
+            margin: 0;
+            color: white;
+            font-weight: 600;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar-menu li {
+            margin: 0;
+        }
+
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar-menu a:hover {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+
+        .sidebar-menu a.active {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+
+        .sidebar-menu a i {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 30px;
+            min-height: 100vh;
+        }
+
+        .qr-code-container {
+            text-align: center;
+            padding: 2rem;
+            background: #f8f9fa;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+        }
+        .qr-code-container img {
+            max-width: 300px;
+            border: 2px solid #dee2e6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            background: white;
+        }
+        .status-badge {
+            font-size: 0.85rem;
+            padding: 0.5rem 1rem;
+        }
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin: 2rem 0;
+        }
+        .step {
+            flex: 1;
+            text-align: center;
+            padding: 1rem;
+            position: relative;
+        }
+        .step.active {
+            color: #0d6efd;
+            font-weight: bold;
+        }
+        .step.completed {
+            color: #198754;
+        }
+        .step::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background: #dee2e6;
+            z-index: -1;
+        }
+        .step:last-child::after {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s;
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="sidebar-brand">
+            <h4><i class="bi bi-building"></i>CG Notification</h4>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+            <li><a href="/admin/sites" class="active"><i class="bi bi-building"></i> Sites</a></li>
+            <li><a href="/admin/campaigns"><i class="bi bi-megaphone"></i> Campaigns</a></li>
+            <li><a href="/admin/sessions"><i class="bi bi-whatsapp"></i> WhatsApp Sessions</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- API Key Configuration Section -->
+        <div class="row mb-4" id="apiKeySection">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-key"></i> Step 1: API Key Configuration</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- WASender API Key Section -->
+                            <div class="col-md-6 mb-4 mb-md-0">
+                                <h6 class="border-bottom pb-2 mb-3"><i class="bi bi-whatsapp"></i> WASender API Key</h6>
+                                
+                                <!-- Status when API key is configured -->
+                                <div id="apiKeyConfigured" style="display: none;">
+                                    <div class="alert alert-success mb-3">
+                                        <i class="bi bi-check-circle"></i> 
+                                        <strong>WASender PAT is configured</strong>
+                                    </div>
+                                    <button type="button" class="btn btn-warning btn-sm" id="changeApiKeyBtn">
+                                        <i class="bi bi-pencil"></i> Change PAT
+                                    </button>
+                                </div>
+                                
+                                <!-- Form when API key is NOT configured or when changing -->
+                                <div id="apiKeyFormContainer">
+                                    <div class="alert alert-warning mb-3" id="apiKeyWarning">
+                                        <i class="bi bi-exclamation-triangle"></i> 
+                                        <strong>WASender PAT Required</strong><br>
+                                        <small>Configure your WASender Personal Access Token (PAT) to create and manage WhatsApp sessions.</small>
+                                    </div>
+                                    <form id="apiKeyForm">
+                                        <div class="mb-3">
+                                            <label for="wasenderApiKey" class="form-label">WASender PAT (Personal Access Token) <span class="text-danger">*</span></label>
+                                            <input type="password" class="form-control" id="wasenderApiKey" 
+                                                   placeholder="Enter your WASender PAT (e.g., 2762|P1gjgDIX...)" required>
+                                            <small class="form-text text-muted">
+                                                Your Personal Access Token from WASender. Used to create and manage WhatsApp sessions.
+                                            </small>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary btn-sm" id="saveApiKeyBtn">
+                                            <i class="bi bi-save"></i> Save PAT
+                                        </button>
+                                        <button type="button" class="btn btn-secondary btn-sm" id="cancelChangeBtn" style="display: none;" onclick="cancelApiKeyChange()">
+                                            <i class="bi bi-x"></i> Cancel
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- SendGrid API Key Section -->
+                            <div class="col-md-6">
+                                <h6 class="border-bottom pb-2 mb-3"><i class="bi bi-envelope-check"></i> SendGrid API Key</h6>
+                                
+                                <!-- Status when API key is configured -->
+                                <div id="sendgridApiKeyConfigured" style="display: none;">
+                                    <div class="alert alert-success mb-3">
+                                        <i class="bi bi-check-circle"></i> 
+                                        <strong>SendGrid API Key is configured</strong>
+                                    </div>
+                                    <button type="button" class="btn btn-warning btn-sm" id="changeSendGridApiKeyBtn">
+                                        <i class="bi bi-pencil"></i> Change API Key
+                                    </button>
+                                </div>
+                                
+                                <!-- Form when API key is NOT configured or when changing -->
+                                <div id="sendgridApiKeyFormContainer">
+                                    <div class="alert alert-info mb-3" id="sendgridApiKeyInfo">
+                                        <i class="bi bi-info-circle"></i> 
+                                        <strong>SendGrid API Key Required</strong><br>
+                                        <small>Configure your SendGrid API key and email settings to send emails for all sites.</small>
+                                    </div>
+                                    <form id="sendgridApiKeyForm">
+                                        <div class="mb-3">
+                                            <label for="sendgridApiKey" class="form-label">SendGrid API Key <span class="text-danger">*</span></label>
+                                            <input type="password" class="form-control" id="sendgridApiKey" 
+                                                   placeholder="SG.xxxxx" required>
+                                            <small class="form-text text-muted">
+                                                Used to send emails for all sites.
+                                            </small>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="sendgridEmailFromAddress" class="form-label">Email From Address <span class="text-danger">*</span></label>
+                                            <input type="email" class="form-control" id="sendgridEmailFromAddress" 
+                                                   placeholder="noreply@example.com" required>
+                                            <small class="form-text text-muted">
+                                                Default sender email address for all sites.
+                                            </small>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="sendgridEmailFromName" class="form-label">Email From Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="sendgridEmailFromName" 
+                                                   placeholder="Your Company" required>
+                                            <small class="form-text text-muted">
+                                                Default sender name for all sites.
+                                            </small>
+                                        </div>
+                                        <button type="submit" class="btn btn-warning btn-sm" id="saveSendGridApiKeyBtn">
+                                            <i class="bi bi-save"></i> Save API Key & Email Config
+                                        </button>
+                                        <button type="button" class="btn btn-secondary btn-sm" id="cancelSendGridChangeBtn" style="display: none;" onclick="cancelSendGridApiKeyChange()">
+                                            <i class="bi bi-x"></i> Cancel
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Site Creation Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-building-add"></i> Step 2: Create Site</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="createSiteForm">
+                            <div class="mb-3">
+                                <label for="siteName" class="form-label">Site Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="siteName" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="siteDescription" class="form-label">Description (Optional)</label>
+                                <textarea class="form-control" id="siteDescription" rows="2"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-success" id="createSiteBtn">
+                                <i class="bi bi-plus-circle"></i> Create Site
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- WhatsApp Connection Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="bi bi-whatsapp"></i> Step 3: Connect WhatsApp</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="siteSelect" class="form-label">Select Site <span class="text-danger">*</span></label>
+                            <select class="form-select" id="siteSelect" required>
+                                <option value="">-- Select a site --</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Session Selection Type -->
+                        <div class="mb-3">
+                            <label class="form-label">Session Selection <span class="text-danger">*</span></label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="sessionSelectionType" id="useExistingSession" value="existing" checked>
+                                <label class="form-check-label" for="useExistingSession">
+                                    Use Existing Session
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="sessionSelectionType" id="createNewSession" value="new">
+                                <label class="form-check-label" for="createNewSession">
+                                    Create New Session
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Existing Session Selection -->
+                        <div id="existingSessionSection" class="mb-3">
+                            <label for="existingSessionSelect" class="form-label">Select Existing Session <span class="text-danger">*</span></label>
+                            <select class="form-select" id="existingSessionSelect">
+                                <option value="">-- Loading sessions... --</option>
+                            </select>
+                            
+                            <button type="button" class="btn btn-success mt-2" id="connectExistingSessionBtn">
+                                <i class="bi bi-link-45deg"></i> Connect Session to Site
+                            </button>
+                        </div>
+
+                        <!-- New Session Creation Form -->
+                        <div id="newSessionSection" style="display: none;">
+                            <div class="mb-3">
+                                <label for="whatsappSessionName" class="form-label">WhatsApp Session Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="whatsappSessionName" 
+                                       placeholder="e.g., site-main-session">
+                                <small class="form-text text-muted">
+                                    Enter a unique name for this WhatsApp session. Multiple sites can share the same session name.
+                                </small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="phoneNumber" class="form-label">Phone Number <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="phoneNumber" 
+                                       placeholder="+1234567890"
+                                       pattern="^\+[1-9]\d{1,14}$"
+                                       title="Phone number in international format (e.g., +1234567890)">
+                                <small class="form-text text-muted">
+                                    Enter phone number in international format (e.g., +1234567890). This will be used when connecting via QR code.
+                                </small>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="accountProtection" checked>
+                                    <label class="form-check-label" for="accountProtection">
+                                        Enable Account Protection
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="logMessages" checked>
+                                    <label class="form-check-label" for="logMessages">
+                                        Enable Message Logging
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-info" id="createSessionBtn">
+                                <i class="bi bi-qr-code"></i> Create Session & Show QR Code
+                            </button>
+                        </div>
+                        
+                        <div id="qrCodeSection" style="display: none;" class="mt-4">
+                            <div class="qr-code-container">
+                                <h6>Scan this QR code with WhatsApp</h6>
+                                <div id="qrCodeImage"></div>
+                                <p id="qrCodeStatus" class="text-info mt-2" style="display: none;"></p>
+                                <p class="text-muted mt-3">
+                                    <i class="bi bi-info-circle"></i> 
+                                    Open WhatsApp on your phone → Settings → Linked Devices → Link a Device
+                                </p>
+                                <button type="button" class="btn btn-secondary mt-2" id="refreshQRBtn">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh QR Code
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Existing Sites List -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-list"></i> Existing Sites</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="sitesList" class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Site Name</th>
+                                        <th>Description</th>
+                                        <th>WhatsApp Session</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sitesTableBody">
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">Loading sites...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key Modal -->
+    <div class="modal fade" id="apiKeyModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-key"></i> WASender PAT Required</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        You need to configure your WASender Personal Access Token (PAT) to continue with this operation.
+                    </div>
+                    <form id="apiKeyModalForm">
+                        <div class="mb-3">
+                            <label for="wasenderApiKeyModal" class="form-label">WASender PAT (Personal Access Token) <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="wasenderApiKeyModal" 
+                                   placeholder="Enter your WASender PAT (e.g., 2762|P1gjgDIX...)" required>
+                            <small class="form-text text-muted">
+                                Your Personal Access Token from WASender. This will be used to create and manage WhatsApp sessions. 
+                                You only need to provide it once.
+                            </small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="saveApiKeyModalBtn">
+                        <i class="bi bi-save"></i> Save PAT
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Regenerated API Key Modal -->
+    <div class="modal fade" id="regeneratedApiKeyModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title"><i class="bi bi-key"></i> New API Key Generated</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <strong>⚠️ IMPORTANT:</strong> Save this API key immediately! It will only be shown once.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Site:</label>
+                        <p id="regeneratedSiteName" class="mb-0"></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">New API Key:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace" id="regeneratedApiKeyInput" readonly>
+                            <button class="btn btn-outline-secondary" type="button" onclick="copyRegeneratedApiKey()">
+                                <i class="bi bi-clipboard"></i> Copy
+                            </button>
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        <small>This API key replaces your old key. Update all applications using the old key immediately.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- QR Code library - Using qrcodejs (davidshimjs/qrcodejs) for better reliability -->
+    <!-- Load library dynamically for better error handling -->
+    <script>
+        // Initialize QR code library state
+        let qrCodeLibraryReady = false;
+        let qrCodeLibraryLoading = false;
+        
+        // Check if QRCode is available (qrcodejs uses QRCode constructor)
+        function checkQRCodeLibrary() {
+            if (typeof QRCode !== 'undefined' && typeof QRCode.CorrectLevel !== 'undefined') {
+                qrCodeLibraryReady = true;
+                console.log('QRCode library (qrcodejs) is ready');
+                return true;
+            }
+            return false;
+        }
+        
+        // Function to load QR code library with multiple CDN fallbacks
+        function initQRCodeLibrary() {
+            if (qrCodeLibraryLoading) {
+                return; // Already loading
+            }
+            
+            if (checkQRCodeLibrary()) {
+                return; // Already loaded
+            }
+            
+            qrCodeLibraryLoading = true;
+            
+            // Try multiple CDNs for reliability
+            const cdns = [
+                'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
+                'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js',
+                'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@gh-pages/qrcode.min.js'
+            ];
+            
+            let cdnIndex = 0;
+            
+            function tryLoadCDN(index) {
+                if (index >= cdns.length) {
+                    console.error('All CDN attempts failed for qrcodejs library');
+                    qrCodeLibraryLoading = false;
+                    return;
+                }
+                
+                // Check if already loaded
+                if (checkQRCodeLibrary()) {
+                    qrCodeLibraryLoading = false;
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = cdns[index];
+                script.onload = function() {
+                    console.log(`QRCode library (qrcodejs) loaded successfully from CDN ${index + 1}`);
+                    // Give it a moment to initialize
+                    setTimeout(function() {
+                        qrCodeLibraryReady = checkQRCodeLibrary();
+                        qrCodeLibraryLoading = false;
+                        if (qrCodeLibraryReady) {
+                            console.log('QRCode library initialized and ready to use');
+                        } else {
+                            console.warn('QRCode library loaded but not properly initialized');
+                        }
+                    }, 50);
+                };
+                script.onerror = function() {
+                    console.warn(`Failed to load QRCode library from CDN ${index + 1}, trying next...`);
+                    tryLoadCDN(index + 1);
+                };
+                document.head.appendChild(script);
+            }
+            
+            // Start loading
+            tryLoadCDN(0);
+        }
+        
+        // Wait for DOM to be ready, then initialize
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initQRCodeLibrary);
+        } else {
+            initQRCodeLibrary();
+        }
+        
+        // Also poll for library availability
+        let checkCount = 0;
+        const checkInterval = setInterval(function() {
+            if (checkQRCodeLibrary() || checkCount++ > 30) { // Check for 3 seconds
+                clearInterval(checkInterval);
+                if (!qrCodeLibraryReady) {
+                    console.warn('QRCode library may not be loaded. Will attempt dynamic loading when needed.');
+                }
+            }
+        }, 100);
+    </script>
+    <script>
+        // Timezone utility functions
+        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        
+        /**
+         * Converts a UTC timestamp string to user's local timezone
+         */
+        function formatLocalDateTime(dateString) {
+            if (!dateString || dateString === 'N/A' || dateString === '-') {
+                return 'N/A';
+            }
+            
+            try {
+                let date;
+                if (dateString.includes('Z') || dateString.includes('+') || dateString.includes('-', 10)) {
+                    date = new Date(dateString);
+                } else {
+                    const utcString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
+                    date = new Date(utcString);
+                }
+                
+                if (isNaN(date.getTime())) {
+                    return dateString;
+                }
+                
+                return date.toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                    timeZoneName: 'short'
+                });
+            } catch (e) {
+                console.error('Error formatting date:', e, dateString);
+                return dateString;
+            }
+        }
+        
+        /**
+         * Formats date for display in tables (shorter format)
+         */
+        function formatLocalDateTimeShort(dateString) {
+            if (!dateString || dateString === 'N/A' || dateString === '-') {
+                return 'N/A';
+            }
+            
+            try {
+                let date;
+                if (dateString.includes('Z') || dateString.includes('+') || dateString.includes('-', 10)) {
+                    date = new Date(dateString);
+                } else {
+                    const utcString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
+                    date = new Date(utcString);
+                }
+                
+                if (isNaN(date.getTime())) {
+                    return dateString;
+                }
+                
+                return date.toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                return dateString;
+            }
+        }
+        
+        let currentSessionName = null;
+        let qrRefreshInterval = null;
+        let apiKeyConfigured = false;
+        let sendgridApiKeyConfigured = false;
+        let pendingOperation = null; // Store the operation that was blocked
+
+        // Check API key status on load
+        checkApiKeyStatus();
+        checkSendGridApiKeyStatus();
+
+        // SendGrid API Key Form
+        document.getElementById('sendgridApiKeyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const apiKey = document.getElementById('sendgridApiKey').value;
+            const emailFromAddress = document.getElementById('sendgridEmailFromAddress').value;
+            const emailFromName = document.getElementById('sendgridEmailFromName').value;
+            
+            if (!apiKey.trim()) {
+                alert('Please enter a SendGrid API key');
+                return;
+            }
+            if (!emailFromAddress.trim()) {
+                alert('Please enter an email from address');
+                return;
+            }
+            if (!emailFromName.trim()) {
+                alert('Please enter an email from name');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/admin/api/sendgrid/api-key', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        sendgridApiKey: apiKey,
+                        emailFromAddress: emailFromAddress,
+                        emailFromName: emailFromName
+                    })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    sendgridApiKeyConfigured = true;
+                    alert('SendGrid API key and email configuration saved successfully!');
+                    document.getElementById('sendgridApiKey').value = '';
+                    document.getElementById('sendgridEmailFromAddress').value = '';
+                    document.getElementById('sendgridEmailFromName').value = '';
+                    document.getElementById('cancelSendGridChangeBtn').style.display = 'none';
+                    checkSendGridApiKeyStatus();
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to save API key'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+
+        // Change SendGrid API Key button handler
+        document.getElementById('changeSendGridApiKeyBtn').addEventListener('click', () => {
+            document.getElementById('sendgridApiKeyConfigured').style.display = 'none';
+            document.getElementById('sendgridApiKeyFormContainer').style.display = 'block';
+            document.getElementById('sendgridApiKeyInfo').style.display = 'block';
+            document.getElementById('cancelSendGridChangeBtn').style.display = 'inline-block';
+            document.getElementById('sendgridApiKey').value = '';
+            document.getElementById('sendgridEmailFromAddress').value = '';
+            document.getElementById('sendgridEmailFromName').value = '';
+            document.getElementById('sendgridApiKey').focus();
+        });
+
+        function cancelSendGridApiKeyChange() {
+            // Restore the configured state
+            document.getElementById('sendgridApiKeyConfigured').style.display = 'block';
+            document.getElementById('sendgridApiKeyFormContainer').style.display = 'none';
+            document.getElementById('cancelSendGridChangeBtn').style.display = 'none';
+            document.getElementById('sendgridApiKey').value = '';
+            document.getElementById('sendgridEmailFromAddress').value = '';
+            document.getElementById('sendgridEmailFromName').value = '';
+        }
+
+        async function checkSendGridApiKeyStatus() {
+            try {
+                const response = await fetch('/admin/api/sendgrid/api-key/status');
+                const data = await response.json();
+                
+                sendgridApiKeyConfigured = data.configured;
+                const sendgridApiKeyConfiguredDiv = document.getElementById('sendgridApiKeyConfigured');
+                const sendgridApiKeyFormContainer = document.getElementById('sendgridApiKeyFormContainer');
+                const sendgridApiKeyInfo = document.getElementById('sendgridApiKeyInfo');
+                
+                if (data.configured) {
+                    // Show "Change API Key" button, hide form
+                    sendgridApiKeyConfiguredDiv.style.display = 'block';
+                    sendgridApiKeyFormContainer.style.display = 'none';
+                } else {
+                    // Show form, hide "Change API Key" button
+                    sendgridApiKeyConfiguredDiv.style.display = 'none';
+                    sendgridApiKeyFormContainer.style.display = 'block';
+                    sendgridApiKeyInfo.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error checking SendGrid API key status:', error);
+            }
+        }
+
+        // Session Selection Type Toggle
+        document.querySelectorAll('input[name="sessionSelectionType"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const isExisting = e.target.value === 'existing';
+                document.getElementById('existingSessionSection').style.display = isExisting ? 'block' : 'none';
+                document.getElementById('newSessionSection').style.display = isExisting ? 'none' : 'block';
+                
+                // Update required fields
+                const existingSelect = document.getElementById('existingSessionSelect');
+                const sessionNameInput = document.getElementById('whatsappSessionName');
+                const phoneNumberInput = document.getElementById('phoneNumber');
+                
+                if (isExisting) {
+                    existingSelect.required = true;
+                    sessionNameInput.required = false;
+                    phoneNumberInput.required = false;
+                } else {
+                    existingSelect.required = false;
+                    sessionNameInput.required = true;
+                    phoneNumberInput.required = true;
+                }
+            });
+        });
+
+        // Load existing sessions on page load
+        loadExistingSessions();
+
+        // Connect Existing Session Button
+        document.getElementById('connectExistingSessionBtn').addEventListener('click', async () => {
+            const siteId = document.getElementById('siteSelect').value;
+            const sessionId = document.getElementById('existingSessionSelect').value;
+            
+            if (!siteId) {
+                alert('Please select a site');
+                return;
+            }
+            
+            if (!sessionId) {
+                alert('Please select an existing session');
+                return;
+            }
+
+            await connectExistingSessionToSite(siteId, sessionId);
+        });
+
+        async function loadExistingSessions() {
+            try {
+                const response = await fetch('/admin/api/whatsapp/user-sessions');
+                const sessions = await response.json();
+                
+                const select = document.getElementById('existingSessionSelect');
+                select.innerHTML = '<option value="">-- Select a session --</option>';
+                
+                if (sessions && sessions.length > 0) {
+                    sessions.forEach(session => {
+                        const option = document.createElement('option');
+                        option.value = session.sessionName || session.sessionId;
+                        const statusBadge = session.status === 'CONNECTED' ? '✓' : '';
+                        const phoneInfo = session.phoneNumber ? ` (${session.phoneNumber})` : '';
+                        option.textContent = `${session.sessionName || session.sessionId}${phoneInfo} ${statusBadge} - ${session.status || 'UNKNOWN'}`;
+                        option.dataset.sessionId = session.sessionId;
+                        option.dataset.sessionName = session.sessionName;
+                        select.appendChild(option);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">-- No sessions available --</option>';
+                }
+            } catch (error) {
+                console.error('Error loading existing sessions:', error);
+                const select = document.getElementById('existingSessionSelect');
+                select.innerHTML = '<option value="">-- Error loading sessions --</option>';
+            }
+        }
+
+        async function connectExistingSessionToSite(siteId, sessionIdentifier) {
+            try {
+                // Get the selected option to find session name
+                const select = document.getElementById('existingSessionSelect');
+                const selectedOption = select.options[select.selectedIndex];
+                const sessionName = selectedOption.dataset.sessionName || sessionIdentifier;
+                
+                // Update site with session name
+                const response = await fetch(`/admin/api/sites/${siteId}/whatsapp-session`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ whatsappSessionName: sessionName })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    alert('Site connected to session successfully!');
+                    loadSites();
+                    updateSiteSelect();
+                    loadExistingSessions(); // Refresh sessions list
+                } else {
+                    alert('Error connecting session: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // API Key Form (from the section, not modal)
+        document.getElementById('apiKeyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const apiKey = document.getElementById('wasenderApiKey').value;
+            
+            if (!apiKey.trim()) {
+                alert('Please enter a WASender PAT (Personal Access Token)');
+                return;
+            }
+            
+            try {
+                // Show loading state
+                const saveBtn = document.getElementById('saveApiKeyBtn');
+                const originalBtnText = saveBtn.innerHTML;
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Saving...';
+                
+                const response = await fetch('/admin/api/wasender/api-key', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ wasenderApiKey: apiKey })
+                });
+                
+                const data = await response.json();
+                
+                // Restore button
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = originalBtnText;
+                
+                if (response.ok) {
+                    apiKeyConfigured = true;
+                    alert('WASender PAT saved successfully!');
+                    document.getElementById('wasenderApiKey').value = '';
+                    document.getElementById('cancelChangeBtn').style.display = 'none';
+                    checkApiKeyStatus();
+                    loadSites();
+                    // Also reload sessions if on sessions page
+                    if (typeof loadSessions === 'function') {
+                        loadSessions();
+                    }
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to save PAT'));
+                }
+            } catch (error) {
+                const saveBtn = document.getElementById('saveApiKeyBtn');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-save"></i> Save PAT';
+                alert('Error: ' + error.message);
+            }
+        });
+
+        // Create Site Form
+        document.getElementById('createSiteForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Check API key first
+            await promptForApiKey(async () => {
+                await performSiteCreation();
+            });
+        });
+
+        async function performSiteCreation() {
+            const siteName = document.getElementById('siteName').value;
+            const description = document.getElementById('siteDescription').value;
+            
+            const requestBody = {
+                siteName: siteName,
+                description: description || null
+            };
+
+            try {
+                const response = await fetch('/admin/api/sites/create', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    alert('Site created successfully! API Key: ' + data.apiKey + '\n\nPlease save this API key securely.');
+                    document.getElementById('createSiteForm').reset();
+                    loadSites();
+                    updateSiteSelect();
+                } else if (response.status === 428 && data.requiresApiKey) {
+                    // API key required - show modal
+                    await promptForApiKey(async () => {
+                        await performSiteCreation();
+                    });
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to create site'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Create Session and Show QR
+        document.getElementById('createSessionBtn').addEventListener('click', async () => {
+            // Check if we're in "new session" mode
+            const isNewSessionMode = document.getElementById('createNewSession').checked;
+            if (!isNewSessionMode) {
+                alert('Please select "Create New Session" option to create a new session');
+                return;
+            }
+
+            const siteId = document.getElementById('siteSelect').value;
+            const sessionName = document.getElementById('whatsappSessionName').value;
+            
+            if (!siteId) {
+                alert('Please select a site');
+                return;
+            }
+            
+            if (!sessionName || !sessionName.trim()) {
+                alert('Please enter a session name');
+                return;
+            }
+
+            // Check API key first
+            await promptForApiKey(async () => {
+                await performSessionCreation(siteId, sessionName);
+            });
+        });
+
+        async function performSessionCreation(siteId, sessionName) {
+            try {
+                // Get form values
+                const phoneNumber = document.getElementById('phoneNumber').value.trim();
+                if (!phoneNumber) {
+                    alert('Phone number is required in international format (e.g., +1234567890)');
+                    return;
+                }
+                
+                // Validate phone number format (international format)
+                if (!phoneNumber.match(/^\+[1-9]\d{1,14}$/)) {
+                    alert('Phone number must be in international format (e.g., +1234567890)');
+                    return;
+                }
+                
+                const accountProtection = document.getElementById('accountProtection').checked;
+                const logMessages = document.getElementById('logMessages').checked;
+                
+                // Create request body with required fields
+                const requestBody = {
+                    sessionName: sessionName,
+                    phoneNumber: phoneNumber,
+                    accountProtection: accountProtection,
+                    logMessages: logMessages
+                };
+                
+                // Create session
+                const createResponse = await fetch('/admin/api/whatsapp/session', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const createData = await createResponse.json();
+                if (createResponse.status === 428 && createData.requiresApiKey) {
+                    // API key required - show modal
+                    await promptForApiKey(async () => {
+                        await performSessionCreation(siteId, sessionName);
+                    });
+                    return;
+                }
+                
+                if (!createResponse.ok || !createData.success) {
+                    alert('Error creating session: ' + (createData.error || 'Unknown error'));
+                    return;
+                }
+
+                // Update site with session name
+                await updateSiteSession(siteId, sessionName);
+                
+                // Extract session ID from response if available
+                let sessionId = null;
+                if (createData.sessionId) {
+                    sessionId = createData.sessionId;
+                } else if (createData.response) {
+                    try {
+                        // Response might be a string that needs parsing
+                        const responseData = typeof createData.response === 'string' 
+                            ? JSON.parse(createData.response) 
+                            : createData.response;
+                        if (responseData?.data?.id) {
+                            sessionId = responseData.data.id.toString();
+                        }
+                    } catch (e) {
+                        console.warn('Could not parse session ID from response:', e);
+                    }
+                }
+                
+                // Show QR code - use session ID if available (preferred), otherwise use session name
+                currentSessionName = sessionName;
+                if (sessionId) {
+                    currentSessionId = sessionId;
+                }
+                showQRCode(sessionName, sessionId);
+                
+                // Start auto-refresh
+                startQRRefresh(sessionName, sessionId);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Refresh QR Code
+        document.getElementById('refreshQRBtn').addEventListener('click', () => {
+            if (currentSessionName) {
+                // Use stored session ID if available (preferred), otherwise use session name
+                console.log('Refresh clicked - using session ID:', currentSessionId, 'or session name:', currentSessionName);
+                showQRCode(currentSessionName, currentSessionId);
+            } else {
+                alert('No active session. Please create a session first.');
+            }
+        });
+
+        async function checkApiKeyStatus() {
+            try {
+                const response = await fetch('/admin/api/wasender/api-key/status');
+                const data = await response.json();
+                
+                apiKeyConfigured = data.configured;
+                const apiKeyConfiguredDiv = document.getElementById('apiKeyConfigured');
+                const apiKeyFormContainer = document.getElementById('apiKeyFormContainer');
+                const apiKeyWarning = document.getElementById('apiKeyWarning');
+                
+                if (data.configured) {
+                    // Show "Change PAT" button, hide form
+                    apiKeyConfiguredDiv.style.display = 'block';
+                    apiKeyFormContainer.style.display = 'none';
+                } else {
+                    // Show form, hide "Change PAT" button
+                    apiKeyConfiguredDiv.style.display = 'none';
+                    apiKeyFormContainer.style.display = 'block';
+                    apiKeyWarning.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error checking API key status:', error);
+            }
+        }
+
+        // Change API Key button handler
+        document.getElementById('changeApiKeyBtn').addEventListener('click', () => {
+            document.getElementById('apiKeyConfigured').style.display = 'none';
+            document.getElementById('apiKeyFormContainer').style.display = 'block';
+            document.getElementById('apiKeyWarning').style.display = 'none';
+            document.getElementById('cancelChangeBtn').style.display = 'inline-block';
+            document.getElementById('wasenderApiKey').value = '';
+            document.getElementById('wasenderApiKey').focus();
+        });
+
+        function cancelApiKeyChange() {
+            // Restore the configured state
+            document.getElementById('apiKeyConfigured').style.display = 'block';
+            document.getElementById('apiKeyFormContainer').style.display = 'none';
+            document.getElementById('cancelChangeBtn').style.display = 'none';
+            document.getElementById('wasenderApiKey').value = '';
+        }
+
+        async function promptForApiKey(operationCallback) {
+            if (apiKeyConfigured) {
+                // API key already configured, proceed with operation
+                if (operationCallback) operationCallback();
+                return;
+            }
+
+            // Store the operation to execute after API key is saved
+            pendingOperation = operationCallback;
+
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('apiKeyModal'));
+            modal.show();
+        }
+
+        // Save API key from modal
+        document.getElementById('saveApiKeyModalBtn').addEventListener('click', async () => {
+            const apiKey = document.getElementById('wasenderApiKeyModal').value;
+            if (!apiKey.trim()) {
+                alert('Please enter a WASender PAT (Personal Access Token)');
+                return;
+            }
+
+            try {
+                // Show loading state
+                const saveBtn = document.getElementById('saveApiKeyModalBtn');
+                const originalBtnText = saveBtn.innerHTML;
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Saving...';
+                
+                const response = await fetch('/admin/api/wasender/api-key', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ wasenderApiKey: apiKey })
+                });
+                
+                const data = await response.json();
+                
+                // Restore button
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = originalBtnText;
+                
+                if (response.ok) {
+                    apiKeyConfigured = true;
+                    document.getElementById('wasenderApiKeyModal').value = '';
+                    
+                    // Hide modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('apiKeyModal'));
+                    modal.hide();
+                    
+                    // Hide API key section
+                    document.getElementById('apiKeySection').style.display = 'none';
+                    
+                    // Execute pending operation if any
+                    if (pendingOperation) {
+                        pendingOperation();
+                        pendingOperation = null;
+                    }
+                    
+                    // Refresh status
+                    checkApiKeyStatus();
+                    // Also reload sessions if on sessions page
+                    if (typeof loadSessions === 'function') {
+                        loadSessions();
+                    }
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to save PAT'));
+                }
+            } catch (error) {
+                const saveBtn = document.getElementById('saveApiKeyModalBtn');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="bi bi-save"></i> Save PAT';
+                alert('Error: ' + error.message);
+            }
+        });
+
+        async function loadSites() {
+            try {
+                const response = await fetch('/admin/api/sites');
+                const sites = await response.json();
+                
+                const tbody = document.getElementById('sitesTableBody');
+                if (sites.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No sites found</td></tr>';
+                } else {
+                    tbody.innerHTML = sites.map(site => {
+                        // Escape site name and ID for safe use in HTML
+                        const escapedSiteName = (site.siteName || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        const escapedSiteId = (site.id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        return `
+                        <tr>
+                            <td>${escapeHtml(site.siteName || '')}</td>
+                            <td>${escapeHtml(site.description || '-')}</td>
+                            <td>${site.whatsappSessionName ? escapeHtml(site.whatsappSessionName) : '<span class="text-muted">Not connected</span>'}</td>
+                            <td><span class="badge ${site.isActive ? 'bg-success' : 'bg-secondary'}">${site.isActive ? 'Active' : 'Inactive'}</span></td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-warning" onclick="regenerateApiKey('${escapedSiteId}', '${escapedSiteName}')" title="Regenerate API Key">
+                                        <i class="bi bi-arrow-repeat"></i> Regenerate API Key
+                                    </button>
+                                    ${site.whatsappSessionName ? 
+                                        `<button class="btn btn-sm btn-info" onclick="showQRForSession('${escapeHtml(site.whatsappSessionName).replace(/'/g, "\\'")}')" title="View QR Code">
+                                            <i class="bi bi-qr-code"></i> View QR
+                                        </button>` : 
+                                        ''
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Error loading sites:', error);
+            }
+        }
+        
+        // Regenerate API Key function
+        async function regenerateApiKey(siteId, siteName) {
+            if (!confirm(`Are you sure you want to regenerate the API key for "${siteName}"?\n\n⚠️ WARNING: The old API key will stop working immediately. Make sure to update all applications using this key.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/admin/api/sites/${siteId}/regenerate-api-key`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                
+                const data = await response.json();
+                if (response.ok && data.apiKey) {
+                    // Show modal with new API key
+                    document.getElementById('regeneratedSiteName').textContent = siteName;
+                    document.getElementById('regeneratedApiKeyInput').value = data.apiKey;
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('regeneratedApiKeyModal'));
+                    modal.show();
+                    
+                    // Refresh sites list
+                    loadSites();
+                } else {
+                    alert('Error regenerating API key: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error regenerating API key:', error);
+                alert('Error regenerating API key: ' + error.message);
+            }
+        }
+        
+        // Copy regenerated API key to clipboard
+        function copyRegeneratedApiKey() {
+            const input = document.getElementById('regeneratedApiKeyInput');
+            if (!input) return;
+            
+            input.select();
+            input.setSelectionRange(0, 99999);
+            
+            try {
+                navigator.clipboard.writeText(input.value).then(() => {
+                    const copyBtn = event.target.closest('button');
+                    const originalHtml = copyBtn.innerHTML;
+                    copyBtn.innerHTML = '<i class="bi bi-check"></i> Copied!';
+                    copyBtn.classList.remove('btn-outline-secondary');
+                    copyBtn.classList.add('btn-success');
+                    
+                    setTimeout(() => {
+                        copyBtn.innerHTML = originalHtml;
+                        copyBtn.classList.remove('btn-success');
+                        copyBtn.classList.add('btn-outline-secondary');
+                    }, 2000);
+                }).catch(() => {
+                    document.execCommand('copy');
+                    alert('API key copied to clipboard!');
+                });
+            } catch (err) {
+                try {
+                    document.execCommand('copy');
+                    alert('API key copied to clipboard!');
+                } catch (e) {
+                    alert('Please select and copy the API key manually.');
+                }
+            }
+        }
+        
+        // Escape HTML helper function
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function updateSiteSelect() {
+            try {
+                const response = await fetch('/admin/api/sites');
+                const sites = await response.json();
+                
+                const select = document.getElementById('siteSelect');
+                select.innerHTML = '<option value="">-- Select a site --</option>';
+                sites.forEach(site => {
+                    const option = document.createElement('option');
+                    option.value = site.id;
+                    option.textContent = site.siteName + (site.whatsappSessionName ? ' (Already connected)' : '');
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading sites for select:', error);
+            }
+        }
+
+        async function updateSiteSession(siteId, sessionName) {
+            try {
+                const response = await fetch(`/admin/api/sites/${siteId}/whatsapp-session`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ whatsappSessionName: sessionName })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    loadSites();
+                    updateSiteSelect();
+                    loadExistingSessions(); // Refresh sessions list
+                } else {
+                    alert('Error updating site session: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Helper function to dynamically load QR code library with multiple CDN attempts
+        function loadQRCodeLibrary(qrCodeString, qrCodeContainer) {
+            console.log('Loading QRCode library (qrcodejs) dynamically...');
+            
+            const cdns = [
+                'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
+                'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js',
+                'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@gh-pages/qrcode.min.js'
+            ];
+            
+            let cdnIndex = 0;
+            
+            function tryLoadCDN(index) {
+                if (index >= cdns.length) {
+                    // All CDNs failed, show QR code as text
+                    console.error('All CDN attempts failed. Showing QR code as text.');
+                    qrCodeContainer.innerHTML = `
+                        <div class="alert alert-warning">
+                            <strong>QR Code Library Unavailable</strong><br>
+                            <p>Please scan this QR code manually:</p>
+                            <div style="background: white; padding: 1rem; border: 2px solid #dee2e6; border-radius: 0.5rem; font-family: monospace; word-break: break-all; max-width: 100%; overflow-x: auto;">
+                                ${qrCodeString}
+                            </div>
+                            <p class="mt-2"><small>You can also try refreshing the page or check your internet connection.</small></p>
+                        </div>`;
+                    return;
+                }
+                
+                // Check if library is already loaded
+                if (typeof QRCode !== 'undefined') {
+                    qrCodeLibraryReady = true;
+                    generateQRCode(qrCodeString, qrCodeContainer);
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = cdns[index];
+                script.onload = function() {
+                    console.log(`QRCode library (qrcodejs) loaded from CDN ${index + 1}`);
+                    // Wait a moment for the library to initialize
+                    setTimeout(function() {
+                        if (typeof QRCode !== 'undefined') {
+                            qrCodeLibraryReady = true;
+                            generateQRCode(qrCodeString, qrCodeContainer);
+                        } else {
+                            console.warn('Library loaded but QRCode not defined, trying next CDN...');
+                            tryLoadCDN(index + 1);
+                        }
+                    }, 100);
+                };
+                script.onerror = function() {
+                    console.warn(`Failed to load from CDN ${index + 1}, trying next...`);
+                    tryLoadCDN(index + 1);
+                };
+                document.head.appendChild(script);
+            }
+            
+            tryLoadCDN(0);
+        }
+        
+        // Helper function to generate QR code using qrcodejs library
+        function generateQRCode(qrCodeString, qrCodeContainer) {
+            console.log('generateQRCode called with:', qrCodeString ? qrCodeString.substring(0, 50) + '...' : 'empty');
+            
+            // Validate input
+            if (!qrCodeString || qrCodeString.trim() === '') {
+                qrCodeContainer.innerHTML = '<div class="alert alert-warning">QR code data is empty.</div>';
+                return;
+            }
+            
+            // Clear container first
+            qrCodeContainer.innerHTML = '';
+            
+            // Check if library is available
+            if (typeof QRCode === 'undefined') {
+                console.error('QRCode library is not defined');
+                showQRCodeFallback(qrCodeString, qrCodeContainer, 'QRCode library (qrcodejs) is not defined');
+                return;
+            }
+            
+            // Create a div element for QR code (qrcodejs generates QR code in a container)
+            const qrDiv = document.createElement('div');
+            qrDiv.id = 'qr-code-' + Date.now(); // Unique ID
+            qrCodeContainer.appendChild(qrDiv);
+            
+            try {
+                console.log('Creating QRCode instance with text length:', qrCodeString.length);
+                
+                // qrcodejs uses constructor: new QRCode(element, options)
+                // Options can be: {text, width, height, colorDark, colorLight, correctLevel}
+                const qrcode = new QRCode(qrDiv, {
+                    text: qrCodeString,
+                    width: 300,
+                    height: 300,
+                    colorDark: '#000000',
+                    colorLight: '#FFFFFF',
+                    correctLevel: QRCode.CorrectLevel.M // Error correction level
+                });
+                
+                console.log('QRCode instance created successfully');
+                
+                // Add styling to the QR code container
+                qrDiv.style.border = '2px solid #dee2e6';
+                qrDiv.style.borderRadius = '0.5rem';
+                qrDiv.style.padding = '1rem';
+                qrDiv.style.background = 'white';
+                qrDiv.style.display = 'inline-block';
+                qrDiv.style.margin = '0 auto';
+                qrDiv.style.textAlign = 'center';
+                
+                // Verify QR code was generated
+                setTimeout(function() {
+                    if (qrDiv.children.length === 0) {
+                        console.warn('QR code div is empty after generation');
+                        showQRCodeFallback(qrCodeString, qrCodeContainer, 'QR code generation produced no output');
+                    } else {
+                        console.log('QR code generated successfully using qrcodejs');
+                    }
+                }, 100);
+                
+            } catch (e) {
+                console.error('Error generating QR code with qrcodejs:', e);
+                console.error('Error stack:', e.stack);
+                showQRCodeFallback(qrCodeString, qrCodeContainer, e.message);
+            }
+        }
+        
+        // Helper function to show QR code fallback
+        function showQRCodeFallback(qrCodeString, qrCodeContainer, errorMessage) {
+            qrCodeContainer.innerHTML = '';
+            
+            // Fallback: try to display as base64 if it's already an image
+            if (qrCodeString.startsWith('data:image') || qrCodeString.length > 1000) {
+                qrCodeContainer.innerHTML = `<img src="${qrCodeString}" alt="QR Code" class="img-fluid">`;
+            } else {
+                // Show QR code string as text as last resort
+                qrCodeContainer.innerHTML = `<div class="alert alert-warning">
+                    <strong>QR Code Library Unavailable</strong><br>
+                    <p>Please scan this QR code manually:</p>
+                    <div style="background: white; padding: 1rem; border: 2px solid #dee2e6; border-radius: 0.5rem; font-family: monospace; word-break: break-all; max-width: 100%; overflow-x: auto; text-align: left;">
+                        ${qrCodeString}
+                    </div>
+                    <small class="mt-2 d-block">Error: ${errorMessage}</small>
+                    <small class="mt-1 d-block">You can also try refreshing the page or check your internet connection.</small>
+                </div>`;
+            }
+        }
+
+        async function showQRCode(sessionName, sessionId = null) {
+            try {
+                // Use stored session ID if available, otherwise use provided one
+                const effectiveSessionId = currentSessionId || sessionId;
+                
+                // Use session ID if available (preferred), otherwise use session name
+                let url = '/admin/api/whatsapp/qrcode?';
+                if (effectiveSessionId) {
+                    url += `sessionId=${encodeURIComponent(effectiveSessionId)}`;
+                    console.log('Using session ID for QR code request:', effectiveSessionId);
+                } else {
+                    url += `sessionName=${encodeURIComponent(sessionName)}`;
+                    console.log('Using session name for QR code request:', sessionName);
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (response.status === 428 && data.requiresApiKey) {
+                    // API key required - show modal
+                    await promptForApiKey(async () => {
+                        await showQRCode(sessionName, sessionId);
+                    });
+                    return;
+                }
+                
+                if (data.success && data.qrCode) {
+                    // Update session ID if provided in response (important for future calls)
+                    if (data.sessionId) {
+                        currentSessionId = data.sessionId;
+                        console.log('Updated session ID from response:', currentSessionId);
+                    }
+                    
+                    // Generate QR code image from the string
+                    const qrCodeString = data.qrCode;
+                    const qrCodeContainer = document.getElementById('qrCodeImage');
+                    qrCodeContainer.innerHTML = '<div class="text-center"><small>Loading QR code...</small></div>'; // Show loading state
+                    
+                    // Ensure QRCode library is loaded before generating QR code
+                    // Function to attempt QR code generation with retries
+                    function attemptQRCodeGeneration(retries = 0) {
+                        console.log(`Attempting QR code generation, attempt ${retries + 1}, QRCode defined: ${typeof QRCode !== 'undefined'}`);
+                        
+                        if (typeof QRCode !== 'undefined' && typeof QRCode.CorrectLevel !== 'undefined') {
+                            qrCodeLibraryReady = true;
+                            console.log('QRCode library (qrcodejs) is available, generating QR code...');
+                            generateQRCode(qrCodeString, qrCodeContainer);
+                        } else if (retries < 30) {
+                            // Wait up to 3 seconds (30 * 100ms) for library to load
+                            console.log(`Waiting for QRCode library (qrcodejs)... (attempt ${retries + 1}/30)`);
+                            setTimeout(() => attemptQRCodeGeneration(retries + 1), 100);
+                        } else {
+                            // Library still not loaded after waiting, try dynamic loading
+                            console.warn('QRCode library still not loaded after waiting, attempting dynamic load...');
+                            loadQRCodeLibrary(qrCodeString, qrCodeContainer);
+                        }
+                    }
+                    
+                    // Start attempting to generate QR code
+                    attemptQRCodeGeneration();
+                    
+                    document.getElementById('qrCodeSection').style.display = 'block';
+                    
+                    // Show status if available
+                    if (data.status) {
+                        const statusElement = document.getElementById('qrCodeStatus');
+                        if (statusElement) {
+                            statusElement.textContent = `Status: ${data.status}`;
+                            statusElement.style.display = 'block';
+                        }
+                    }
+                } else {
+                    // Error response - handle gracefully
+                    const qrCodeContainer = document.getElementById('qrCodeImage');
+                    let errorMessage = data.error || 'Unknown error occurred';
+                    
+                    // If we have a session ID in the error response, update it
+                    if (data.sessionId) {
+                        currentSessionId = data.sessionId;
+                        console.log('Updated session ID from error response:', currentSessionId);
+                    }
+                    
+                    // Check if it's an "already connected" error
+                    if (errorMessage.toLowerCase().includes('already connected') || data.status === 'connected') {
+                        qrCodeContainer.innerHTML = `
+                            <div class="alert alert-success">
+                                <h6><i class="bi bi-check-circle"></i> Session Already Connected</h6>
+                                <p>This WhatsApp session is already connected and active. No QR code is needed.</p>
+                                <p class="mb-2"><strong>Status:</strong> <span class="badge bg-success">${data.status || 'connected'}</span></p>
+                                <button class="btn btn-sm btn-outline-primary" onclick="loadSessionLogs('${effectiveSessionId || sessionName}')">
+                                    <i class="bi bi-clock-history"></i> View Session Logs
+                                </button>
+                            </div>`;
+                        document.getElementById('qrCodeSection').style.display = 'block';
+                    } else {
+                        // Show error in container instead of alert
+                        qrCodeContainer.innerHTML = `<div class="alert alert-danger">
+                            <strong>Error loading QR code</strong><br>
+                            ${errorMessage}
+                        </div>`;
+                        document.getElementById('qrCodeSection').style.display = 'block';
+                    }
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+
+        // Store current session ID globally so refresh can use it
+        let currentSessionId = null;
+        
+        function startQRRefresh(sessionName, sessionId = null) {
+            if (qrRefreshInterval) {
+                clearInterval(qrRefreshInterval);
+            }
+            // Store session ID for refresh
+            if (sessionId) {
+                currentSessionId = sessionId;
+            }
+            // Refresh QR code every 30 seconds
+            qrRefreshInterval = setInterval(() => {
+                // Use stored session ID if available, otherwise use session name
+                showQRCode(sessionName, currentSessionId || sessionId);
+            }, 30000);
+        }
+
+        async function showQRForSession(sessionName) {
+            currentSessionName = sessionName;
+            showQRCode(sessionName);
+            document.getElementById('qrCodeSection').scrollIntoView({ behavior: 'smooth' });
+            startQRRefresh(sessionName);
+        }
+
+        // Function to load and display session logs
+        async function loadSessionLogs(sessionIdentifier) {
+            try {
+                const sessionId = currentSessionId || sessionIdentifier;
+                let url = '/admin/api/whatsapp/session-logs?';
+                if (sessionId) {
+                    url += `sessionId=${encodeURIComponent(sessionId)}`;
+                } else {
+                    url += `sessionName=${encodeURIComponent(sessionIdentifier)}`;
+                }
+                url += '&page=1&per_page=20';
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    displaySessionLogs(data.data);
+                } else {
+                    alert('Error loading session logs: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error loading session logs:', error);
+                alert('Error loading session logs: ' + error.message);
+            }
+        }
+
+        // Function to display session logs in a modal or section
+        function displaySessionLogs(logsData) {
+            const logs = logsData.data || [];
+            const currentPage = logsData.current_page || 1;
+            const totalPages = logsData.last_page || 1;
+            const total = logsData.total || 0;
+            
+            let logsHtml = `
+                <div class="modal fade" id="sessionLogsModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title"><i class="bi bi-clock-history"></i> Session Activity Logs</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted">Total events: ${total}</p>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Event Type</th>
+                                                <th>Status</th>
+                                                <th>Occurred At</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>`;
+            
+            if (logs.length === 0) {
+                logsHtml += `<tr><td colspan="3" class="text-center text-muted">No logs available</td></tr>`;
+            } else {
+                logs.forEach(log => {
+                    const eventType = log.event_type || 'unknown';
+                    const status = log.status || 'N/A';
+                    const occurredAt = formatLocalDateTimeShort(log.occurred_at);
+                    
+                    let statusBadge = 'secondary';
+                    if (status === 'connected') statusBadge = 'success';
+                    else if (status === 'need_scan' || status === 'NEED_SCAN') statusBadge = 'warning';
+                    else if (status === 'disconnected') statusBadge = 'danger';
+                    
+                    logsHtml += `
+                        <tr>
+                            <td><code>${eventType}</code></td>
+                            <td><span class="badge bg-${statusBadge}">${status}</span></td>
+                            <td><small>${occurredAt}</small></td>
+                        </tr>`;
+                });
+            }
+            
+            logsHtml += `
+                                        </tbody>
+                                    </table>
+                                </div>`;
+            
+            if (totalPages > 1) {
+                logsHtml += `
+                                <nav aria-label="Logs pagination">
+                                    <ul class="pagination pagination-sm justify-content-center">
+                                        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                                            <a class="page-link" href="#" onclick="loadSessionLogsPage(${currentPage - 1}); return false;">Previous</a>
+                                        </li>
+                                        <li class="page-item active">
+                                            <span class="page-link">Page ${currentPage} of ${totalPages}</span>
+                                        </li>
+                                        <li class="page-item ${currentPage >= totalPages ? 'disabled' : ''}">
+                                            <a class="page-link" href="#" onclick="loadSessionLogsPage(${currentPage + 1}); return false;">Next</a>
+                                        </li>
+                                    </ul>
+                                </nav>`;
+            }
+            
+            logsHtml += `
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('sessionLogsModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', logsHtml);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('sessionLogsModal'));
+            modal.show();
+        }
+
+        // Function to load session logs for a specific page
+        async function loadSessionLogsPage(page) {
+            const sessionId = currentSessionId || currentSessionName;
+            if (sessionId) {
+                try {
+                    let url = '/admin/api/whatsapp/session-logs?';
+                    if (currentSessionId) {
+                        url += `sessionId=${encodeURIComponent(currentSessionId)}`;
+                    } else {
+                        url += `sessionName=${encodeURIComponent(currentSessionName)}`;
+                    }
+                    url += `&page=${page}&per_page=20`;
+                    
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    if (data.success && data.data) {
+                        displaySessionLogs(data.data);
+                    }
+                } catch (error) {
+                    console.error('Error loading session logs page:', error);
+                }
+            }
+        }
+
+        // Load sites on page load
+        loadSites();
+        updateSiteSelect();
+    </script>
+</body>
+</html>
+
