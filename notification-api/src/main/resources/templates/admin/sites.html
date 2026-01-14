@@ -616,80 +616,6 @@
         }, 100);
     </script>
     <script>
-        // Timezone utility functions
-        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        
-        /**
-         * Converts a UTC timestamp string to user's local timezone
-         */
-        function formatLocalDateTime(dateString) {
-            if (!dateString || dateString === 'N/A' || dateString === '-') {
-                return 'N/A';
-            }
-            
-            try {
-                let date;
-                if (dateString.includes('Z') || dateString.includes('+') || dateString.includes('-', 10)) {
-                    date = new Date(dateString);
-                } else {
-                    const utcString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
-                    date = new Date(utcString);
-                }
-                
-                if (isNaN(date.getTime())) {
-                    return dateString;
-                }
-                
-                return date.toLocaleString(undefined, {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                    timeZoneName: 'short'
-                });
-            } catch (e) {
-                console.error('Error formatting date:', e, dateString);
-                return dateString;
-            }
-        }
-        
-        /**
-         * Formats date for display in tables (shorter format)
-         */
-        function formatLocalDateTimeShort(dateString) {
-            if (!dateString || dateString === 'N/A' || dateString === '-') {
-                return 'N/A';
-            }
-            
-            try {
-                let date;
-                if (dateString.includes('Z') || dateString.includes('+') || dateString.includes('-', 10)) {
-                    date = new Date(dateString);
-                } else {
-                    const utcString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
-                    date = new Date(utcString);
-                }
-                
-                if (isNaN(date.getTime())) {
-                    return dateString;
-                }
-                
-                return date.toLocaleString(undefined, {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false
-                });
-            } catch (e) {
-                return dateString;
-            }
-        }
         
         let currentSessionName = null;
         let qrRefreshInterval = null;
@@ -1732,7 +1658,30 @@
                 logs.forEach(log => {
                     const eventType = log.event_type || 'unknown';
                     const status = log.status || 'N/A';
-                    const occurredAt = formatLocalDateTimeShort(log.occurred_at);
+                    // Timezone utility function (if not already defined)
+                    const formatToLocalTime = function(dateString) {
+                        if (!dateString || dateString === 'N/A') return 'N/A';
+                        try {
+                            let utcString = dateString;
+                            if (!utcString.endsWith('Z') && !utcString.includes('+') && !utcString.includes('-', 10)) {
+                                utcString = utcString + 'Z';
+                            }
+                            const date = new Date(utcString);
+                            if (isNaN(date.getTime())) return dateString;
+                            return date.toLocaleString(undefined, {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            });
+                        } catch (e) {
+                            return dateString;
+                        }
+                    };
+                    const occurredAt = log.occurred_at ? formatToLocalTime(log.occurred_at) : 'N/A';
                     
                     let statusBadge = 'secondary';
                     if (status === 'connected') statusBadge = 'success';

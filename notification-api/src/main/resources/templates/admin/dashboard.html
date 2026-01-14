@@ -342,9 +342,107 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script th:inline="javascript">
+        // Timezone utility functions
+        const TimezoneUtils = {
+            // Get user's timezone
+            getUserTimezone: function() {
+                return Intl.DateTimeFormat().resolvedOptions().timeZone;
+            },
+            
+            // Get timezone offset in minutes
+            getTimezoneOffset: function() {
+                return new Date().getTimezoneOffset();
+            },
+            
+            // Convert UTC date string to local date string
+            // Handles both ISO format with 'Z' and without timezone
+            formatToLocalTime: function(dateString) {
+                if (!dateString) return '-';
+                
+                try {
+                    // If the string doesn't end with 'Z', assume it's UTC and add 'Z'
+                    let utcString = dateString;
+                    if (!utcString.endsWith('Z') && !utcString.includes('+') && !utcString.includes('-', 10)) {
+                        // If it's just a date-time without timezone, assume UTC
+                        utcString = utcString + 'Z';
+                    }
+                    
+                    const date = new Date(utcString);
+                    
+                    // Check if date is valid
+                    if (isNaN(date.getTime())) {
+                        return dateString; // Return original if parsing fails
+                    }
+                    
+                    // Format in user's local timezone with date and time
+                    return date.toLocaleString(undefined, {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    });
+                } catch (e) {
+                    console.error('Error formatting date:', dateString, e);
+                    return dateString;
+                }
+            },
+            
+            // Format date for display with timezone info
+            formatWithTimezone: function(dateString) {
+                if (!dateString) return '-';
+                
+                try {
+                    let utcString = dateString;
+                    if (!utcString.endsWith('Z') && !utcString.includes('+') && !utcString.includes('-', 10)) {
+                        utcString = utcString + 'Z';
+                    }
+                    
+                    const date = new Date(utcString);
+                    
+                    if (isNaN(date.getTime())) {
+                        return dateString;
+                    }
+                    
+                    const timezone = this.getUserTimezone();
+                    const offset = -this.getTimezoneOffset();
+                    const offsetHours = Math.floor(Math.abs(offset) / 60);
+                    const offsetMinutes = Math.abs(offset) % 60;
+                    const offsetSign = offset >= 0 ? '+' : '-';
+                    const offsetString = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+                    
+                    return date.toLocaleString(undefined, {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    }) + ` (${timezone} ${offsetString})`;
+                } catch (e) {
+                    console.error('Error formatting date with timezone:', dateString, e);
+                    return dateString;
+                }
+            }
+        };
+        
         // Update current time
         function updateTime() {
-            document.getElementById('currentTime').textContent = new Date().toLocaleString();
+            const now = new Date();
+            const timezone = TimezoneUtils.getUserTimezone();
+            document.getElementById('currentTime').textContent = 
+                now.toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }) + ` (${timezone})`;
         }
         updateTime();
         setInterval(updateTime, 1000);
@@ -448,8 +546,8 @@
                             </td>
                             <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
                             <td><small class="text-danger">${msg.errorMessage || '-'}</small></td>
-                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
+                            <td><small>${msg.sentAt ? TimezoneUtils.formatToLocalTime(msg.sentAt) : '-'}</small></td>
+                            <td><small>${msg.deliveredAt ? TimezoneUtils.formatToLocalTime(msg.deliveredAt) : '-'}</small></td>
                         </tr>
                     `).join('');
                 })
@@ -478,7 +576,7 @@
                             <td><span class="badge bg-danger">${msg.status}</span></td>
                             <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
                             <td><small class="text-danger fw-bold">${msg.errorMessage || 'Unknown error'}</small></td>
-                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
+                            <td><small>${msg.sentAt ? TimezoneUtils.formatToLocalTime(msg.sentAt) : '-'}</small></td>
                             <td><small>-</small></td>
                         </tr>
                     `).join('');

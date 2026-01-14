@@ -12,5 +12,9 @@ public class SiteRegistrationRequest {
 
     @Size(max = 500, message = "Description must not exceed 500 characters")
     private String description;
+    
+    private String emailFromAddress;
+    private String emailFromName;
+    private String whatsappSessionName;
 }
 

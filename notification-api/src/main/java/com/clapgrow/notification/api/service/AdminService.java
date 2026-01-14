@@ -136,5 +136,10 @@ public class AdminService {
             })
             .collect(Collectors.toList());
     }
+    
+    public List<MessageDetailResponse> getScheduledMessages(int limit) {
+        // TODO: Implement scheduled messages retrieval
+        return List.of();
+    }
 }
 

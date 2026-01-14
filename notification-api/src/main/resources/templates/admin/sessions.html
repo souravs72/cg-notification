@@ -575,44 +575,37 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Timezone utility functions
-        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        
-        /**
-         * Converts a UTC timestamp string to user's local timezone
-         */
-        function formatLocalDateTime(dateString) {
-            if (!dateString || dateString === 'N/A' || dateString === '-') {
-                return 'N/A';
-            }
-            
-            try {
-                let date;
-                if (dateString.includes('Z') || dateString.includes('+') || dateString.includes('-', 10)) {
-                    date = new Date(dateString);
-                } else {
-                    const utcString = dateString.endsWith('Z') ? dateString : dateString + 'Z';
-                    date = new Date(utcString);
-                }
+        const TimezoneUtils = {
+            formatToLocalTime: function(dateString) {
+                if (!dateString || dateString === 'N/A') return 'N/A';
                 
-                if (isNaN(date.getTime())) {
+                try {
+                    let utcString = dateString;
+                    if (!utcString.endsWith('Z') && !utcString.includes('+') && !utcString.includes('-', 10)) {
+                        utcString = utcString + 'Z';
+                    }
+                    
+                    const date = new Date(utcString);
+                    
+                    if (isNaN(date.getTime())) {
+                        return dateString;
+                    }
+                    
+                    return date.toLocaleString(undefined, {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    });
+                } catch (e) {
+                    console.error('Error formatting date:', dateString, e);
                     return dateString;
                 }
-                
-                return date.toLocaleString(undefined, {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                    timeZoneName: 'short'
-                });
-            } catch (e) {
-                console.error('Error formatting date:', e, dateString);
-                return dateString;
             }
-        }
+        };
         
         let currentSessionId = null;
         let currentSessionName = null;
@@ -1682,10 +1675,10 @@
             const webhookEvents = sessionData.webhook_events || sessionData.webhookEvents || [];
             const apiKey = sessionData.api_key || sessionData.apiKey || sessionData.token || 'Not available';
             const apiKeyDisplay = apiKey !== 'Not available' ? (apiKey.substring(0, 20) + '...') : 'Not available';
-            const createdAtRaw = sessionData.created_at || sessionData.createdAt || 'N/A';
-            const updatedAtRaw = sessionData.updated_at || sessionData.updatedAt || 'N/A';
-            const createdAt = formatLocalDateTime(createdAtRaw);
-            const updatedAt = formatLocalDateTime(updatedAtRaw);
+            const createdAt = sessionData.created_at || sessionData.createdAt || 'N/A';
+            const updatedAt = sessionData.updated_at || sessionData.updatedAt || 'N/A';
+            const createdAtFormatted = createdAt !== 'N/A' ? TimezoneUtils.formatToLocalTime(createdAt) : 'N/A';
+            const updatedAtFormatted = updatedAt !== 'N/A' ? TimezoneUtils.formatToLocalTime(updatedAt) : 'N/A';
             
             const statusClass = `status-${status.toLowerCase().replace(' ', '_')}`;
             
@@ -1776,13 +1769,11 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <strong><i class="bi bi-calendar-plus"></i> Created At:</strong>
-                        <p class="mb-0">${escapeHtml(createdAt)}</p>
-                        <small class="text-muted">Timezone: ${userTimezone}</small>
+                        <p class="mb-0">${escapeHtml(createdAtFormatted)}</p>
                     </div>
                     <div class="col-md-6 mb-3">
                         <strong><i class="bi bi-calendar-check"></i> Updated At:</strong>
-                        <p class="mb-0">${escapeHtml(updatedAt)}</p>
-                        <small class="text-muted">Timezone: ${userTimezone}</small>
+                        <p class="mb-0">${escapeHtml(updatedAtFormatted)}</p>
                     </div>
                 </div>
                 
