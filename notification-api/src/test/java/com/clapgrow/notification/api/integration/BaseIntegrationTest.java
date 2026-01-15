@@ -12,7 +12,6 @@ import org.springframework.test.context.DynamicPropertySource;
  * For local development, ensure PostgreSQL and Kafka are running or use Testcontainers.
  */
 @SpringBootTest(classes = NotificationApiApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(TestDatabaseConfig.class)
 public abstract class BaseIntegrationTest {
 
     @DynamicPropertySource
@@ -33,9 +32,12 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.kafka.bootstrap-servers", () -> 
             kafkaServers != null ? kafkaServers : "localhost:9092");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
-        // Disable Spring Boot's SQL initialization to avoid conflicts
-        // We use TestDatabaseConfig with @PostConstruct to run SQL scripts early
-        registry.add("spring.sql.init.mode", () -> "never");
+        // Enable Spring Boot's SQL initialization to create enum types before Hibernate
+        registry.add("spring.sql.init.mode", () -> "always");
+        registry.add("spring.sql.init.schema-locations", () -> "classpath:schema-test.sql");
+        registry.add("spring.sql.init.continue-on-error", () -> "true");
+        // CRITICAL: This ensures SQL scripts run BEFORE Hibernate creates tables
+        registry.add("spring.jpa.defer-datasource-initialization", () -> "false");
     }
 }
 
