@@ -35,8 +35,9 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.sql.init.mode", () -> "always");
         registry.add("spring.sql.init.schema-locations", () -> "classpath:schema-test.sql");
         registry.add("spring.sql.init.continue-on-error", () -> "true");
-        // CRITICAL: This ensures SQL scripts run BEFORE Hibernate creates tables
-        registry.add("spring.jpa.defer-datasource-initialization", () -> "false");
+        // CRITICAL: This defers Hibernate DDL until AFTER SQL scripts run
+        // This ensures enum types are created before Hibernate tries to create tables
+        registry.add("spring.jpa.defer-datasource-initialization", () -> "true");
     }
 }
 
