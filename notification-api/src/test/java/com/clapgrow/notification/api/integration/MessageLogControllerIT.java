@@ -6,11 +6,14 @@ import com.clapgrow.notification.api.enums.DeliveryStatus;
 import com.clapgrow.notification.api.enums.NotificationChannel;
 import com.clapgrow.notification.api.repository.FrappeSiteRepository;
 import com.clapgrow.notification.api.repository.MessageLogRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.dao.InvalidDataAccessResourceUsageException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,14 +43,19 @@ class MessageLogControllerIT extends BaseIntegrationTest {
     @Autowired
     private MessageLogRepository messageLogRepository;
 
+    @Autowired
+    private EntityManager entityManager;
+
     private FrappeSite testSite;
     private String testApiKey;
 
     @BeforeEach
     void setUp() {
         // Clean up test data
-        messageLogRepository.deleteAll();
-        siteRepository.deleteAll();
+        // Handle case where tables might not exist yet (Hibernate DDL timing)
+        // Use separate try-catch blocks to avoid transaction rollback issues
+        cleanupIfTableExists("message_logs", () -> messageLogRepository.deleteAll());
+        cleanupIfTableExists("frappe_sites", () -> siteRepository.deleteAll());
 
         // Create test site
         testApiKey = UUID.randomUUID().toString();
@@ -63,6 +71,23 @@ class MessageLogControllerIT extends BaseIntegrationTest {
 
         // Create test message logs
         createTestMessageLogs();
+    }
+
+    /**
+     * Helper method to safely clean up data only if the table exists.
+     * This prevents transaction rollback issues when tables don't exist yet.
+     */
+    private void cleanupIfTableExists(String tableName, Runnable cleanupAction) {
+        try {
+            // Check if table exists by querying it
+            entityManager.createNativeQuery("SELECT 1 FROM " + tableName + " LIMIT 1").getResultList();
+            // Table exists, proceed with cleanup
+            cleanupAction.run();
+        } catch (PersistenceException | InvalidDataAccessResourceUsageException e) {
+            // Table doesn't exist yet - Hibernate will create it when we save
+            // This can happen if setUp() runs before Hibernate completes DDL
+            // Ignore and continue
+        }
     }
 
     private void createTestMessageLogs() {
