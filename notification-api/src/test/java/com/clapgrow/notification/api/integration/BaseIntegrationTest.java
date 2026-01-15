@@ -2,6 +2,7 @@ package com.clapgrow.notification.api.integration;
 
 import com.clapgrow.notification.api.NotificationApiApplication;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -11,6 +12,7 @@ import org.springframework.test.context.DynamicPropertySource;
  * For local development, ensure PostgreSQL and Kafka are running or use Testcontainers.
  */
 @SpringBootTest(classes = NotificationApiApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(TestDatabaseConfig.class)
 public abstract class BaseIntegrationTest {
 
     @DynamicPropertySource
@@ -31,12 +33,9 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.kafka.bootstrap-servers", () -> 
             kafkaServers != null ? kafkaServers : "localhost:9092");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
-        // Run SQL scripts before Hibernate creates schema
-        registry.add("spring.sql.init.mode", () -> "always");
-        registry.add("spring.sql.init.schema-locations", () -> "classpath:schema-test.sql");
-        registry.add("spring.sql.init.continue-on-error", () -> "true");
-        // Ensure SQL scripts run before Hibernate DDL
-        registry.add("spring.jpa.defer-datasource-initialization", () -> "true");
+        // Disable Spring Boot's SQL initialization to avoid conflicts
+        // We use TestDatabaseConfig with @PostConstruct to run SQL scripts early
+        registry.add("spring.sql.init.mode", () -> "never");
     }
 }
 
