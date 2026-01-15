@@ -1,5 +1,6 @@
 package com.clapgrow.notification.api.controller;
 
+import com.clapgrow.notification.api.entity.WhatsAppSession;
 import com.clapgrow.notification.api.service.AdminAuthService;
 import com.clapgrow.notification.api.service.AdminService;
 import com.clapgrow.notification.api.service.SiteService;
@@ -18,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -210,6 +212,14 @@ class AdminControllerQRCodeTest {
         mockResponse.put("sessionName", testSessionName);
         mockResponse.put("sessionId", testSessionId);
 
+        // Mock WhatsAppSession entity
+        WhatsAppSession mockSession = new WhatsAppSession();
+        mockSession.setId(UUID.randomUUID());
+        mockSession.setSessionId(testSessionId);
+        mockSession.setSessionName(testSessionName);
+        mockSession.setPhoneNumber(testPhoneNumber);
+        mockSession.setSessionApiKey(null); // Initially null, will be fetched later
+
         when(wasenderQRService.createSession(
                 eq(testSessionName),
                 eq(testPhoneNumber),
@@ -225,6 +235,22 @@ class AdminControllerQRCodeTest {
                 isNull(),  // ignoreBroadcasts
                 anyString()  // apiKey
         )).thenReturn(mockResponse);
+
+        when(whatsAppSessionService.saveSession(
+                anyString(),  // sessionId
+                anyString(),  // sessionName
+                anyString(),  // phoneNumber
+                any(Boolean.class),  // accountProtection
+                any(Boolean.class),  // logMessages
+                any(),  // webhookUrl
+                any(),  // webhookEvents
+                any()  // httpSession
+        )).thenReturn(mockSession);
+
+        // Mock getSessionDetails to return empty (so it doesn't try to fetch API key)
+        Map<String, Object> emptySessionDetails = new HashMap<>();
+        emptySessionDetails.put("success", false);
+        when(wasenderQRService.getSessionDetails(anyString(), anyString())).thenReturn(emptySessionDetails);
 
         // Act & Assert
         mockMvc.perform(post("/admin/api/whatsapp/session")
@@ -283,6 +309,14 @@ class AdminControllerQRCodeTest {
         Map<String, Object> mockResponse = new HashMap<>();
         mockResponse.put("success", true);
 
+        // Mock WhatsAppSession entity
+        WhatsAppSession mockSession = new WhatsAppSession();
+        mockSession.setId(UUID.randomUUID());
+        mockSession.setSessionId(testSessionId);
+        mockSession.setSessionName(testSessionName);
+        mockSession.setPhoneNumber(testPhoneNumber);
+        mockSession.setSessionApiKey(null); // Initially null, will be fetched later
+
         when(wasenderQRService.createSession(
                 anyString(),  // sessionName
                 anyString(),  // phoneNumber
@@ -298,6 +332,22 @@ class AdminControllerQRCodeTest {
                 any(),  // ignoreBroadcasts
                 anyString()  // apiKey
         )).thenReturn(mockResponse);
+
+        when(whatsAppSessionService.saveSession(
+                anyString(),  // sessionId
+                anyString(),  // sessionName
+                anyString(),  // phoneNumber
+                any(Boolean.class),  // accountProtection
+                any(Boolean.class),  // logMessages
+                any(),  // webhookUrl
+                any(),  // webhookEvents
+                any()  // httpSession
+        )).thenReturn(mockSession);
+
+        // Mock getSessionDetails to return empty (so it doesn't try to fetch API key)
+        Map<String, Object> emptySessionDetails = new HashMap<>();
+        emptySessionDetails.put("success", false);
+        when(wasenderQRService.getSessionDetails(anyString(), anyString())).thenReturn(emptySessionDetails);
 
         // Act & Assert
         mockMvc.perform(post("/admin/api/whatsapp/session")

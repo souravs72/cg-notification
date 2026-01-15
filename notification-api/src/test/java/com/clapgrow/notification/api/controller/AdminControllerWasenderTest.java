@@ -1,6 +1,7 @@
 package com.clapgrow.notification.api.controller;
 
 import com.clapgrow.notification.api.dto.WasenderApiKeyRequest;
+import com.clapgrow.notification.api.entity.User;
 import com.clapgrow.notification.api.service.WasenderConfigService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,9 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.UUID;
+
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -56,17 +60,27 @@ class AdminControllerWasenderTest {
         WasenderApiKeyRequest request = new WasenderApiKeyRequest();
         request.setWasenderApiKey("test-api-key-12345");
 
+        // Mock user
+        UUID testUserId = UUID.randomUUID();
+        User testUser = new User();
+        testUser.setId(testUserId);
+        testUser.setEmail("test@example.com");
+
         doNothing().when(wasenderConfigService).saveApiKey(anyString());
+        when(userService.getCurrentUser(any())).thenReturn(testUser);
+        when(userService.updateWasenderApiKey(any(UUID.class), anyString())).thenReturn(testUser);
 
         mockMvc.perform(post("/admin/api/wasender/api-key")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request))
-                .sessionAttr("userId", "test-user-id"))
+                .sessionAttr("userId", testUserId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.configured").value(true))
-                .andExpect(jsonPath("$.message").value("WASender API key saved successfully"));
+                .andExpect(jsonPath("$.message").value("WASender PAT saved successfully"));
 
         verify(wasenderConfigService).saveApiKey("test-api-key-12345");
+        verify(userService).getCurrentUser(any());
+        verify(userService).updateWasenderApiKey(eq(testUserId), eq("test-api-key-12345"));
     }
 
     @Test
