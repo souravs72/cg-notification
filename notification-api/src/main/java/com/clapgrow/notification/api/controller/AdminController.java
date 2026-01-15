@@ -608,10 +608,29 @@ public class AdminController {
     }
 
     @PostMapping("/api/wasender/api-key")
-    public ResponseEntity<?> saveWasenderApiKey(@RequestBody WasenderApiKeyRequest request) {
+    public ResponseEntity<?> saveWasenderApiKey(@RequestBody WasenderApiKeyRequest request, HttpSession session) {
         try {
-            wasenderConfigService.saveApiKey(request.getWasenderApiKey());
-            WasenderApiKeyResponse response = new WasenderApiKeyResponse(true, "WASender API key saved successfully");
+            String pat = request.getWasenderApiKey();
+            
+            // Save to global config
+            wasenderConfigService.saveApiKey(pat);
+            
+            // Get current user and update their PAT
+            User user = userWasenderService.getCurrentUser(session)
+                .orElseThrow(() -> new IllegalStateException("User not found in session"));
+            
+            try {
+                // Try to update with validation (to get subscription info)
+                userService.updateWasenderApiKey(user.getId(), pat);
+            } catch (Exception e) {
+                // If validation fails, save without validation as fallback
+                userService.updateWasenderApiKeyWithoutValidation(user.getId(), pat);
+            }
+            
+            // Set PAT in session immediately
+            session.setAttribute("wasenderApiKey", pat);
+            
+            WasenderApiKeyResponse response = new WasenderApiKeyResponse(true, "WASender PAT saved successfully");
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             Map<String, String> errorResponse = new HashMap<>();
@@ -619,7 +638,30 @@ public class AdminController {
             return ResponseEntity.badRequest().body(errorResponse);
         } catch (Exception e) {
             Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Failed to save API key: " + e.getMessage());
+            errorResponse.put("error", "Failed to save PAT: " + e.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+    
+    @PostMapping("/api/sites/{siteId}/regenerate-api-key")
+    public ResponseEntity<?> regenerateSiteApiKey(@PathVariable(name = "siteId") String siteId) {
+        try {
+            UUID siteUuid = UUID.fromString(siteId);
+            siteService.getSiteById(siteUuid); // Verify site exists
+            String newApiKey = siteService.regenerateApiKey(siteUuid);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("apiKey", newApiKey);
+            response.put("message", "API key regenerated successfully");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (Exception e) {
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to regenerate API key: " + e.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
         }
     }

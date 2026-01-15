@@ -93,6 +93,25 @@ public class UserService {
     }
 
     @Transactional
+    public User updateWasenderApiKeyWithoutValidation(UUID userId, String wasenderApiKey) {
+        User user = userRepository.findByIdAndIsDeletedFalse(userId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (wasenderApiKey == null || wasenderApiKey.trim().isEmpty()) {
+            throw new IllegalArgumentException("WASender API key is required");
+        }
+
+        // Save PAT without external validation (used as fallback)
+        user.setWasenderApiKey(wasenderApiKey.trim());
+        user.setUpdatedBy("SYSTEM");
+
+        user = userRepository.save(user);
+        log.info("Updated WASender API key (without validation) for user: {}", user.getEmail());
+        
+        return user;
+    }
+
+    @Transactional
     public void updateSessionsUsed(UUID userId, int sessionsUsed) {
         User user = userRepository.findByIdAndIsDeletedFalse(userId)
             .orElseThrow(() -> new IllegalArgumentException("User not found"));

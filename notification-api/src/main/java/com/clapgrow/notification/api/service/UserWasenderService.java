@@ -19,12 +19,20 @@ public class UserWasenderService {
 
     /**
      * Get WASender API key from user session
+     * Prioritizes HttpSession attribute, then falls back to database
      */
     public Optional<String> getApiKeyFromSession(HttpSession session) {
         if (session == null) {
             return Optional.empty();
         }
         
+        // First, try to get from HttpSession attribute (set when PAT is saved)
+        String patFromSession = (String) session.getAttribute("wasenderApiKey");
+        if (patFromSession != null && !patFromSession.trim().isEmpty()) {
+            return Optional.of(patFromSession);
+        }
+        
+        // Fallback to database
         String userId = (String) session.getAttribute("userId");
         if (userId == null) {
             return Optional.empty();

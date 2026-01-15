@@ -105,5 +105,17 @@ public class SiteService {
     public FrappeSite updateSite(FrappeSite site) {
         return siteRepository.save(site);
     }
+
+    @Transactional
+    public String regenerateApiKey(UUID siteId) {
+        FrappeSite site = getSiteById(siteId);
+        String newApiKey = apiKeyService.generateApiKey();
+        site.setApiKey(newApiKey);
+        site.setApiKeyHash(apiKeyService.hashApiKey(newApiKey));
+        site.setUpdatedBy("SYSTEM");
+        siteRepository.save(site);
+        log.info("Regenerated API key for site: {} with ID: {}", site.getSiteName(), siteId);
+        return newApiKey;
+    }
 }
 

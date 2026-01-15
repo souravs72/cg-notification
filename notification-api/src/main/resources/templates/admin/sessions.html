@@ -6,6 +6,15 @@
     <title>WhatsApp Sessions - Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- QRCode.js library - served locally to avoid CSP/proxy/adblock issues -->
+    <script src="/js/qrcode.min.js"></script>
+    <script>
+        // Hard-fail if QRCode.js didn't load (prevents silent failures)
+        if (!window.QRCode || typeof QRCode.toCanvas !== 'function') {
+            console.error('QRCode library failed to load. Check /js/qrcode.min.js');
+            alert('QRCode library failed to load. Please check the browser console and ensure /js/qrcode.min.js is accessible.');
+        }
+    </script>
     <style>
         :root {
             --sidebar-width: 250px;
@@ -568,90 +577,12 @@
         let currentSessionId = null;
         let currentSessionName = null;
         let qrCodePollInterval = null;
-        let qrCodeLibraryLoaded = false;
         
-        // Load QRCode library dynamically
-        function loadQRCodeLibrary(callback) {
-            // Check if already loaded
-            if (typeof QRCode !== 'undefined') {
-                qrCodeLibraryLoaded = true;
-                console.log('QRCode library already available');
-                if (callback) callback();
-                return;
-            }
-            
-            // Check if already loading
-            if (document.querySelector('script[src*="qrcode"]')) {
-                // Script tag exists, wait for it to load
-                let attempts = 0;
-                const checkInterval = setInterval(function() {
-                    attempts++;
-                    if (typeof QRCode !== 'undefined') {
-                        clearInterval(checkInterval);
-                        qrCodeLibraryLoaded = true;
-                        console.log('QRCode library loaded from existing script');
-                        if (callback) callback();
-                    } else if (attempts > 20) {
-                        clearInterval(checkInterval);
-                        console.error('QRCode library did not load from existing script');
-                        if (callback) callback(new Error('QRCode library failed to load'));
-                    }
-                }, 100);
-                return;
-            }
-            
-            // Load from CDN
-            console.log('Loading QRCode library from CDN...');
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';
-            script.async = true;
-            script.onload = function() {
-                if (typeof QRCode !== 'undefined') {
-                    qrCodeLibraryLoaded = true;
-                    console.log('QRCode library loaded successfully from unpkg');
-                    if (callback) callback();
-                } else {
-                    console.error('QRCode library script loaded but QRCode is undefined');
-                    if (callback) callback(new Error('QRCode library failed to initialize'));
-                }
-            };
-            script.onerror = function() {
-                console.error('Failed to load QRCode library from unpkg, trying jsdelivr...');
-                // Fallback to jsdelivr
-                const script2 = document.createElement('script');
-                script2.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
-                script2.async = true;
-                script2.onload = function() {
-                    if (typeof QRCode !== 'undefined') {
-                        qrCodeLibraryLoaded = true;
-                        console.log('QRCode library loaded from jsdelivr');
-                        if (callback) callback();
-                    } else {
-                        console.error('QRCode library script loaded but QRCode is undefined');
-                        if (callback) callback(new Error('QRCode library failed to initialize'));
-                    }
-                };
-                script2.onerror = function() {
-                    console.error('Failed to load QRCode library from both CDNs');
-                    if (callback) callback(new Error('QRCode library failed to load from all CDNs'));
-                };
-                document.head.appendChild(script2);
-            };
-            document.head.appendChild(script);
-        }
+        // QRCode.js is loaded in <head> with defer attribute - no dynamic loading needed
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             loadSessions();
-            
-            // Preload QRCode library in the background
-            loadQRCodeLibrary(function(error) {
-                if (error) {
-                    console.warn('QRCode library preload failed, will retry when needed:', error);
-                } else {
-                    console.log('QRCode library preloaded successfully');
-                }
-            });
             
             // Toggle webhook fields
             document.getElementById('webhookEnabled').addEventListener('change', function() {
@@ -861,14 +792,18 @@
                         }
                     }
                     
-                    // If we still don't have a session ID, use the session name
-                    // The backend will try to look it up or use /connect endpoint
-                    const identifier = sessionId || actualSessionName;
+                    // CRITICAL: Never use name as identifier - always require sessionId
+                    // If ID is missing, wait for backend to return it (refresh list)
+                    if (!sessionId) {
+                        alert("Session created but ID not returned yet. Please refresh the list.");
+                        loadSessions();
+                        return;
+                    }
                     
-                    console.log('Session created. ID:', sessionId, 'Name:', actualSessionName, 'Using identifier:', identifier);
+                    console.log('Session created. ID:', sessionId, 'Name:', actualSessionName);
                     
-                    // Show QR code modal - use session ID if available, otherwise use name
-                    showQRCode(identifier, actualSessionName);
+                    // Show QR code modal - always use sessionId
+                    showQRCode(sessionId, actualSessionName);
                     
                     // Reload sessions after a delay
                     setTimeout(loadSessions, 2000);
@@ -885,26 +820,55 @@
         }
 
         // Show QR code
-        function showQRCode(sessionIdentifier, sessionName) {
-            // Use the identifier provided (could be ID or name)
-            currentSessionId = sessionIdentifier;
-            currentSessionName = sessionName || sessionIdentifier;
+        function showQRCode(sessionId, sessionName) {
+            // CRITICAL: Always use sessionId - never accept name as identifier
+            if (!sessionId) {
+                console.error('Cannot show QR code: sessionId is required');
+                alert('Error: Session ID is required to display QR code.');
+                return;
+            }
             
-            console.log('Showing QR code for:', { sessionIdentifier, sessionName, currentSessionId, currentSessionName });
+            currentSessionId = String(sessionId);
+            currentSessionName = sessionName || currentSessionId;
+            
+            console.log('Showing QR code for:', { sessionId: currentSessionId, sessionName: currentSessionName });
             
             const modal = new bootstrap.Modal(document.getElementById('qrCodeModal'));
             modal.show();
             
-            // Load QR code using the identifier (ID preferred, but name works too)
-            loadQRCode(sessionIdentifier);
+            // Load QR code using sessionId
+            loadQRCode(currentSessionId);
             
-            // Start polling for connection status - use identifier
-            startQRCodePolling(sessionIdentifier);
+            // Start polling for connection status - use sessionId
+            startQRCodePolling(currentSessionId);
         }
 
+        // Store QR strings in memory only - NEVER in HTML attributes
+        const qrCodeDataStore = new Map();
+        
         // Helper function to generate QR code from string
+        // IMPORTANT: QR string is a binary payload, NOT base64/image/URL
+        // MUST only use QRCode.toCanvas(qrString) - nothing else
         function generateQRFromString(qrString, container, sessionName, sessionId) {
-            console.log('Generating QR code from string, length:', qrString.length);
+            console.log('Generating QR code from WhatsApp QR string');
+            console.log('  - Length:', qrString.length);
+            console.log('  - Type: Binary payload (NOT base64/image/URL)');
+            
+            // Store QR string in memory only (keyed by sessionId)
+            // CRITICAL: Always use String(sessionId) - never use sessionName or fallback
+            // If sessionId is missing, we cannot store the QR - fail early
+            if (!sessionId) {
+                console.error('Cannot store QR code: sessionId is missing');
+                container.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Error: Session ID is required to display QR code.
+                    </div>
+                `;
+                return;
+            }
+            
+            const storeKey = String(sessionId);
+            qrCodeDataStore.set(storeKey, qrString);
             
             // Show loading state
             container.innerHTML = `
@@ -917,220 +881,105 @@
                 <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(sessionName || sessionId)}</small></p>
             `;
             
-            // Method 1: Try Google Charts QR Code API (most reliable, no library needed)
-            generateQRCodeWithGoogleCharts(qrString, container, sessionName, sessionId);
+            // Generate QR code using QRCode.js library ONLY
+            // This is the ONLY safe way to handle WhatsApp QR strings
+            // CRITICAL: Pass sessionId - function will use String(sessionId) as key
+            generateQRCodeWithLibrary(null, container, sessionName, sessionId);
         }
         
-        // Generate QR code using Google Charts API (most reliable)
-        function generateQRCodeWithGoogleCharts(qrString, container, sessionName, sessionId) {
+        // Generate QR code using QRCode.js library
+        // QRCode.js is loaded in <head> - just use it directly
+        function generateQRCodeWithLibrary(storeKey, container, sessionName, sessionId) {
             const qrContainer = document.getElementById('qrCodeCanvas');
             if (!qrContainer) {
                 console.error('QR container not found');
                 return;
             }
             
-            // Google Charts QR Code API - very reliable, no library needed
-            const encodedData = encodeURIComponent(qrString);
-            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodedData}`;
-            
-            console.log('Generating QR code with Google Charts API');
-            
-            const img = document.createElement('img');
-            img.src = qrCodeUrl;
-            img.alt = 'QR Code';
-            img.className = 'img-fluid';
-            img.style.border = '2px solid #dee2e6';
-            img.style.borderRadius = '8px';
-            img.style.padding = '10px';
-            img.style.backgroundColor = 'white';
-            img.style.maxWidth = '300px';
-            
-            img.onload = function() {
-                qrContainer.innerHTML = '';
-                qrContainer.appendChild(img);
-                console.log('QR code generated successfully with Google Charts API');
-            };
-            
-            img.onerror = function() {
-                console.warn('Google Charts API failed, trying alternative method...');
-                // Fallback to QRCode.js library
-                generateQRCodeWithLibrary(qrString, container, sessionName, sessionId);
-            };
-        }
-        
-        // Fallback: Generate QR code using QRCode.js library
-        function generateQRCodeWithLibrary(qrString, container, sessionName, sessionId) {
-            const qrContainer = document.getElementById('qrCodeCanvas');
-            if (!qrContainer) {
-                console.error('QR container not found');
+            // Retrieve QR string from memory store
+            const qrString = qrCodeDataStore.get(String(sessionId));
+            if (!qrString) {
+                console.error('QR string not found in memory store for sessionId:', sessionId);
+                qrContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> QR code data not available. Please try again.
+                    </div>
+                `;
                 return;
             }
             
-            // Load library if needed
-            loadQRCodeLibrary(function(error) {
-                if (error || typeof QRCode === 'undefined') {
-                    console.error('QRCode library not available:', error);
-                    // Final fallback - use alternative QR code service
-                    generateQRCodeWithAlternativeService(qrString, container, sessionName, sessionId);
-                    return;
+            console.log('Generating QR code with QRCode.toCanvas()');
+            console.log('  - QR string length:', qrString.length);
+            
+            // Safety check: Ensure QRCode is loaded (should always be, but defensive programming)
+            // QRCode.js is loaded synchronously in <head> (no defer), so it should be available
+            if (typeof QRCode === 'undefined' || typeof QRCode.toCanvas !== 'function') {
+                console.error('QRCode library not loaded');
+                qrContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Error: QR code library not loaded. Please refresh the page.
+                    </div>
+                `;
+                return;
+            }
+            
+            // Clear container and create canvas
+            qrContainer.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            qrContainer.appendChild(canvas);
+            
+            // Generate QR code - QRCode.js is loaded synchronously in <head> (no defer)
+            QRCode.toCanvas(canvas, qrString, {
+                width: 300,
+                margin: 2,
+                errorCorrectionLevel: 'H'
+            }, function(err) {
+                if (err) {
+                    console.error('Error generating QR code:', err);
+                    qrContainer.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Error: ${escapeHtml(err.message || 'Failed to generate QR code')}
+                        </div>
+                    `;
+                } else {
+                    console.log('QR code generated successfully!');
+                    // Add styling to the canvas
+                    canvas.style.border = '2px solid #dee2e6';
+                    canvas.style.borderRadius = '8px';
+                    canvas.style.padding = '10px';
+                    canvas.style.backgroundColor = 'white';
+                    canvas.style.display = 'block';
+                    canvas.style.margin = '0 auto';
+                    canvas.style.maxWidth = '300px';
+                    canvas.className = 'img-fluid';
                 }
-                
-                qrContainer.innerHTML = ''; // Clear loading spinner
-                const canvas = document.createElement('canvas');
-                qrContainer.appendChild(canvas);
-                
-                console.log('Generating QR code with QRCode library, data length:', qrString.length);
-                
-                // Use the full QR string (including commas) - this is the WhatsApp QR code data
-                QRCode.toCanvas(canvas, qrString, {
-                    width: 300,
-                    margin: 2,
-                    color: {
-                        dark: '#000000',
-                        light: '#FFFFFF'
-                    },
-                    errorCorrectionLevel: 'M'
-                }, function (error) {
-                    if (error) {
-                        console.error('Error generating QR code:', error);
-                        generateQRCodeWithAlternativeService(qrString, container, sessionName, sessionId);
-                    } else {
-                        console.log('QR code generated successfully with QRCode library');
-                        // Add styling to the canvas
-                        canvas.style.border = '2px solid #dee2e6';
-                        canvas.style.borderRadius = '8px';
-                        canvas.style.padding = '10px';
-                        canvas.style.backgroundColor = 'white';
-                        canvas.style.maxWidth = '300px';
-                        canvas.className = 'img-fluid';
-                    }
-                });
             });
         }
         
-        // Alternative QR code service fallback
-        function generateQRCodeWithAlternativeService(qrString, container, sessionName, sessionId) {
-            const qrContainer = document.getElementById('qrCodeCanvas');
-            if (!qrContainer) {
-                return;
-            }
-            
-            // Try multiple QR code services
-            const services = [
-                `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrString)}`,
-                `https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=${encodeURIComponent(qrString)}`,
-                `https://qr-server.com/api/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrString)}`
-            ];
-            
-            let serviceIndex = 0;
-            const tryNextService = function() {
-                if (serviceIndex >= services.length) {
-                    // All services failed - show manual option
-                    container.innerHTML = `
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle"></i> Unable to generate QR code automatically.
-                        </div>
-                        <div class="mt-3">
-                            <p class="fw-bold">Please use an external QR code generator with this data:</p>
-                            <textarea class="form-control" rows="4" readonly id="qrCodeDataText">${escapeHtml(qrString)}</textarea>
-                            <div class="mt-2">
-                                <button class="btn btn-sm btn-primary" onclick="navigator.clipboard.writeText(document.getElementById('qrCodeDataText').value).then(() => alert('Copied to clipboard!'))">
-                                    <i class="bi bi-clipboard"></i> Copy QR Code Data
-                                </button>
-                                <a href="https://www.qr-code-generator.com/" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
-                                    <i class="bi bi-box-arrow-up-right"></i> Open QR Generator
-                                </a>
-                            </div>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                const img = document.createElement('img');
-                img.src = services[serviceIndex];
-                img.alt = 'QR Code';
-                img.className = 'img-fluid';
-                img.style.border = '2px solid #dee2e6';
-                img.style.borderRadius = '8px';
-                img.style.padding = '10px';
-                img.style.backgroundColor = 'white';
-                img.style.maxWidth = '300px';
-                
-                img.onload = function() {
-                    qrContainer.innerHTML = '';
-                    qrContainer.appendChild(img);
-                    console.log('QR code generated successfully with alternative service');
-                };
-                
-                img.onerror = function() {
-                    serviceIndex++;
-                    tryNextService();
-                };
-            };
-            
-            tryNextService();
-        }
-        
-        // Alternative method to display QR code - try different base64 formats
-        function tryAlternativeQRDisplay(qrString, container, sessionName, sessionId) {
-            console.log('Trying alternative QR code display method');
-            
-            // Try different base64 formats
-            const formats = [
-                qrString.replace(/,/g, ''), // Remove commas
-                qrString, // Original
-                qrString.split(',')[0], // First chunk
-            ];
-            
-            let tried = 0;
-            const tryNext = function() {
-                if (tried >= formats.length) {
-                    container.innerHTML = `
-                        <div class="text-danger">
-                            <i class="bi bi-exclamation-triangle"></i> Unable to display QR code. Please copy the QR code data and use an external QR code generator.
-                        </div>
-                        <div class="mt-3">
-                            <p class="fw-bold">QR Code Data:</p>
-                            <textarea class="form-control" rows="3" readonly>${escapeHtml(qrString)}</textarea>
-                            <button class="btn btn-sm btn-primary mt-2" onclick="navigator.clipboard.writeText('${escapeHtml(qrString)}').then(() => alert('Copied to clipboard!'))">
-                                Copy QR Code Data
-                            </button>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                const format = formats[tried++];
-                const img = new Image();
-                img.onload = function() {
-                    container.innerHTML = `
-                        <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
-                        <img src="data:image/png;base64,${format}" alt="QR Code" class="img-fluid" style="max-width: 300px; border: 2px solid #dee2e6; border-radius: 8px; padding: 10px; background-color: white;">
-                        <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(sessionName || sessionId)}</small></p>
-                    `;
-                };
-                img.onerror = function() {
-                    tryNext();
-                };
-                img.src = 'data:image/png;base64,' + format;
-            };
-            
-            tryNext();
-        }
+        // REMOVED ALL DANGEROUS FUNCTIONS:
+        // - generateQRCodeWithDataURL: DANGEROUS - treats QR as base64/image
+        // - generateQRCodeWithAlternativeService: DANGEROUS - sends QR in URL (truncates silently)
+        // - generateQRCodeWithGoogleCharts: DANGEROUS - sends QR in URL (truncates silently)
+        // - tryAlternativeQRDisplay: DANGEROUS - treats QR as base64
+        //
+        // ONLY safe method: QRCode.toCanvas(qrString)
+        // QR string is a binary payload - NOT base64, NOT an image, NOT a URL
+        // Must ONLY use QRCode.toCanvas() - nothing else
 
         // Load QR code
-        function loadQRCode(sessionIdentifier) {
+        function loadQRCode(sessionId) {
             const container = document.getElementById('qrCodeContainer');
             const statusDiv = document.getElementById('qrCodeStatus');
             
-            if (!sessionIdentifier) {
+            // CRITICAL: Always require sessionId - never accept name
+            if (!sessionId) {
                 container.innerHTML = `
                     <div class="text-danger">
-                        <i class="bi bi-exclamation-triangle"></i> Session identifier is required
+                        <i class="bi bi-exclamation-triangle"></i> Session ID is required
                     </div>
                 `;
                 statusDiv.className = 'alert alert-danger';
-                statusDiv.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Session identifier is missing. Please try again.';
+                statusDiv.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Session ID is missing. Please try again.';
                 statusDiv.style.display = 'block';
                 return;
             }
@@ -1138,9 +987,9 @@
             container.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>';
             statusDiv.style.display = 'none';
 
-            // Try sessionId first, then fallback to sessionName
-            const url = `/admin/api/whatsapp/qrcode?sessionId=${encodeURIComponent(sessionIdentifier)}`;
-            console.log('Loading QR code for session:', sessionIdentifier, 'URL:', url);
+            // Always use sessionId - never fallback to name
+            const url = `/admin/api/whatsapp/qrcode?sessionId=${encodeURIComponent(sessionId)}`;
+            console.log('Loading QR code for session:', sessionId, 'URL:', url);
 
             fetch(url, {
                 credentials: 'same-origin'
@@ -1167,99 +1016,68 @@
                     
                     console.log('QR code response:', data);
                     
-                    // Check status first - only show QR code if status is NEED_SCAN
-                    const status = data.status || (data.data && data.data.status);
-                    const shouldShowQR = status === 'NEED_SCAN' || status === 'need_scan' || !status;
+                    // Extract QR code from various possible response formats
+                    // WASender API formats:
+                    // 1. {success: true, qrCode: "..."}
+                    // 2. {success: true, data: {qrCode: "..."}}
+                    // 3. {success: true, data: {status: "NEED_SCAN", qrCode: "..."}}
+                    let qrCodeData = null;
+                    let status = null;
                     
-                    if (!shouldShowQR) {
-                        // Status is not NEED_SCAN, hide QR code
-                        container.innerHTML = `
-                            <div class="alert alert-info">
-                                <i class="bi bi-info-circle"></i> Session status: <strong>${escapeHtml(status || 'Unknown')}</strong>
-                            </div>
-                            <p class="text-muted">QR code is only available when session status is NEED_SCAN.</p>
-                        `;
-                        statusDiv.className = 'alert alert-info';
-                        statusDiv.innerHTML = `<i class="bi bi-info-circle"></i> Session status: ${escapeHtml(status || 'Unknown')}`;
-                        statusDiv.style.display = 'block';
-                        return;
+                    if (data.qrCode) {
+                        qrCodeData = data.qrCode;
+                    } else if (data.data && data.data.qrCode) {
+                        qrCodeData = data.data.qrCode;
                     }
                     
-                    if (data.success && data.qrCode) {
-                        let qrCodeData = data.qrCode;
-                        console.log('QR code data received, length:', qrCodeData.length, 'first 100 chars:', qrCodeData.substring(0, 100));
-                        
-                        // Check if it's already a base64 image data URL
-                        if (qrCodeData.startsWith('data:image')) {
-                            // It's already a data URL, use it directly
+                    // Extract status
+                    status = data.status || (data.data && data.data.status);
+                    
+                    // Check if we have QR code data
+                    if (!qrCodeData || qrCodeData.trim() === '') {
+                        // No QR code in response - check status
+                        if (status && status !== 'NEED_SCAN' && status !== 'need_scan') {
                             container.innerHTML = `
-                                <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
-                                <img src="${qrCodeData}" alt="QR Code" class="img-fluid" style="max-width: 300px; border: 2px solid #dee2e6; border-radius: 8px; padding: 10px; background-color: white;">
-                                <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(currentSessionName || sessionIdentifier)}</small></p>
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> Session status: <strong>${escapeHtml(status)}</strong>
+                                </div>
+                                <p class="text-muted">QR code is only available when session status is NEED_SCAN.</p>
                             `;
+                            statusDiv.className = 'alert alert-info';
+                            statusDiv.innerHTML = `<i class="bi bi-info-circle"></i> Session status: ${escapeHtml(status)}`;
+                            statusDiv.style.display = 'block';
+                            return;
                         } else {
-                            // Try to use it as base64 image data first
-                            // Check if it looks like base64 (contains only base64 characters)
-                            const base64Pattern = /^[A-Za-z0-9+/=,]+$/;
-                            let isBase64Image = false;
-                            
-                            // If it contains commas, it might be multiple base64 chunks - try combining them
-                            if (qrCodeData.includes(',')) {
-                                // Try using combined base64 (remove commas) as image
-                                const combinedBase64 = qrCodeData.replace(/,/g, '');
-                                if (base64Pattern.test(combinedBase64) && combinedBase64.length > 100) {
-                                    // Try to display as image
-                                    const img = new Image();
-                                    img.onload = function() {
-                                        container.innerHTML = `
-                                            <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
-                                            <img src="data:image/png;base64,${combinedBase64}" alt="QR Code" class="img-fluid" style="max-width: 300px; border: 2px solid #dee2e6; border-radius: 8px; padding: 10px; background-color: white;">
-                                            <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(currentSessionName || sessionIdentifier)}</small></p>
-                                        `;
-                                    };
-                                    img.onerror = function() {
-                                        // If image fails to load, generate QR code from string
-                                        console.log('Base64 image failed to load, generating QR code from string');
-                                        generateQRFromString(qrCodeData, container, currentSessionName, sessionIdentifier);
-                                    };
-                                    // Try with combined base64 (remove commas)
-                                    img.src = 'data:image/png;base64,' + combinedBase64;
-                                    container.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading QR code...</span></div>';
-                                } else {
-                                    // Generate QR code from the string
-                                    generateQRFromString(qrCodeData, container, currentSessionName, sessionIdentifier);
-                                }
-                            } else if (base64Pattern.test(qrCodeData) && qrCodeData.length > 100) {
-                                // Single base64 string - try as image first
-                                const img = new Image();
-                                img.onload = function() {
-                                    container.innerHTML = `
-                                        <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
-                                        <img src="data:image/png;base64,${qrCodeData}" alt="QR Code" class="img-fluid" style="max-width: 300px; border: 2px solid #dee2e6; border-radius: 8px; padding: 10px; background-color: white;">
-                                        <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(currentSessionName || sessionIdentifier)}</small></p>
-                                    `;
-                                };
-                                img.onerror = function() {
-                                    // If image fails to load, generate QR code from string
-                                    console.log('Base64 image failed to load, generating QR code from string');
-                                    generateQRFromString(qrCodeData, container, currentSessionName, sessionIdentifier);
-                                };
-                                img.src = 'data:image/png;base64,' + qrCodeData;
-                                container.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading QR code...</span></div>';
-                            } else {
-                                // Generate QR code from the string
-                                generateQRFromString(qrCodeData, container, currentSessionName, sessionIdentifier);
-                            }
+                            throw new Error('QR code not found in response');
                         }
-                        
-                        statusDiv.className = 'alert alert-info';
-                        statusDiv.innerHTML = '<i class="bi bi-info-circle"></i> QR code generated. Scan with WhatsApp to connect.';
-                        statusDiv.style.display = 'block';
-                    } else if (data.success === false) {
-                        throw new Error(data.error || 'Failed to get QR code');
-                    } else {
-                        throw new Error('Invalid response format from server');
                     }
+                    
+                    // We have QR code data, display it
+                    // According to WASender API documentation:
+                    // The QR code is returned as a STRING (e.g., "2@DfzdTHeYfa9/RMXr8A2IP3/....")
+                    // This is a QR code data string that must be converted to an image using a QR code library
+                    // We should NOT try to display it as a base64 image - it's a string that needs to be encoded
+                    let qrCodeString = qrCodeData.trim();
+                    
+                    console.log('QR code string received from WASender API');
+                    console.log('  - Length:', qrCodeString.length);
+                    console.log('  - First 100 chars:', qrCodeString.substring(0, 100));
+                    console.log('  - Full string:', qrCodeString);
+                    
+                    // Check if QR string is empty
+                    if (!qrCodeString || qrCodeString.length === 0) {
+                        throw new Error('QR code string is empty');
+                    }
+                    
+                    // Generate QR code image from the string using QR code library
+                    // This follows WASender documentation: "This is the QR string. Use a QR code library to generate an image."
+                    // The QR string may contain commas (multi-part WhatsApp QR codes)
+                    // CRITICAL: Always use currentSessionId (never sessionIdentifier/name)
+                    generateQRFromString(qrCodeString, container, currentSessionName, currentSessionId);
+                    
+                    statusDiv.className = 'alert alert-info';
+                    statusDiv.innerHTML = '<i class="bi bi-info-circle"></i> QR code generated. Scan with WhatsApp to connect.';
+                    statusDiv.style.display = 'block';
                 })
                 .catch(error => {
                     console.error('Error loading QR code:', error);
@@ -1268,7 +1086,7 @@
                             <i class="bi bi-exclamation-triangle"></i> Error loading QR code
                         </div>
                         <p class="text-muted mt-2"><small>${escapeHtml(error.message)}</small></p>
-                        <button class="btn btn-sm btn-primary mt-2" onclick="loadQRCode('${escapeHtml(sessionIdentifier)}')">
+                        <button class="btn btn-sm btn-primary mt-2" onclick="loadQRCode('${escapeHtml(sessionId)}')">
                             <i class="bi bi-arrow-clockwise"></i> Retry
                         </button>
                     `;
@@ -1397,39 +1215,67 @@
                         window.location.href = '/auth/login';
                         return null;
                     }
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.error || `HTTP ${response.status}: Failed to reconnect session`);
+                        });
+                    }
                     return response.json();
                 })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Show QR code
-                    fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}`, {
-                            credentials: 'same-origin'
-                        })
-                        .then(response => {
-                            if (response.status === 401 || response.redirected) {
-                                window.location.href = '/auth/login';
-                                return null;
-                            }
-                            return response.json();
-                        })
-                        .then(sessionData => {
-                            if (sessionData.success && sessionData.data) {
-                                const sessionName = sessionData.data.name || sessionId;
-                                showQRCode(sessionId, sessionName);
-                            } else {
-                                alert('Session reconnected. Please refresh the page.');
-                                loadSessions();
-                            }
-                        });
-                } else {
-                    alert('Error reconnecting session: ' + (data.error || 'Unknown error'));
-                }
-            })
-            .catch(error => {
-                console.error('Error reconnecting session:', error);
-                alert('Error reconnecting session: ' + error.message);
-            });
+                .then(data => {
+                    if (!data) return;
+                    
+                    console.log('Reconnect response:', data);
+                    
+                    if (data.success) {
+                        // If QR code is in the response, show it directly
+                        if (data.qrCode || (data.data && data.data.qrCode)) {
+                            const qrCode = data.qrCode || (data.data && data.data.qrCode);
+                            const sessionName = (data.data && data.data.name) || sessionId;
+                            // Show QR code modal and load QR code
+                            showQRCode(sessionId, sessionName);
+                        } else {
+                            // Fetch session details to get QR code
+                            fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}`, {
+                                    credentials: 'same-origin'
+                                })
+                                .then(response => {
+                                    if (response.status === 401 || response.redirected) {
+                                        window.location.href = '/auth/login';
+                                        return null;
+                                    }
+                                    if (!response.ok) {
+                                        return response.json().then(errData => {
+                                            throw new Error(errData.error || `HTTP ${response.status}: Failed to get session details`);
+                                        });
+                                    }
+                                    return response.json();
+                                })
+                                .then(sessionData => {
+                                    if (!sessionData) return;
+                                    
+                                    if (sessionData.success && sessionData.data) {
+                                        const sessionName = sessionData.data.name || sessionId;
+                                        showQRCode(sessionId, sessionName);
+                                    } else {
+                                        // Try to load QR code anyway
+                                        showQRCode(sessionId, sessionId);
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error fetching session details:', error);
+                                    // Try to load QR code anyway
+                                    showQRCode(sessionId, sessionId);
+                                });
+                        }
+                    } else {
+                        alert('Error reconnecting session: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error reconnecting session:', error);
+                    alert('Error reconnecting session: ' + error.message);
+                });
         }
 
         // Disconnect session
@@ -1532,8 +1378,9 @@
             });
         }
 
-        // Store current session identifier for refresh
-        let currentSessionIdentifier = null;
+        // Store current session ID for refresh (always use ID, never name)
+        // Note: This is separate from currentSessionId used for QR code (same purpose, consistent naming)
+        let currentSessionIdForDetails = null;
 
         // Show session details modal and fetch details
         // Show API Key
@@ -1691,8 +1538,15 @@
             }
         }
 
-        async function showSessionDetails(sessionIdentifier, sessionName) {
-            currentSessionIdentifier = sessionIdentifier;
+        async function showSessionDetails(sessionId, sessionName) {
+            // CRITICAL: Always use sessionId - never accept name as identifier
+            if (!sessionId) {
+                console.error('Cannot show session details: sessionId is required');
+                alert('Error: Session ID is required to display details.');
+                return;
+            }
+            
+            currentSessionIdForDetails = String(sessionId);
             
             // Show modal
             const modal = new bootstrap.Modal(document.getElementById('sessionDetailsModal'));
@@ -1700,14 +1554,20 @@
             
             // Update modal title
             document.querySelector('#sessionDetailsModal .modal-title').innerHTML = 
-                `<i class="bi bi-info-circle"></i> Session Details: ${escapeHtml(sessionName || sessionIdentifier)}`;
+                `<i class="bi bi-info-circle"></i> Session Details: ${escapeHtml(sessionName || sessionId)}`;
             
             // Fetch and display details
-            await fetchSessionDetails(sessionIdentifier);
+            await fetchSessionDetails(currentSessionIdForDetails);
         }
 
         // Fetch session details from API
-        async function fetchSessionDetails(sessionIdentifier) {
+        async function fetchSessionDetails(sessionId) {
+            // CRITICAL: Always require sessionId - never accept name
+            if (!sessionId) {
+                console.error('Cannot fetch session details: sessionId is required');
+                return;
+            }
+            
             const contentDiv = document.getElementById('sessionDetailsContent');
             
             // Show loading state
@@ -1721,7 +1581,7 @@
             `;
 
             try {
-                const response = await fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionIdentifier)}`, {
+                const response = await fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}`, {
                     method: 'GET',
                     credentials: 'same-origin'
                 });
@@ -1876,8 +1736,8 @@
 
         // Refresh session details
         function refreshSessionDetails() {
-            if (currentSessionIdentifier) {
-                fetchSessionDetails(currentSessionIdentifier);
+            if (currentSessionIdForDetails) {
+                fetchSessionDetails(currentSessionIdForDetails);
             }
         }
 
@@ -1915,4 +1775,3 @@
     </script>
 </body>
 </html>
-
