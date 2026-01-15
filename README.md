@@ -215,6 +215,10 @@ cd notification-api && mvn test
 
 Integration tests require PostgreSQL and Kafka to be running. You can use Docker to run them locally:
 
+**Prerequisites:**
+- Docker and Docker Compose must be installed and running
+- Port 5432 must be available (stop local PostgreSQL if needed: `sudo systemctl stop postgresql`)
+
 **Option 1: Using the test script (Recommended)**
 
 ```bash
@@ -224,6 +228,13 @@ Integration tests require PostgreSQL and Kafka to be running. You can use Docker
 # Clean up and start fresh
 ./run-tests-local.sh clean
 ```
+
+The script will:
+- Start PostgreSQL, Zookeeper, and Kafka in Docker
+- Wait for services to be ready
+- Set environment variables
+- Run all tests (unit + integration)
+- Optionally stop services when done
 
 **Option 2: Manual setup**
 
