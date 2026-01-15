@@ -1,3 +1,4 @@
+---
 services:
   postgres:
     image: postgres:15-alpine
@@ -153,4 +154,3 @@ services:
 
 volumes:
   postgres_data:
-

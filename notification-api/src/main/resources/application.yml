@@ -1,13 +1,14 @@
+---
 spring:
   application:
     name: notification-api
-  
+
   datasource:
     url: jdbc:postgresql://localhost:5432/notification_db
     username: notification_user
     password: notification_pass
     driver-class-name: org.postgresql.Driver
-  
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -21,7 +22,7 @@ spring:
             non_contextual_creation: true
         temp:
           use_jdbc_metadata_defaults: false
-  
+
   kafka:
     # bootstrap-servers is set via SPRING_KAFKA_BOOTSTRAP_SERVERS environment variable
     producer:
@@ -31,7 +32,7 @@ spring:
       retries: 3
       max-in-flight-requests-per-connection: 1
       enable-idempotence: true
-  
+
   thymeleaf:
     prefix: classpath:/templates/
     suffix: .html
@@ -75,4 +76,3 @@ wasender:
   api:
     base-url: ${WASENDER_API_BASE_URL:https://wasenderapi.com/api}
     key: ${WASENDER_API_KEY:}
-
