@@ -9,7 +9,10 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 
 import javax.sql.DataSource;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.Statement;
 
 /**
  * Test configuration to initialize database enum types before Hibernate creates tables.
@@ -26,14 +29,24 @@ public class TestDatabaseConfig implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() {
-        // Execute SQL script directly using ScriptUtils during bean initialization
+        // Execute SQL script directly as a single statement to handle multi-line DO blocks
         // This runs before Hibernate's EntityManagerFactory is created
-        try (Connection connection = dataSource.getConnection()) {
-            ScriptUtils.executeSqlScript(connection, new ClassPathResource("schema-test.sql"));
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            
+            // Read the entire SQL script as a single string
+            ClassPathResource resource = new ClassPathResource("schema-test.sql");
+            String sql = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            
+            // Execute the entire script as one statement
+            statement.execute(sql);
         } catch (Exception e) {
             // Log but don't fail - enum types might already exist
             System.err.println("Warning: Could not initialize database enum types: " + e.getMessage());
-            e.printStackTrace();
+            // Don't print full stack trace for expected errors (duplicate types)
+            if (!e.getMessage().contains("already exists") && !e.getMessage().contains("duplicate")) {
+                e.printStackTrace();
+            }
             // Don't rethrow - the SQL script uses DO blocks that handle duplicates gracefully
         }
     }
