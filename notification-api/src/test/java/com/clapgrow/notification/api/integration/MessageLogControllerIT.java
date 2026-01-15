@@ -9,6 +9,7 @@ import com.clapgrow.notification.api.repository.MessageLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import jakarta.persistence.EntityManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -39,6 +40,9 @@ class MessageLogControllerIT extends BaseIntegrationTest {
 
     @Autowired
     private MessageLogRepository messageLogRepository;
+    
+    @Autowired
+    private EntityManager entityManager;
 
     private FrappeSite testSite;
     private String testApiKey;
@@ -64,6 +68,10 @@ class MessageLogControllerIT extends BaseIntegrationTest {
 
         // Create test message logs
         createTestMessageLogs();
+        
+        // Flush to ensure tables are created before tests run
+        // This triggers Hibernate to create any missing tables
+        entityManager.flush();
     }
 
     private void createTestMessageLogs() {
