@@ -1464,6 +1464,31 @@
             }).format(date);
         }
 
+        // Create a date representing a specific hour of today in user's timezone
+        // Returns a Date object that, when formatted in user's timezone, shows the specified hour
+        function createHourDateInTimezone(year, month, day, hour) {
+            const timezone = getUserTimezone();
+            
+            // Start with a reference UTC date (noon to avoid DST issues)
+            let testDate = new Date(Date.UTC(year, month, day, 12, 0, 0));
+            
+            // Find what hour noon represents in user's timezone
+            let currentHour = getHourInTimezone(testDate);
+            
+            // Calculate offset to get to the desired hour
+            const hourOffset = hour - currentHour;
+            testDate = new Date(testDate.getTime() + hourOffset * 3600000);
+            
+            // Verify and correct (handles DST transitions)
+            currentHour = getHourInTimezone(testDate);
+            if (currentHour !== hour) {
+                const correction = (hour - currentHour) * 3600000;
+                testDate = new Date(testDate.getTime() + correction);
+            }
+            
+            return testDate;
+        }
+
         // Utility function to format UTC date strings to user's local timezone
         // This intelligently handles UTC dates and converts them to local timezone
         function formatDateTimeLocal(utcDateString) {
@@ -1612,38 +1637,20 @@
                     // Determine date range based on filter (all dates in user's timezone)
                     if (filter === 'today') {
                         // Today only - group by hours (0-23 in user's timezone)
-                        const timezone = getUserTimezone();
                         const todayParts = getDatePartsInTimezone(now);
                         
-                        // Create hour labels by finding UTC times that represent each hour in user's timezone
-                        // Strategy: Start with a known UTC time (noon today) and calculate offsets
-                        const baseUtcDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day, 12, 0, 0));
-                        const baseHour = getHourInTimezone(baseUtcDate);
-                        
+                        // Create hour labels for today in user's timezone
                         for (let h = 0; h < 24; h++) {
-                            // Calculate how many hours offset from base hour
-                            const hourDiff = h - baseHour;
-                            // Create UTC date for this hour
-                            const hourUtcDate = new Date(baseUtcDate.getTime() + hourDiff * 3600000);
+                            // Create a date representing this hour in user's timezone
+                            const hourDate = createHourDateInTimezone(todayParts.year, todayParts.month, todayParts.day, h);
                             
-                            // Verify the hour is correct (accounting for DST changes)
-                            let actualHour = getHourInTimezone(hourUtcDate);
-                            if (actualHour !== h) {
-                                // Fine-tune: adjust by the difference
-                                const adjustMs = (h - actualHour) * 3600000;
-                                hourUtcDate.setTime(hourUtcDate.getTime() + adjustMs);
-                                // Re-verify
-                                actualHour = getHourInTimezone(hourUtcDate);
-                                // If still wrong, try one more adjustment (for edge cases)
-                                if (actualHour !== h && Math.abs(adjustMs) < 3600000) {
-                                    hourUtcDate.setTime(hourUtcDate.getTime() + (h - actualHour) * 3600000);
-                                }
-                            }
+                            // Format the label in user's timezone
+                            const label = formatTimeInTimezone(hourDate);
                             
                             dateRange.push({
                                 hour: h,
                                 dateStr: todayDateStr,
-                                label: formatTimeInTimezone(hourUtcDate)
+                                label: label
                             });
                         }
                         startDateStr = todayDateStr;
@@ -1763,8 +1770,14 @@
                                              weekdayStr === 'Tue' ? 2 : weekdayStr === 'Wed' ? 3 :
                                              weekdayStr === 'Thu' ? 4 : weekdayStr === 'Fri' ? 5 : 6;
                             const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-                            const mondayDate = new Date(msgDate);
-                            mondayDate.setDate(msgDate.getDate() - daysToMonday);
+                            
+                            // Calculate Monday date correctly in user's timezone
+                            // Get date parts of the message date in user's timezone
+                            const msgParts = getDatePartsInTimezone(msgDate);
+                            // Create a date representing the message date at noon UTC
+                            let mondayDate = new Date(Date.UTC(msgParts.year, msgParts.month, msgParts.day, 12, 0, 0));
+                            // Subtract days to get to Monday (working in UTC but representing user's timezone date)
+                            mondayDate.setUTCDate(mondayDate.getUTCDate() - daysToMonday);
                             const mondayDateStr = getDateStringInTimezone(mondayDate);
                             key = mondayDateStr;
                             
