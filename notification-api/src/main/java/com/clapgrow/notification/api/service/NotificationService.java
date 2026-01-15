@@ -68,7 +68,7 @@ public class NotificationService {
                     }
                 });
 
-            return new NotificationResponse(messageId, "ACCEPTED", "Notification queued successfully");
+            return new NotificationResponse(messageId, "ACCEPTED", "Notification queued successfully", request.getChannel().name());
             
         } catch (Exception e) {
             log.error("Error processing notification request", e);
@@ -94,7 +94,8 @@ public class NotificationService {
                 responses.add(new NotificationResponse(
                     generateMessageId(),
                     "FAILED",
-                    "Failed to process notification: " + e.getMessage()
+                    "Failed to process notification: " + e.getMessage(),
+                    notificationRequest.getChannel() != null ? notificationRequest.getChannel().name() : null
                 ));
             }
         }

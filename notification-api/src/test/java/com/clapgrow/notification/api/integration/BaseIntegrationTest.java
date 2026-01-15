@@ -31,6 +31,10 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.kafka.bootstrap-servers", () -> 
             kafkaServers != null ? kafkaServers : "localhost:9092");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
+        // Run SQL scripts before Hibernate creates schema
+        registry.add("spring.sql.init.mode", () -> "always");
+        registry.add("spring.sql.init.schema-locations", () -> "classpath:schema-test.sql");
+        registry.add("spring.sql.init.continue-on-error", () -> "true");
     }
 }
 

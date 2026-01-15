@@ -23,6 +23,11 @@ public class ScheduledNotificationRequest {
 
     @NotNull(message = "Scheduled time is required")
     private LocalDateTime scheduledAt;
+    
+    // Custom validation method
+    public boolean isValidScheduledTime() {
+        return scheduledAt != null && scheduledAt.isAfter(LocalDateTime.now());
+    }
 
     // WhatsApp specific fields
     private String imageUrl;

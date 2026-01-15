@@ -39,6 +39,11 @@ public class ScheduledMessageService {
 
     @Transactional
     public NotificationResponse scheduleNotification(ScheduledNotificationRequest request, FrappeSite site) {
+        // Validate scheduled time is in the future
+        if (request.getScheduledAt() == null || !request.getScheduledAt().isAfter(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Scheduled time must be in the future");
+        }
+        
         String messageId = generateMessageId();
         
         try {
@@ -48,7 +53,8 @@ public class ScheduledMessageService {
 
             log.info("Message {} scheduled for {}", messageId, request.getScheduledAt());
             return new NotificationResponse(messageId, "SCHEDULED", 
-                "Notification scheduled for " + request.getScheduledAt());
+                "Notification scheduled for " + request.getScheduledAt(),
+                request.getChannel().name());
             
         } catch (Exception e) {
             log.error("Error scheduling notification", e);
@@ -68,7 +74,8 @@ public class ScheduledMessageService {
                     return new NotificationResponse(
                         generateMessageId(),
                         "FAILED",
-                        "Failed to schedule: " + e.getMessage()
+                        "Failed to schedule: " + e.getMessage(),
+                        request.getChannel() != null ? request.getChannel().name() : null
                     );
                 }
             })

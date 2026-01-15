@@ -4,9 +4,10 @@ import com.clapgrow.notification.api.dto.BulkNotificationRequest;
 import com.clapgrow.notification.api.dto.NotificationRequest;
 import com.clapgrow.notification.api.dto.ScheduledNotificationRequest;
 import com.clapgrow.notification.api.entity.FrappeSite;
+import com.clapgrow.notification.api.entity.WasenderConfig;
 import com.clapgrow.notification.api.enums.NotificationChannel;
 import com.clapgrow.notification.api.repository.FrappeSiteRepository;
-import com.clapgrow.notification.api.service.SiteService;
+import com.clapgrow.notification.api.repository.WasenderConfigRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,7 +47,7 @@ class NotificationControllerIT extends BaseIntegrationTest {
     private FrappeSiteRepository siteRepository;
 
     @Autowired
-    private SiteService siteService;
+    private WasenderConfigRepository wasenderConfigRepository;
 
     private FrappeSite testSite;
     private String testApiKey;
@@ -55,6 +56,7 @@ class NotificationControllerIT extends BaseIntegrationTest {
     void setUp() {
         // Clean up any existing test data
         siteRepository.deleteAll();
+        wasenderConfigRepository.deleteAll();
 
         // Create a test site with API key
         testApiKey = UUID.randomUUID().toString();
@@ -68,6 +70,12 @@ class NotificationControllerIT extends BaseIntegrationTest {
         testSite.setIsActive(true);
         testSite.setDescription("Test site for integration tests");
         testSite = siteRepository.save(testSite);
+
+        // Create a WASender config for WhatsApp tests
+        WasenderConfig wasenderConfig = new WasenderConfig();
+        wasenderConfig.setWasenderApiKey("test-wasender-api-key");
+        wasenderConfig.setIsDeleted(false);
+        wasenderConfigRepository.save(wasenderConfig);
     }
 
     @Test
