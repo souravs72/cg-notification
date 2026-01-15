@@ -40,7 +40,6 @@ public class SiteService {
             site.setWhatsappSessionName(request.getWhatsappSessionName());
             site.setEmailFromAddress(request.getEmailFromAddress());
             site.setEmailFromName(request.getEmailFromName());
-            site.setSendgridApiKey(request.getSendgridApiKey());
             site.setIsActive(true);
             site.setIsDeleted(false);
             site.setUpdatedBy("SYSTEM");
@@ -56,7 +55,6 @@ public class SiteService {
             site.setWhatsappSessionName(request.getWhatsappSessionName());
             site.setEmailFromAddress(request.getEmailFromAddress());
             site.setEmailFromName(request.getEmailFromName());
-            site.setSendgridApiKey(request.getSendgridApiKey());
             site.setIsActive(true);
             site.setCreatedBy("SYSTEM");
             log.info("Registered new site: {} with ID: {}", site.getSiteName(), site.getId());
@@ -77,6 +75,7 @@ public class SiteService {
         return siteRepository.findAll().stream()
             .filter(site -> apiKeyService.validateApiKey(apiKey, site.getApiKeyHash()))
             .filter(FrappeSite::getIsActive)
+            .filter(site -> !Boolean.TRUE.equals(site.getIsDeleted()))
             .findFirst()
             .orElseThrow(() -> new SecurityException("Invalid or inactive API key"));
     }
@@ -100,6 +99,11 @@ public class SiteService {
         site.setUpdatedBy("ADMIN");
         siteRepository.save(site);
         log.info("Deleted site: {} with ID: {}", site.getSiteName(), siteId);
+    }
+
+    @Transactional
+    public FrappeSite updateSite(FrappeSite site) {
+        return siteRepository.save(site);
     }
 }
 

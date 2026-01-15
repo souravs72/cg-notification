@@ -16,7 +16,7 @@ WORKDIR /app
 COPY notification-api/pom.xml ./notification-api/
 COPY notification-api/src ./notification-api/src
 WORKDIR /app/notification-api
-RUN mvn clean package spring-boot:repackage -DskipTests
+RUN mvn clean package spring-boot:repackage -DskipTests -Dmaven.test.skip=true
 
 # Runtime stage
 FROM eclipse-temurin:17-jre-alpine

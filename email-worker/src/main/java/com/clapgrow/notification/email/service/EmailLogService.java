@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +50,19 @@ public class EmailLogService {
             jdbcTemplate.update(sql, messageId);
         } catch (Exception e) {
             log.error("Failed to increment retry count for {}", messageId, e);
+        }
+    }
+
+    public int getRetryCount(String messageId) {
+        try {
+            String sql = "SELECT retry_count FROM message_logs WHERE message_id = ?";
+            List<Integer> results = jdbcTemplate.query(sql, 
+                (rs, rowNum) -> rs.getInt("retry_count"), 
+                messageId);
+            return results.isEmpty() ? 0 : results.get(0);
+        } catch (Exception e) {
+            log.warn("Failed to get retry count for {}, defaulting to 0: {}", messageId, e.getMessage());
+            return 0;
         }
     }
 }

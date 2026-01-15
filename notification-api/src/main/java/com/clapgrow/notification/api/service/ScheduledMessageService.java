@@ -31,8 +31,11 @@ public class ScheduledMessageService {
     private static final String WHATSAPP_TOPIC = "notifications-whatsapp";
     
     private final MessageLogRepository messageLogRepository;
+    private final FrappeSiteRepository siteRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final WasenderConfigService wasenderConfigService;
+    private final SendGridConfigService sendGridConfigService;
 
     @Transactional
     public NotificationResponse scheduleNotification(ScheduledNotificationRequest request, FrappeSite site) {
@@ -77,7 +80,7 @@ public class ScheduledMessageService {
     public void processScheduledMessages() {
         LocalDateTime now = LocalDateTime.now();
         List<MessageLog> scheduledMessages = messageLogRepository.findByStatusAndScheduledAtLessThanEqual(
-            DeliveryStatus.SCHEDULED, now
+            DeliveryStatus.SCHEDULED.name(), now
         );
 
         log.info("Processing {} scheduled messages", scheduledMessages.size());
@@ -160,6 +163,10 @@ public class ScheduledMessageService {
 
     private String serializeNotificationPayload(MessageLog messageLog) {
         try {
+            // Get site information to include WhatsApp session and API key
+            FrappeSite site = siteRepository.findById(messageLog.getSiteId())
+                .orElseThrow(() -> new IllegalArgumentException("Site not found: " + messageLog.getSiteId()));
+            
             com.clapgrow.notification.api.model.NotificationPayload payload = 
                 new com.clapgrow.notification.api.model.NotificationPayload();
             payload.setMessageId(messageLog.getMessageId());
@@ -176,6 +183,14 @@ public class ScheduledMessageService {
             payload.setFromEmail(messageLog.getFromEmail());
             payload.setFromName(messageLog.getFromName());
             payload.setIsHtml(messageLog.getIsHtml());
+            payload.setWhatsappSessionName(site.getWhatsappSessionName());
+            // Use global SendGrid API key
+            sendGridConfigService.getApiKey().ifPresent(payload::setSendgridApiKey);
+            
+            // Include WASender API key for WhatsApp messages
+            if (messageLog.getChannel() == com.clapgrow.notification.api.enums.NotificationChannel.WHATSAPP) {
+                wasenderConfigService.getApiKey().ifPresent(payload::setWasenderApiKey);
+            }
             
             if (messageLog.getMetadata() != null) {
                 try {

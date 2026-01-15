@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Sessions - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+            --primary-color: #25D366;
+            --sidebar-bg: #2c3e50;
+            --sidebar-hover: #34495e;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f7fa;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            color: white;
+            padding: 20px 0;
+            z-index: 1000;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar-brand {
+            padding: 0 20px 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 20px;
+        }
+
+        .sidebar-brand h4 {
+            margin: 0;
+            color: white;
+            font-weight: 600;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar-menu li {
+            margin: 0;
+        }
+
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar-menu a:hover {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+
+        .sidebar-menu a.active {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+
+        .sidebar-menu a i {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 30px;
+            min-height: 100vh;
+        }
+
+        /* Breadcrumb */
+        .breadcrumb {
+            background-color: transparent;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+
+        .breadcrumb-item a {
+            color: #6c757d;
+            text-decoration: none;
+        }
+
+        /* Page Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .page-header h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        /* Cards */
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+        }
+
+        .card-header {
+            background-color: white;
+            border-bottom: 1px solid #e9ecef;
+            padding: 15px 20px;
+            font-weight: 600;
+        }
+
+        /* Status Badges */
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-transform: capitalize;
+        }
+
+        .status-connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-connecting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .status-disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-needs_scan {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-logged_out {
+            background-color: #e2e3e5;
+            color: #383d41;
+        }
+
+        .status-expired {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        /* Session Card */
+        .session-card {
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .session-card .card-body {
+            padding: 20px;
+        }
+
+        .session-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .session-details h5 {
+            margin: 0 0 5px 0;
+            color: #2c3e50;
+        }
+
+        .session-details p {
+            margin: 0;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .session-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* QR Code Container */
+        .qr-code-container {
+            text-align: center;
+            padding: 30px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .qr-code-container img {
+            max-width: 300px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 10px;
+            background-color: white;
+        }
+
+        .qr-code-loading {
+            padding: 40px;
+        }
+
+        /* Form Styles */
+        .form-label {
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(37, 211, 102, 0.25);
+        }
+
+        .form-check-input:checked {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        /* Buttons */
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-primary:hover {
+            background-color: #20ba56;
+            border-color: #20ba56;
+        }
+
+        .btn-outline-primary {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-outline-primary:hover {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        /* Loading Spinner */
+        .spinner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s;
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+        }
+
+        /* Animation */
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .pulsing {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="sidebar-brand">
+            <h4><i class="bi bi-whatsapp"></i>CG Notification</h4>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+            <li><a href="/admin/campaigns"><i class="bi bi-megaphone"></i> Campaigns</a></li>
+            <li><a href="/admin/sessions" class="active"><i class="bi bi-whatsapp"></i> WhatsApp Sessions</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Breadcrumb -->
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/admin/dashboard">Dashboard</a></li>
+                <li class="breadcrumb-item active" aria-current="page">WhatsApp Sessions</li>
+            </ol>
+        </nav>
+
+        <!-- Page Header -->
+        <div class="page-header">
+            <h1><i class="bi bi-whatsapp"></i> WhatsApp Sessions</h1>
+            <div class="d-flex align-items-center gap-3">
+                <a href="/auth/logout" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </a>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createSessionModal">
+                    <i class="bi bi-plus-circle"></i> Create New Session
+                </button>
+            </div>
+        </div>
+
+        <!-- Sessions List -->
+        <div id="sessionsContainer">
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 text-muted">Loading sessions...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Session Modal -->
+    <div class="modal fade" id="createSessionModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Create New Session</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createSessionForm">
+                        <div class="mb-3">
+                            <label for="sessionName" class="form-label">Session Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="sessionName" required 
+                                   placeholder="e.g., Business Account, Customer Support">
+                            <small class="form-text text-muted">A unique name to identify this session</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="phoneNumber" class="form-label">Phone Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="phoneNumber" required 
+                                   placeholder="+1234567890" pattern="^\+[1-9]\d{1,14}$">
+                            <small class="form-text text-muted">Phone number in international format (e.g., +1234567890)</small>
+                        </div>
+
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-gear"></i> Session Settings</h6>
+
+                        <div class="mb-3 form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="logMessages" checked>
+                            <label class="form-check-label" for="logMessages">
+                                Message Logging
+                            </label>
+                            <small class="form-text text-muted d-block">Enable to keep a record of all messages sent and received</small>
+                        </div>
+
+                        <div class="mb-3 form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="accountProtection" checked>
+                            <label class="form-check-label" for="accountProtection">
+                                Account Protection
+                            </label>
+                            <small class="form-text text-muted d-block">Helps prevent WhatsApp from restricting your account by controlling message sending frequency</small>
+                        </div>
+
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-webhook"></i> Webhooks (Optional)</h6>
+
+                        <div class="mb-3 form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="webhookEnabled">
+                            <label class="form-check-label" for="webhookEnabled">
+                                Enable Webhooks
+                            </label>
+                            <small class="form-text text-muted d-block">Receive real-time notifications</small>
+                        </div>
+
+                        <div class="mb-3" id="webhookFields" style="display: none;">
+                            <label for="webhookUrl" class="form-label">Webhook URL</label>
+                            <input type="url" class="form-control" id="webhookUrl" placeholder="https://your-domain.com/webhook">
+                            
+                            <label class="form-label mt-3">Webhook Events</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="eventMessage" value="message">
+                                <label class="form-check-label" for="eventMessage">Message Received</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="eventStatus" value="status">
+                                <label class="form-check-label" for="eventStatus">Status Updates</label>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info mt-3">
+                            <i class="bi bi-info-circle"></i> After creating the session, you'll need to scan the QR code with WhatsApp to connect your account.
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="createSession()">
+                        <i class="bi bi-check-circle"></i> Create Session
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Details Modal -->
+    <div class="modal fade" id="sessionDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-info-circle"></i> Session Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="sessionDetailsContent">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading session details...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="refreshSessionDetails()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div class="modal fade" id="qrCodeModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-qr-code"></i> Scan QR Code</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        <strong>How to connect:</strong>
+                        <ol class="mb-0 mt-2">
+                            <li>Open WhatsApp on your smartphone</li>
+                            <li>Go to <strong>Settings</strong> > <strong>Linked Devices</strong></li>
+                            <li>Tap <strong>Link a Device</strong></li>
+                            <li>Point your phone's camera at the QR code below</li>
+                        </ol>
+                    </div>
+                    <div class="qr-code-container" id="qrCodeContainer">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <div id="qrCodeStatus" class="alert" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-primary" onclick="refreshQRCode()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh QR Code
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key Modal -->
+    <div class="modal fade" id="apiKeyModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-key"></i> Session API Key</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <strong>Keep this API key secure!</strong> This key allows sending messages from this WhatsApp session. 
+                        Do not share it publicly or commit it to version control.
+                    </div>
+                    <div id="apiKeyContent">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading API key...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="copyApiKeyBtn" onclick="copyApiKey()" style="display: none;">
+                        <i class="bi bi-clipboard"></i> Copy API Key
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentSessionId = null;
+        let currentSessionName = null;
+        let qrCodePollInterval = null;
+        let qrCodeLibraryLoaded = false;
+        
+        // Load QRCode library dynamically
+        function loadQRCodeLibrary(callback) {
+            // Check if already loaded
+            if (typeof QRCode !== 'undefined') {
+                qrCodeLibraryLoaded = true;
+                console.log('QRCode library already available');
+                if (callback) callback();
+                return;
+            }
+            
+            // Check if already loading
+            if (document.querySelector('script[src*="qrcode"]')) {
+                // Script tag exists, wait for it to load
+                let attempts = 0;
+                const checkInterval = setInterval(function() {
+                    attempts++;
+                    if (typeof QRCode !== 'undefined') {
+                        clearInterval(checkInterval);
+                        qrCodeLibraryLoaded = true;
+                        console.log('QRCode library loaded from existing script');
+                        if (callback) callback();
+                    } else if (attempts > 20) {
+                        clearInterval(checkInterval);
+                        console.error('QRCode library did not load from existing script');
+                        if (callback) callback(new Error('QRCode library failed to load'));
+                    }
+                }, 100);
+                return;
+            }
+            
+            // Load from CDN
+            console.log('Loading QRCode library from CDN...');
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';
+            script.async = true;
+            script.onload = function() {
+                if (typeof QRCode !== 'undefined') {
+                    qrCodeLibraryLoaded = true;
+                    console.log('QRCode library loaded successfully from unpkg');
+                    if (callback) callback();
+                } else {
+                    console.error('QRCode library script loaded but QRCode is undefined');
+                    if (callback) callback(new Error('QRCode library failed to initialize'));
+                }
+            };
+            script.onerror = function() {
+                console.error('Failed to load QRCode library from unpkg, trying jsdelivr...');
+                // Fallback to jsdelivr
+                const script2 = document.createElement('script');
+                script2.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+                script2.async = true;
+                script2.onload = function() {
+                    if (typeof QRCode !== 'undefined') {
+                        qrCodeLibraryLoaded = true;
+                        console.log('QRCode library loaded from jsdelivr');
+                        if (callback) callback();
+                    } else {
+                        console.error('QRCode library script loaded but QRCode is undefined');
+                        if (callback) callback(new Error('QRCode library failed to initialize'));
+                    }
+                };
+                script2.onerror = function() {
+                    console.error('Failed to load QRCode library from both CDNs');
+                    if (callback) callback(new Error('QRCode library failed to load from all CDNs'));
+                };
+                document.head.appendChild(script2);
+            };
+            document.head.appendChild(script);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSessions();
+            
+            // Preload QRCode library in the background
+            loadQRCodeLibrary(function(error) {
+                if (error) {
+                    console.warn('QRCode library preload failed, will retry when needed:', error);
+                } else {
+                    console.log('QRCode library preloaded successfully');
+                }
+            });
+            
+            // Toggle webhook fields
+            document.getElementById('webhookEnabled').addEventListener('change', function() {
+                document.getElementById('webhookFields').style.display = this.checked ? 'block' : 'none';
+            });
+
+            // Reset form when modal is closed
+            document.getElementById('createSessionModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('createSessionForm').reset();
+                document.getElementById('webhookFields').style.display = 'none';
+            });
+        });
+
+        // Load all sessions
+        function loadSessions() {
+            fetch('/admin/api/whatsapp/sessions')
+                .then(response => {
+                    if (response.status === 428) {
+                        return response.json().then(data => {
+                            showApiKeyRequired();
+                            return null;
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data) return;
+                    
+                    if (data.success && data.data) {
+                        const sessions = Array.isArray(data.data) ? data.data : (data.data.sessions || []);
+                        displaySessions(sessions);
+                    } else {
+                        showError('Failed to load sessions: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading sessions:', error);
+                    showError('Error loading sessions: ' + error.message);
+                });
+        }
+
+        // Display sessions
+        function displaySessions(sessions) {
+            const container = document.getElementById('sessionsContainer');
+            
+            if (!sessions || sessions.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-whatsapp"></i>
+                        <h3>No WhatsApp Sessions</h3>
+                        <p>Create your first WhatsApp session to start sending messages</p>
+                        <button class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#createSessionModal">
+                            <i class="bi bi-plus-circle"></i> Create New Session
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = sessions.map(session => {
+                const status = session.status || 'unknown';
+                const statusClass = `status-${status.toLowerCase().replace(' ', '_')}`;
+                const sessionId = session.id || session.session_id || '';
+                const sessionName = session.name || session.session_name || 'Unnamed Session';
+                const phoneNumber = session.phone_number || session.phone || 'N/A';
+                
+                return `
+                    <div class="card session-card" style="cursor: pointer;" onclick="showSessionDetails('${sessionId}', '${escapeHtml(sessionName)}')" title="Click to view details">
+                        <div class="card-body">
+                            <div class="session-info">
+                                <div class="session-details">
+                                    <h5>${escapeHtml(sessionName)}</h5>
+                                    <p class="mb-2">
+                                        <i class="bi bi-telephone"></i> ${escapeHtml(phoneNumber)} | 
+                                        <i class="bi bi-hash"></i> ID: ${escapeHtml(String(sessionId))}
+                                    </p>
+                                    <span class="status-badge ${statusClass}">${escapeHtml(status)}</span>
+                                </div>
+                                <div class="session-actions" onclick="event.stopPropagation();">
+                                    ${status === 'connected' || status === 'CONNECTED' ? `
+                                        <button class="btn btn-sm btn-outline-warning" onclick="disconnectSession('${sessionId}', '${escapeHtml(sessionName)}')" title="Disconnect">
+                                            <i class="bi bi-x-circle"></i> Disconnect
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="showUpdateSessionModal('${sessionId}', '${escapeHtml(sessionName)}')" title="Edit Session">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </button>
+                                    ` : ''}
+                                    ${status === 'connected' || status === 'CONNECTED' ? '' : `
+                                        <button class="btn btn-sm btn-outline-primary" onclick="showQRCode('${sessionId}', '${escapeHtml(sessionName)}')" title="Show QR Code">
+                                            <i class="bi bi-qr-code"></i>
+                                        </button>
+                                    `}
+                                    ${status === 'disconnected' || status === 'DISCONNECTED' || status === 'logged_out' || status === 'LOGGED_OUT' ? `
+                                        <button class="btn btn-sm btn-outline-success" onclick="reconnectSession('${sessionId}')" title="Reconnect">
+                                            <i class="bi bi-arrow-clockwise"></i> Reconnect
+                                        </button>
+                                    ` : ''}
+                                    <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); deleteSession('${sessionId}', '${escapeHtml(sessionName)}')" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-info" onclick="event.stopPropagation(); showSessionDetails('${sessionId}', '${escapeHtml(sessionName)}')" title="View Details">
+                                        <i class="bi bi-info-circle"></i> Details
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Create session
+        function createSession() {
+            const sessionName = document.getElementById('sessionName').value.trim();
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            const logMessages = document.getElementById('logMessages').checked;
+            const accountProtection = document.getElementById('accountProtection').checked;
+            const webhookEnabled = document.getElementById('webhookEnabled').checked;
+            const webhookUrl = document.getElementById('webhookUrl').value.trim();
+            
+            const webhookEvents = [];
+            if (document.getElementById('eventMessage').checked) {
+                webhookEvents.push('message');
+            }
+            if (document.getElementById('eventStatus').checked) {
+                webhookEvents.push('status');
+            }
+
+            if (!sessionName || !phoneNumber) {
+                alert('Please fill in all required fields');
+                return;
+            }
+
+            const requestBody = {
+                sessionName: sessionName,
+                phoneNumber: phoneNumber,
+                logMessages: logMessages,
+                accountProtection: accountProtection
+            };
+
+            if (webhookEnabled && webhookUrl) {
+                requestBody.webhookEnabled = true;
+                requestBody.webhookUrl = webhookUrl;
+                if (webhookEvents.length > 0) {
+                    requestBody.webhookEvents = webhookEvents;
+                }
+            }
+
+            // Show loading
+            const createBtn = event.target;
+            const originalText = createBtn.innerHTML;
+            createBtn.disabled = true;
+            createBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+
+            fetch('/admin/api/whatsapp/session', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin',
+                body: JSON.stringify(requestBody)
+            })
+                .then(response => {
+                    if (response.status === 401 || response.redirected) {
+                        window.location.href = '/auth/login';
+                        return null;
+                    }
+                    if (response.status === 428) {
+                        return response.json().then(data => {
+                            alert('WASender API key is not configured. Please configure it first.');
+                            return null;
+                        });
+                    }
+                    return response.json();
+                })
+            .then(data => {
+                createBtn.disabled = false;
+                createBtn.innerHTML = originalText;
+
+                if (!data) return;
+
+                if (data.success) {
+                    // Close create modal
+                    const createModal = bootstrap.Modal.getInstance(document.getElementById('createSessionModal'));
+                    createModal.hide();
+                    
+                    // Extract session ID from response - try multiple possible locations
+                    let sessionId = null;
+                    let actualSessionName = data.sessionName || sessionName;
+                    
+                    // Try to get session ID from various possible response structures
+                    if (data.sessionId) {
+                        sessionId = data.sessionId.toString();
+                    } else if (data.data && data.data.id) {
+                        sessionId = data.data.id.toString();
+                    } else if (data.response) {
+                        try {
+                            // Response might be a string that needs parsing
+                            const responseData = typeof data.response === 'string' 
+                                ? JSON.parse(data.response) 
+                                : data.response;
+                            if (responseData?.data?.id) {
+                                sessionId = responseData.data.id.toString();
+                            } else if (responseData?.id) {
+                                sessionId = responseData.id.toString();
+                            }
+                        } catch (e) {
+                            console.warn('Could not parse session ID from response:', e);
+                        }
+                    }
+                    
+                    // If we still don't have a session ID, use the session name
+                    // The backend will try to look it up or use /connect endpoint
+                    const identifier = sessionId || actualSessionName;
+                    
+                    console.log('Session created. ID:', sessionId, 'Name:', actualSessionName, 'Using identifier:', identifier);
+                    
+                    // Show QR code modal - use session ID if available, otherwise use name
+                    showQRCode(identifier, actualSessionName);
+                    
+                    // Reload sessions after a delay
+                    setTimeout(loadSessions, 2000);
+                } else {
+                    alert('Error creating session: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                createBtn.disabled = false;
+                createBtn.innerHTML = originalText;
+                console.error('Error creating session:', error);
+                alert('Error creating session: ' + error.message);
+            });
+        }
+
+        // Show QR code
+        function showQRCode(sessionIdentifier, sessionName) {
+            // Use the identifier provided (could be ID or name)
+            currentSessionId = sessionIdentifier;
+            currentSessionName = sessionName || sessionIdentifier;
+            
+            console.log('Showing QR code for:', { sessionIdentifier, sessionName, currentSessionId, currentSessionName });
+            
+            const modal = new bootstrap.Modal(document.getElementById('qrCodeModal'));
+            modal.show();
+            
+            // Load QR code using the identifier (ID preferred, but name works too)
+            loadQRCode(sessionIdentifier);
+            
+            // Start polling for connection status - use identifier
+            startQRCodePolling(sessionIdentifier);
+        }
+
+        // Helper function to generate QR code from string
+        function generateQRFromString(qrString, container, sessionName, sessionId) {
+            console.log('Generating QR code from string, length:', qrString.length);
+            
+            // Show loading state
+            container.innerHTML = `
+                <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
+                <div id="qrCodeCanvas" style="text-align: center; margin: 20px 0;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Generating QR code...</span>
+                    </div>
+                </div>
+                <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(sessionName || sessionId)}</small></p>
+            `;
+            
+            // Method 1: Try Google Charts QR Code API (most reliable, no library needed)
+            generateQRCodeWithGoogleCharts(qrString, container, sessionName, sessionId);
+        }
+        
+        // Generate QR code using Google Charts API (most reliable)
+        function generateQRCodeWithGoogleCharts(qrString, container, sessionName, sessionId) {
+            const qrContainer = document.getElementById('qrCodeCanvas');
+            if (!qrContainer) {
+                console.error('QR container not found');
+                return;
+            }
+            
+            // Google Charts QR Code API - very reliable, no library needed
+            const encodedData = encodeURIComponent(qrString);
+            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodedData}`;
+            
+            console.log('Generating QR code with Google Charts API');
+            
+            const img = document.createElement('img');
+            img.src = qrCodeUrl;
+            img.alt = 'QR Code';
+            img.className = 'img-fluid';
+            img.style.border = '2px solid #dee2e6';
+            img.style.borderRadius = '8px';
+            img.style.padding = '10px';
+            img.style.backgroundColor = 'white';
+            img.style.maxWidth = '300px';
+            
+            img.onload = function() {
+                qrContainer.innerHTML = '';
+                qrContainer.appendChild(img);
+                console.log('QR code generated successfully with Google Charts API');
+            };
+            
+            img.onerror = function() {
+                console.warn('Google Charts API failed, trying alternative method...');
+                // Fallback to QRCode.js library
+                generateQRCodeWithLibrary(qrString, container, sessionName, sessionId);
+            };
+        }
+        
+        // Fallback: Generate QR code using QRCode.js library
+        function generateQRCodeWithLibrary(qrString, container, sessionName, sessionId) {
+            const qrContainer = document.getElementById('qrCodeCanvas');
+            if (!qrContainer) {
+                console.error('QR container not found');
+                return;
+            }
+            
+            // Load library if needed
+            loadQRCodeLibrary(function(error) {
+                if (error || typeof QRCode === 'undefined') {
+                    console.error('QRCode library not available:', error);
+                    // Final fallback - use alternative QR code service
+                    generateQRCodeWithAlternativeService(qrString, container, sessionName, sessionId);
+                    return;
+                }
+                
+                qrContainer.innerHTML = ''; // Clear loading spinner
+                const canvas = document.createElement('canvas');
+                qrContainer.appendChild(canvas);
+                
+                console.log('Generating QR code with QRCode library, data length:', qrString.length);
+                
+                // Use the full QR string (including commas) - this is the WhatsApp QR code data
+                QRCode.toCanvas(canvas, qrString, {
+                    width: 300,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    },
+                    errorCorrectionLevel: 'M'
+                }, function (error) {
+                    if (error) {
+                        console.error('Error generating QR code:', error);
+                        generateQRCodeWithAlternativeService(qrString, container, sessionName, sessionId);
+                    } else {
+                        console.log('QR code generated successfully with QRCode library');
+                        // Add styling to the canvas
+                        canvas.style.border = '2px solid #dee2e6';
+                        canvas.style.borderRadius = '8px';
+                        canvas.style.padding = '10px';
+                        canvas.style.backgroundColor = 'white';
+                        canvas.style.maxWidth = '300px';
+                        canvas.className = 'img-fluid';
+                    }
+                });
+            });
+        }
+        
+        // Alternative QR code service fallback
+        function generateQRCodeWithAlternativeService(qrString, container, sessionName, sessionId) {
+            const qrContainer = document.getElementById('qrCodeCanvas');
+            if (!qrContainer) {
+                return;
+            }
+            
+            // Try multiple QR code services
+            const services = [
+                `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrString)}`,
+                `https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=${encodeURIComponent(qrString)}`,
+                `https://qr-server.com/api/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrString)}`
+            ];
+            
+            let serviceIndex = 0;
+            const tryNextService = function() {
+                if (serviceIndex >= services.length) {
+                    // All services failed - show manual option
+                    container.innerHTML = `
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> Unable to generate QR code automatically.
+                        </div>
+                        <div class="mt-3">
+                            <p class="fw-bold">Please use an external QR code generator with this data:</p>
+                            <textarea class="form-control" rows="4" readonly id="qrCodeDataText">${escapeHtml(qrString)}</textarea>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-primary" onclick="navigator.clipboard.writeText(document.getElementById('qrCodeDataText').value).then(() => alert('Copied to clipboard!'))">
+                                    <i class="bi bi-clipboard"></i> Copy QR Code Data
+                                </button>
+                                <a href="https://www.qr-code-generator.com/" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
+                                    <i class="bi bi-box-arrow-up-right"></i> Open QR Generator
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const img = document.createElement('img');
+                img.src = services[serviceIndex];
+                img.alt = 'QR Code';
+                img.className = 'img-fluid';
+                img.style.border = '2px solid #dee2e6';
+                img.style.borderRadius = '8px';
+                img.style.padding = '10px';
+                img.style.backgroundColor = 'white';
+                img.style.maxWidth = '300px';
+                
+                img.onload = function() {
+                    qrContainer.innerHTML = '';
+                    qrContainer.appendChild(img);
+                    console.log('QR code generated successfully with alternative service');
+                };
+                
+                img.onerror = function() {
+                    serviceIndex++;
+                    tryNextService();
+                };
+            };
+            
+            tryNextService();
+        }
+        
+        // Alternative method to display QR code - try different base64 formats
+        function tryAlternativeQRDisplay(qrString, container, sessionName, sessionId) {
+            console.log('Trying alternative QR code display method');
+            
+            // Try different base64 formats
+            const formats = [
+                qrString.replace(/,/g, ''), // Remove commas
+                qrString, // Original
+                qrString.split(',')[0], // First chunk
+            ];
+            
+            let tried = 0;
+            const tryNext = function() {
+                if (tried >= formats.length) {
+                    container.innerHTML = `
+                        <div class="text-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Unable to display QR code. Please copy the QR code data and use an external QR code generator.
+                        </div>
+                        <div class="mt-3">
+                            <p class="fw-bold">QR Code Data:</p>
+                            <textarea class="form-control" rows="3" readonly>${escapeHtml(qrString)}</textarea>
+                            <button class="btn btn-sm btn-primary mt-2" onclick="navigator.clipboard.writeText('${escapeHtml(qrString)}').then(() => alert('Copied to clipboard!'))">
+                                Copy QR Code Data
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const format = formats[tried++];
+                const img = new Image();
+                img.onload = function() {
+                    container.innerHTML = `
+                        <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
+                        <img src="data:image/png;base64,${format}" alt="QR Code" class="img-fluid" style="max-width: 300px; border: 2px solid #dee2e6; border-radius: 8px; padding: 10px; background-color: white;">
+                        <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(sessionName || sessionId)}</small></p>
+                    `;
+                };
+                img.onerror = function() {
+                    tryNext();
+                };
+                img.src = 'data:image/png;base64,' + format;
+            };
+            
+            tryNext();
+        }
+
+        // Load QR code
+        function loadQRCode(sessionIdentifier) {
+            const container = document.getElementById('qrCodeContainer');
+            const statusDiv = document.getElementById('qrCodeStatus');
+            
+            if (!sessionIdentifier) {
+                container.innerHTML = `
+                    <div class="text-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Session identifier is required
+                    </div>
+                `;
+                statusDiv.className = 'alert alert-danger';
+                statusDiv.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Session identifier is missing. Please try again.';
+                statusDiv.style.display = 'block';
+                return;
+            }
+            
+            container.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>';
+            statusDiv.style.display = 'none';
+
+            // Try sessionId first, then fallback to sessionName
+            const url = `/admin/api/whatsapp/qrcode?sessionId=${encodeURIComponent(sessionIdentifier)}`;
+            console.log('Loading QR code for session:', sessionIdentifier, 'URL:', url);
+
+            fetch(url, {
+                credentials: 'same-origin'
+            })
+                .then(response => {
+                    if (response.status === 401 || response.redirected) {
+                        window.location.href = '/auth/login';
+                        return null;
+                    }
+                    if (response.status === 428) {
+                        return response.json().then(data => {
+                            throw new Error('WASender API key is not configured');
+                        });
+                    }
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.error || `HTTP ${response.status}: Failed to get QR code`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data) return;
+                    
+                    console.log('QR code response:', data);
+                    
+                    // Check status first - only show QR code if status is NEED_SCAN
+                    const status = data.status || (data.data && data.data.status);
+                    const shouldShowQR = status === 'NEED_SCAN' || status === 'need_scan' || !status;
+                    
+                    if (!shouldShowQR) {
+                        // Status is not NEED_SCAN, hide QR code
+                        container.innerHTML = `
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i> Session status: <strong>${escapeHtml(status || 'Unknown')}</strong>
+                            </div>
+                            <p class="text-muted">QR code is only available when session status is NEED_SCAN.</p>
+                        `;
+                        statusDiv.className = 'alert alert-info';
+                        statusDiv.innerHTML = `<i class="bi bi-info-circle"></i> Session status: ${escapeHtml(status || 'Unknown')}`;
+                        statusDiv.style.display = 'block';
+                        return;
+                    }
+                    
+                    if (data.success && data.qrCode) {
+                        let qrCodeData = data.qrCode;
+                        console.log('QR code data received, length:', qrCodeData.length, 'first 100 chars:', qrCodeData.substring(0, 100));
+                        
+                        // Check if it's already a base64 image data URL
+                        if (qrCodeData.startsWith('data:image')) {
+                            // It's already a data URL, use it directly
+                            container.innerHTML = `
+                                <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
+                                <img src="${qrCodeData}" alt="QR Code" class="img-fluid" style="max-width: 300px; border: 2px solid #dee2e6; border-radius: 8px; padding: 10px; background-color: white;">
+                                <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(currentSessionName || sessionIdentifier)}</small></p>
+                            `;
+                        } else {
+                            // Try to use it as base64 image data first
+                            // Check if it looks like base64 (contains only base64 characters)
+                            const base64Pattern = /^[A-Za-z0-9+/=,]+$/;
+                            let isBase64Image = false;
+                            
+                            // If it contains commas, it might be multiple base64 chunks - try combining them
+                            if (qrCodeData.includes(',')) {
+                                // Try using combined base64 (remove commas) as image
+                                const combinedBase64 = qrCodeData.replace(/,/g, '');
+                                if (base64Pattern.test(combinedBase64) && combinedBase64.length > 100) {
+                                    // Try to display as image
+                                    const img = new Image();
+                                    img.onload = function() {
+                                        container.innerHTML = `
+                                            <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
+                                            <img src="data:image/png;base64,${combinedBase64}" alt="QR Code" class="img-fluid" style="max-width: 300px; border: 2px solid #dee2e6; border-radius: 8px; padding: 10px; background-color: white;">
+                                            <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(currentSessionName || sessionIdentifier)}</small></p>
+                                        `;
+                                    };
+                                    img.onerror = function() {
+                                        // If image fails to load, generate QR code from string
+                                        console.log('Base64 image failed to load, generating QR code from string');
+                                        generateQRFromString(qrCodeData, container, currentSessionName, sessionIdentifier);
+                                    };
+                                    // Try with combined base64 (remove commas)
+                                    img.src = 'data:image/png;base64,' + combinedBase64;
+                                    container.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading QR code...</span></div>';
+                                } else {
+                                    // Generate QR code from the string
+                                    generateQRFromString(qrCodeData, container, currentSessionName, sessionIdentifier);
+                                }
+                            } else if (base64Pattern.test(qrCodeData) && qrCodeData.length > 100) {
+                                // Single base64 string - try as image first
+                                const img = new Image();
+                                img.onload = function() {
+                                    container.innerHTML = `
+                                        <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
+                                        <img src="data:image/png;base64,${qrCodeData}" alt="QR Code" class="img-fluid" style="max-width: 300px; border: 2px solid #dee2e6; border-radius: 8px; padding: 10px; background-color: white;">
+                                        <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(currentSessionName || sessionIdentifier)}</small></p>
+                                    `;
+                                };
+                                img.onerror = function() {
+                                    // If image fails to load, generate QR code from string
+                                    console.log('Base64 image failed to load, generating QR code from string');
+                                    generateQRFromString(qrCodeData, container, currentSessionName, sessionIdentifier);
+                                };
+                                img.src = 'data:image/png;base64,' + qrCodeData;
+                                container.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading QR code...</span></div>';
+                            } else {
+                                // Generate QR code from the string
+                                generateQRFromString(qrCodeData, container, currentSessionName, sessionIdentifier);
+                            }
+                        }
+                        
+                        statusDiv.className = 'alert alert-info';
+                        statusDiv.innerHTML = '<i class="bi bi-info-circle"></i> QR code generated. Scan with WhatsApp to connect.';
+                        statusDiv.style.display = 'block';
+                    } else if (data.success === false) {
+                        throw new Error(data.error || 'Failed to get QR code');
+                    } else {
+                        throw new Error('Invalid response format from server');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading QR code:', error);
+                    container.innerHTML = `
+                        <div class="text-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Error loading QR code
+                        </div>
+                        <p class="text-muted mt-2"><small>${escapeHtml(error.message)}</small></p>
+                        <button class="btn btn-sm btn-primary mt-2" onclick="loadQRCode('${escapeHtml(sessionIdentifier)}')">
+                            <i class="bi bi-arrow-clockwise"></i> Retry
+                        </button>
+                    `;
+                    statusDiv.className = 'alert alert-danger';
+                    statusDiv.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${escapeHtml(error.message)}`;
+                    statusDiv.style.display = 'block';
+                });
+        }
+
+        // Refresh QR code
+        function refreshQRCode() {
+            if (currentSessionId) {
+                console.log('Refreshing QR code for session:', currentSessionId);
+                loadQRCode(currentSessionId);
+            } else {
+                console.error('Cannot refresh QR code: no session ID available');
+                alert('Cannot refresh QR code: session identifier is missing');
+            }
+        }
+
+        // Start polling for connection status
+        function startQRCodePolling(sessionId) {
+            // Clear any existing interval
+            if (qrCodePollInterval) {
+                clearInterval(qrCodePollInterval);
+            }
+            
+            // Poll every 3 seconds
+            qrCodePollInterval = setInterval(() => {
+                fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}`, {
+                        credentials: 'same-origin'
+                    })
+                    .then(response => {
+                        if (response.status === 401 || response.redirected) {
+                            window.location.href = '/auth/login';
+                            return null;
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success && data.data) {
+                            const status = data.data.status || data.data.state;
+                            const statusUpper = status ? status.toUpperCase() : '';
+                            
+                            // Check if status changed from NEED_SCAN to something else
+                            if (statusUpper === 'CONNECTED' || statusUpper === 'CONNECTING' || 
+                                statusUpper === 'AUTHENTICATED' || statusUpper === 'READY') {
+                                // Connected or connecting! Hide QR code and show success
+                                stopQRCodePolling();
+                                const container = document.getElementById('qrCodeContainer');
+                                const statusDiv = document.getElementById('qrCodeStatus');
+                                
+                                // Hide QR code container
+                                container.innerHTML = `
+                                    <div class="alert alert-success">
+                                        <i class="bi bi-check-circle"></i> <strong>Session ${statusUpper === 'CONNECTED' ? 'Connected' : 'Connecting'}!</strong>
+                                        <p class="mb-0 mt-2">Your WhatsApp session is ${statusUpper === 'CONNECTED' ? 'now connected' : 'connecting'}.</p>
+                                    </div>
+                                `;
+                                
+                                statusDiv.className = 'alert alert-success';
+                                statusDiv.innerHTML = `<i class="bi bi-check-circle"></i> <strong>${statusUpper === 'CONNECTED' ? 'Connection Successful!' : 'Connecting...'}</strong> Your WhatsApp session is ${statusUpper === 'CONNECTED' ? 'now connected' : 'connecting'}.`;
+                                statusDiv.style.display = 'block';
+                                
+                                // If fully connected, update session status and reload
+                                if (statusUpper === 'CONNECTED') {
+                                    // Call endpoint to update session status and store API key
+                                    fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}/update-status`, {
+                                        method: 'POST',
+                                        credentials: 'same-origin'
+                                    }).catch(err => console.error('Error updating session status:', err));
+                                    
+                                    setTimeout(() => {
+                                        loadSessions();
+                                        const modal = bootstrap.Modal.getInstance(document.getElementById('qrCodeModal'));
+                                        if (modal) {
+                                            modal.hide();
+                                        }
+                                    }, 2000);
+                                }
+                            } else if (statusUpper !== 'NEED_SCAN' && statusUpper !== '') {
+                                // Status changed but not to connected - hide QR code
+                                const container = document.getElementById('qrCodeContainer');
+                                container.innerHTML = `
+                                    <div class="alert alert-info">
+                                        <i class="bi bi-info-circle"></i> Session status: <strong>${escapeHtml(status)}</strong>
+                                    </div>
+                                    <p class="text-muted">QR code is only available when session status is NEED_SCAN.</p>
+                                `;
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error polling session status:', error);
+                    });
+            }, 3000);
+        }
+
+        // Stop QR code polling
+        function stopQRCodePolling() {
+            if (qrCodePollInterval) {
+                clearInterval(qrCodePollInterval);
+                qrCodePollInterval = null;
+            }
+        }
+
+        // Clean up polling when modal is closed
+        document.getElementById('qrCodeModal').addEventListener('hidden.bs.modal', function() {
+            stopQRCodePolling();
+            currentSessionId = null;
+            currentSessionName = null;
+        });
+
+        // Reconnect session
+        function reconnectSession(sessionId) {
+            if (!confirm('Are you sure you want to reconnect this session? You will need to scan the QR code again.')) {
+                return;
+            }
+
+            fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}/reconnect`, {
+                method: 'POST',
+                credentials: 'same-origin'
+            })
+                .then(response => {
+                    if (response.status === 401 || response.redirected) {
+                        window.location.href = '/auth/login';
+                        return null;
+                    }
+                    return response.json();
+                })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show QR code
+                    fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}`, {
+                            credentials: 'same-origin'
+                        })
+                        .then(response => {
+                            if (response.status === 401 || response.redirected) {
+                                window.location.href = '/auth/login';
+                                return null;
+                            }
+                            return response.json();
+                        })
+                        .then(sessionData => {
+                            if (sessionData.success && sessionData.data) {
+                                const sessionName = sessionData.data.name || sessionId;
+                                showQRCode(sessionId, sessionName);
+                            } else {
+                                alert('Session reconnected. Please refresh the page.');
+                                loadSessions();
+                            }
+                        });
+                } else {
+                    alert('Error reconnecting session: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error reconnecting session:', error);
+                alert('Error reconnecting session: ' + error.message);
+            });
+        }
+
+        // Disconnect session
+        function disconnectSession(sessionId, sessionName) {
+            if (!confirm(`Are you sure you want to disconnect session "${sessionName}"?`)) {
+                return;
+            }
+
+            fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}/disconnect`, {
+                method: 'POST',
+                credentials: 'same-origin'
+            })
+                .then(response => {
+                    if (response.status === 401 || response.redirected) {
+                        window.location.href = '/auth/login';
+                        return null;
+                    }
+                    return response.json();
+                })
+            .then(data => {
+                if (data && data.success) {
+                    alert('Session disconnected successfully');
+                    loadSessions();
+                } else {
+                    alert('Error disconnecting session: ' + (data?.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error disconnecting session:', error);
+                alert('Error disconnecting session: ' + error.message);
+            });
+        }
+
+        // Show update session modal
+        function showUpdateSessionModal(sessionId, sessionName) {
+            // For now, show a simple prompt. Can be enhanced with a full modal later
+            const newName = prompt(`Update session name for "${sessionName}":`, sessionName);
+            if (newName && newName.trim() !== sessionName) {
+                updateSession(sessionId, { name: newName.trim() });
+            }
+        }
+
+        // Update session
+        function updateSession(sessionId, updateData) {
+            fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin',
+                body: JSON.stringify(updateData)
+            })
+                .then(response => {
+                    if (response.status === 401 || response.redirected) {
+                        window.location.href = '/auth/login';
+                        return null;
+                    }
+                    return response.json();
+                })
+            .then(data => {
+                if (data && data.success) {
+                    alert('Session updated successfully');
+                    loadSessions();
+                } else {
+                    alert('Error updating session: ' + (data?.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error updating session:', error);
+                alert('Error updating session: ' + error.message);
+            });
+        }
+
+        // Delete session
+        function deleteSession(sessionId, sessionName) {
+            if (!confirm(`Are you sure you want to delete session "${sessionName}"?\n\nThis action cannot be undone.`)) {
+                return;
+            }
+
+            fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}`, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            })
+                .then(response => {
+                    if (response.status === 401 || response.redirected) {
+                        window.location.href = '/auth/login';
+                        return null;
+                    }
+                    return response.json();
+                })
+            .then(data => {
+                if (data && data.success) {
+                    alert('Session deleted successfully');
+                    loadSessions();
+                } else {
+                    alert('Error deleting session: ' + (data?.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting session:', error);
+                alert('Error deleting session: ' + error.message);
+            });
+        }
+
+        // Store current session identifier for refresh
+        let currentSessionIdentifier = null;
+
+        // Show session details modal and fetch details
+        // Show API Key
+        function showApiKey(sessionId, sessionName) {
+            const modal = new bootstrap.Modal(document.getElementById('apiKeyModal'));
+            const contentDiv = document.getElementById('apiKeyContent');
+            const copyBtn = document.getElementById('copyApiKeyBtn');
+            
+            // Reset modal content
+            contentDiv.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading API key...</p>
+                </div>
+            `;
+            copyBtn.style.display = 'none';
+            
+            // Show modal
+            modal.show();
+            
+            // Fetch API key
+            fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionId)}/api-key`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.status === 401 || response.redirected) {
+                    window.location.href = '/auth/login';
+                    return null;
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data) return;
+                
+                if (data.success && data.apiKey) {
+                    const apiKey = data.apiKey;
+                    const sessionNameDisplay = data.sessionName || sessionName || 'Unknown';
+                    
+                    contentDiv.innerHTML = `
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Session Name:</label>
+                            <p class="text-muted">${escapeHtml(sessionNameDisplay)}</p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">API Key:</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control font-monospace" id="apiKeyInput" 
+                                       value="${escapeHtml(apiKey)}" readonly 
+                                       style="background-color: #f8f9fa; font-size: 0.9rem;">
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyApiKey()">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                            <small class="form-text text-muted mt-2 d-block">
+                                Use this API key to integrate with your Frappe Cloud site or other applications.
+                            </small>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> 
+                            <strong>Integration Example:</strong>
+                            <pre class="mt-2 mb-0" style="font-size: 0.85rem;"><code>POST /api/notifications
+{
+  "channel": "WHATSAPP",
+  "recipient": "+1234567890",
+  "body": "Your message here",
+  "whatsappSessionApiKey": "${escapeHtml(apiKey)}"
+}</code></pre>
+                        </div>
+                    `;
+                    copyBtn.style.display = 'inline-block';
+                } else {
+                    contentDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> 
+                            <strong>API Key Not Available</strong>
+                            <p class="mb-0 mt-2">${escapeHtml(data.error || 'The API key is not available for this session. The session may need to be connected first.')}</p>
+                        </div>
+                    `;
+                    copyBtn.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching API key:', error);
+                contentDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <strong>Error</strong>
+                        <p class="mb-0 mt-2">${escapeHtml(error.message || 'Failed to fetch API key')}</p>
+                    </div>
+                `;
+                copyBtn.style.display = 'none';
+            });
+        }
+
+        // Copy API Key to clipboard
+        function copyApiKey() {
+            const apiKeyInput = document.getElementById('apiKeyInput');
+            if (apiKeyInput) {
+                apiKeyInput.select();
+                apiKeyInput.setSelectionRange(0, 99999); // For mobile devices
+                try {
+                    document.execCommand('copy');
+                    // Show success feedback
+                    const copyBtn = document.querySelector('#apiKeyContent button[onclick="copyApiKey()"]') || 
+                                   document.getElementById('copyApiKeyBtn');
+                    if (copyBtn) {
+                        const originalHTML = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="bi bi-check"></i> Copied!';
+                        copyBtn.classList.remove('btn-outline-secondary', 'btn-primary');
+                        copyBtn.classList.add('btn-success');
+                        setTimeout(() => {
+                            copyBtn.innerHTML = originalHTML;
+                            copyBtn.classList.remove('btn-success');
+                            if (copyBtn.id === 'copyApiKeyBtn') {
+                                copyBtn.classList.add('btn-primary');
+                            } else {
+                                copyBtn.classList.add('btn-outline-secondary');
+                            }
+                        }, 2000);
+                    }
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                    // Fallback to modern clipboard API
+                    const apiKeyText = apiKeyInput.value;
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(apiKeyText).then(() => {
+                            alert('API key copied to clipboard!');
+                        }).catch(() => {
+                            alert('Failed to copy. Please select and copy manually.');
+                        });
+                    } else {
+                        alert('Failed to copy. Please select and copy manually.');
+                    }
+                }
+            } else {
+                // Fallback: try to get from modal content
+                const apiKeyText = document.querySelector('#apiKeyContent input[type="text"]')?.value;
+                if (apiKeyText) {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(apiKeyText).then(() => {
+                            alert('API key copied to clipboard!');
+                        }).catch(() => {
+                            alert('Failed to copy. Please select and copy manually.');
+                        });
+                    } else {
+                        alert('Please select and copy the API key manually.');
+                    }
+                }
+            }
+        }
+
+        async function showSessionDetails(sessionIdentifier, sessionName) {
+            currentSessionIdentifier = sessionIdentifier;
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('sessionDetailsModal'));
+            modal.show();
+            
+            // Update modal title
+            document.querySelector('#sessionDetailsModal .modal-title').innerHTML = 
+                `<i class="bi bi-info-circle"></i> Session Details: ${escapeHtml(sessionName || sessionIdentifier)}`;
+            
+            // Fetch and display details
+            await fetchSessionDetails(sessionIdentifier);
+        }
+
+        // Fetch session details from API
+        async function fetchSessionDetails(sessionIdentifier) {
+            const contentDiv = document.getElementById('sessionDetailsContent');
+            
+            // Show loading state
+            contentDiv.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Fetching session details...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`/admin/api/whatsapp/session/${encodeURIComponent(sessionIdentifier)}`, {
+                    method: 'GET',
+                    credentials: 'same-origin'
+                });
+
+                if (response.status === 401 || response.redirected) {
+                    window.location.href = '/auth/login';
+                    return;
+                }
+
+                if (response.status === 428) {
+                    const data = await response.json();
+                    if (data.requiresApiKey) {
+                        contentDiv.innerHTML = `
+                            <div class="alert alert-warning">
+                                <strong>API Key Required</strong><br>
+                                Please configure your WASender API key first.
+                            </div>
+                        `;
+                        return;
+                    }
+                }
+
+                const data = await response.json();
+
+                if (data && data.success && data.data) {
+                    displaySessionDetails(data.data);
+                } else {
+                    contentDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <strong>Error</strong><br>
+                            ${data?.error || 'Failed to fetch session details'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error fetching session details:', error);
+                contentDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Display session details in modal
+        function displaySessionDetails(sessionData) {
+            const contentDiv = document.getElementById('sessionDetailsContent');
+            
+            const id = sessionData.id || 'N/A';
+            const name = sessionData.name || 'N/A';
+            const status = sessionData.status || 'UNKNOWN';
+            const phoneNumber = sessionData.phone_number || sessionData.phoneNumber || 'N/A';
+            const accountProtection = sessionData.account_protection !== undefined ? sessionData.account_protection : 'N/A';
+            const logMessages = sessionData.log_messages !== undefined ? sessionData.log_messages : 'N/A';
+            const webhookUrl = sessionData.webhook_url || sessionData.webhookUrl || 'N/A';
+            const webhookEnabled = sessionData.webhook_enabled !== undefined ? sessionData.webhook_enabled : 'N/A';
+            const webhookEvents = sessionData.webhook_events || sessionData.webhookEvents || [];
+            const apiKey = sessionData.api_key || sessionData.apiKey || sessionData.token || 'Not available';
+            const apiKeyDisplay = apiKey !== 'Not available' ? (apiKey.substring(0, 20) + '...') : 'Not available';
+            const createdAt = sessionData.created_at || sessionData.createdAt || 'N/A';
+            const updatedAt = sessionData.updated_at || sessionData.updatedAt || 'N/A';
+            
+            const statusClass = `status-${status.toLowerCase().replace(' ', '_')}`;
+            
+            contentDiv.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-hash"></i> Session ID:</strong>
+                        <p class="mb-0">${escapeHtml(String(id))}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-person"></i> Session Name:</strong>
+                        <p class="mb-0">${escapeHtml(name)}</p>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-telephone"></i> Phone Number:</strong>
+                        <p class="mb-0">${escapeHtml(phoneNumber)}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-circle-fill"></i> Status:</strong>
+                        <p class="mb-0"><span class="status-badge ${statusClass}">${escapeHtml(status)}</span></p>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-shield-check"></i> Account Protection:</strong>
+                        <p class="mb-0">${accountProtection === true ? 'Enabled' : accountProtection === false ? 'Disabled' : 'N/A'}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-journal-text"></i> Log Messages:</strong>
+                        <p class="mb-0">${logMessages === true ? 'Enabled' : logMessages === false ? 'Disabled' : 'N/A'}</p>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <strong><i class="bi bi-key"></i> Session API Key:</strong>
+                        <p class="mb-0">
+                            <code>${escapeHtml(apiKeyDisplay)}</code>
+                            ${apiKey !== 'Not available' ? '<span class="badge bg-success ms-2">Available</span>' : '<span class="badge bg-warning ms-2">Not Available</span>'}
+                        </p>
+                        <small class="text-muted">Database updated automatically when details are fetched</small>
+                    </div>
+                </div>
+                
+                ${webhookUrl !== 'N/A' ? `
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <strong><i class="bi bi-webhook"></i> Webhook URL:</strong>
+                        <p class="mb-0">${escapeHtml(webhookUrl)}</p>
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${webhookEnabled !== 'N/A' ? `
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-toggle-on"></i> Webhook Enabled:</strong>
+                        <p class="mb-0">${webhookEnabled === true ? 'Yes' : 'No'}</p>
+                    </div>
+                    ${webhookEvents.length > 0 ? `
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-bell"></i> Webhook Events:</strong>
+                        <p class="mb-0">${webhookEvents.map(e => `<span class="badge bg-info me-1">${escapeHtml(e)}</span>`).join('')}</p>
+                    </div>
+                    ` : ''}
+                </div>
+                ` : ''}
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-calendar-plus"></i> Created At:</strong>
+                        <p class="mb-0">${escapeHtml(createdAt)}</p>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <strong><i class="bi bi-calendar-check"></i> Updated At:</strong>
+                        <p class="mb-0">${escapeHtml(updatedAt)}</p>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-info-circle"></i> 
+                    <strong>Note:</strong> Session details are fetched from WASender API and the database is automatically updated with the latest information.
+                </div>
+            `;
+        }
+
+        // Refresh session details
+        function refreshSessionDetails() {
+            if (currentSessionIdentifier) {
+                fetchSessionDetails(currentSessionIdentifier);
+            }
+        }
+
+        // Show API key required message
+        function showApiKeyRequired() {
+            const container = document.getElementById('sessionsContainer');
+            container.innerHTML = `
+                <div class="alert alert-warning">
+                    <h5><i class="bi bi-exclamation-triangle"></i> WASender API Key Required</h5>
+                    <p>Please configure your WASender API key to manage WhatsApp sessions.</p>
+                </div>
+            `;
+        }
+
+        // Show error message
+        function showError(message) {
+            const container = document.getElementById('sessionsContainer');
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="bi bi-exclamation-triangle"></i> Error</h5>
+                    <p>${escapeHtml(message)}</p>
+                    <button class="btn btn-sm btn-outline-danger mt-2" onclick="loadSessions()">
+                        <i class="bi bi-arrow-clockwise"></i> Retry
+                    </button>
+                </div>
+            `;
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
+

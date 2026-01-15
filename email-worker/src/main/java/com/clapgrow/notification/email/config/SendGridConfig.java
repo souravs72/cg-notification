@@ -1,19 +1,13 @@
 package com.clapgrow.notification.email.config;
 
-import com.sendgrid.SendGrid;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
+/**
+ * Configuration class for SendGrid.
+ * Note: SendGridService now creates SendGrid instances dynamically using API keys
+ * retrieved from the database (with fallback to configuration file).
+ * This class is kept for potential future use or documentation purposes.
+ */
 public class SendGridConfig {
-    
-    @Value("${sendgrid.api.key}")
-    private String sendGridApiKey;
-
-    @Bean
-    public SendGrid sendGrid() {
-        return new SendGrid(sendGridApiKey);
-    }
+    // SendGrid instances are now created dynamically in SendGridService
+    // based on API keys retrieved from the database or configuration
 }
 

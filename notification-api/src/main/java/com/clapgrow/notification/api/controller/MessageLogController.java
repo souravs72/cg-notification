@@ -10,6 +10,14 @@ import com.clapgrow.notification.api.repository.MessageLogRepository;
 import com.clapgrow.notification.api.service.SiteService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +38,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/v1/messages")
 @RequiredArgsConstructor
+@Tag(name = "Message Logs", description = "API endpoints for retrieving message logs and statistics")
 public class MessageLogController {
     
     private final MessageLogRepository messageLogRepository;
@@ -38,13 +47,30 @@ public class MessageLogController {
     private final ObjectMapper objectMapper;
 
     @GetMapping("/logs")
+    @Operation(
+            summary = "Get message logs",
+            description = "Retrieves paginated message logs for the authenticated site. Supports filtering by status, channel, and date range."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Message logs retrieved successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid filter parameters"),
+            @ApiResponse(responseCode = "401", description = "Invalid or missing API key")
+    })
+    @SecurityRequirement(name = "SiteKey")
     public ResponseEntity<Map<String, Object>> getMessageLogs(
-            @RequestHeader("X-Site-Key") String apiKey,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String channel,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @Parameter(description = "Site API key for authentication", required = true)
+            @RequestHeader(name = "X-Site-Key") String apiKey,
+            @Parameter(description = "Filter by delivery status (PENDING, SCHEDULED, SENT, DELIVERED, FAILED)")
+            @RequestParam(name = "status", required = false) String status,
+            @Parameter(description = "Filter by notification channel (EMAIL, WHATSAPP)")
+            @RequestParam(name = "channel", required = false) String channel,
+            @Parameter(description = "Start date for filtering (ISO format: YYYY-MM-DD)")
+            @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @Parameter(description = "End date for filtering (ISO format: YYYY-MM-DD)")
+            @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @Parameter(description = "Page number (0-indexed)", example = "0")
             @RequestParam(name = "page", defaultValue = "0") int page,
+            @Parameter(description = "Page size", example = "20")
             @RequestParam(name = "size", defaultValue = "20") int size) {
         
         DeliveryStatus statusEnum = null;
@@ -117,9 +143,22 @@ public class MessageLogController {
     }
 
     @GetMapping("/logs/{messageId}")
+    @Operation(
+            summary = "Get message log by ID",
+            description = "Retrieves detailed information about a specific message by its ID."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Message log retrieved successfully",
+                    content = @Content(schema = @Schema(implementation = MessageLogResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Invalid or missing API key"),
+            @ApiResponse(responseCode = "404", description = "Message not found")
+    })
+    @SecurityRequirement(name = "SiteKey")
     public ResponseEntity<MessageLogResponse> getMessageLog(
-            @RequestHeader("X-Site-Key") String apiKey,
-            @PathVariable String messageId) {
+            @Parameter(description = "Site API key for authentication", required = true)
+            @RequestHeader(name = "X-Site-Key") String apiKey,
+            @Parameter(description = "Message ID", required = true)
+            @PathVariable(name = "messageId") String messageId) {
         
         FrappeSite site = siteService.validateApiKey(apiKey);
         
@@ -134,8 +173,18 @@ public class MessageLogController {
     }
 
     @GetMapping("/stats")
+    @Operation(
+            summary = "Get message statistics",
+            description = "Retrieves aggregated statistics for messages sent by the authenticated site including totals, success rates, and averages."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Statistics retrieved successfully"),
+            @ApiResponse(responseCode = "401", description = "Invalid or missing API key")
+    })
+    @SecurityRequirement(name = "SiteKey")
     public ResponseEntity<Map<String, Object>> getMessageStats(
-            @RequestHeader("X-Site-Key") String apiKey) {
+            @Parameter(description = "Site API key for authentication", required = true)
+            @RequestHeader(name = "X-Site-Key") String apiKey) {
         
         FrappeSite site = siteService.validateApiKey(apiKey);
         

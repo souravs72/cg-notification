@@ -21,8 +21,5 @@ public class SiteRegistrationRequest {
 
     @Size(max = 255, message = "Email from name must not exceed 255 characters")
     private String emailFromName;
-
-    @Size(max = 255, message = "SendGrid API key must not exceed 255 characters")
-    private String sendgridApiKey;
 }
 

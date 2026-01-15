@@ -40,43 +40,70 @@ public class EmailProcessingService {
             emailLogService.updateStatus(messageId, "SENT", null);
             
             // Send email via SendGrid
-            boolean success = sendGridService.sendEmail(notification);
+            SendEmailResult result = sendGridService.sendEmail(notification);
             
-            if (success) {
+            if (result.isSuccess()) {
                 emailLogService.updateStatus(messageId, "DELIVERED", null);
                 log.info("Email notification {} processed successfully", messageId);
+                acknowledgment.acknowledge();
             } else {
-                handleFailure(messageId, payload, 0, "SendGrid API returned error");
+                // Get current retry count from database
+                int currentRetryCount = emailLogService.getRetryCount(messageId);
+                handleFailure(messageId, payload, currentRetryCount, result.getErrorMessage());
+                // Acknowledge after handling failure (will retry via Kafka if needed)
+                acknowledgment.acknowledge();
             }
-            
-            acknowledgment.acknowledge();
             
         } catch (Exception e) {
             log.error("Error processing email notification {}", messageId, e);
-            handleFailure(messageId, payload, 0, e.getMessage());
+            int currentRetryCount = emailLogService.getRetryCount(messageId);
+            handleFailure(messageId, payload, currentRetryCount, e.getMessage());
             acknowledgment.acknowledge();
         }
     }
 
     private void handleFailure(String messageId, String payload, int retryCount, String errorMessage) {
+        // Check for permanent failures (invalid API key, unverified sender) - fail faster
+        boolean isPermanentFailure = errorMessage != null && 
+            (errorMessage.contains("invalid, expired, or revoked") || 
+             errorMessage.contains("401") ||
+             errorMessage.contains("does not match a verified Sender Identity") ||
+             errorMessage.contains("403"));
+        
+        if (isPermanentFailure && retryCount >= 1) {
+            // Don't retry permanent failures more than once
+            log.error("Permanent failure detected for email notification {} (invalid API key/unverified sender). Marking as FAILED immediately.", messageId);
+            sendToDLQ(messageId, payload, errorMessage);
+            emailLogService.updateStatus(messageId, "FAILED", 
+                "Permanent failure (invalid API key/unverified sender): " + errorMessage);
+            return;
+        }
+        
         if (retryCount < MAX_RETRIES) {
             log.warn("Retrying email notification {} (attempt {}/{})", 
                 messageId, retryCount + 1, MAX_RETRIES);
             
-            emailLogService.updateStatus(messageId, "FAILED", errorMessage);
+            // Set status to PENDING for retry
+            emailLogService.updateStatus(messageId, "PENDING", errorMessage);
             emailLogService.incrementRetryCount(messageId);
             
-            // In production, you might want to use a delay topic or retry mechanism
-            // For now, we'll send to DLQ after max retries
+            // Exponential backoff with longer delay for API errors
+            long backoffMs = 2000L * (retryCount + 1); // 2s, 4s, 6s
+            
             try {
-                Thread.sleep(1000 * (retryCount + 1)); // Exponential backoff
+                Thread.sleep(backoffMs);
                 kafkaTemplate.send("notifications-email", messageId, payload);
+                log.info("Re-queued email notification {} for retry", messageId);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                log.error("Interrupted while retrying email notification {}", messageId);
                 sendToDLQ(messageId, payload, errorMessage);
+                emailLogService.updateStatus(messageId, "FAILED", 
+                    "Retry interrupted: " + errorMessage);
             }
         } else {
-            log.error("Max retries reached for email notification {}. Sending to DLQ", messageId);
+            log.error("Max retries ({}) reached for email notification {}. Sending to DLQ", 
+                MAX_RETRIES, messageId);
             sendToDLQ(messageId, payload, errorMessage);
             emailLogService.updateStatus(messageId, "FAILED", 
                 "Max retries exceeded: " + errorMessage);

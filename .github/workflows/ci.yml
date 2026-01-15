@@ -223,7 +223,6 @@ jobs:
 
       kafka:
         image: confluentinc/cp-kafka:7.5.0
-        depends-on: zookeeper
         env:
           KAFKA_BROKER_ID: 1
           KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -232,6 +231,11 @@ jobs:
           KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
         ports:
           - 9092:9092
+        options: >-
+          --health-cmd "kafka-broker-api-versions --bootstrap-server localhost:9092"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout code
@@ -245,7 +249,7 @@ jobs:
           cache: "maven"
 
       - name: Run integration tests
-        run: mvn verify -Dtest=*IT -DfailIfNoTests=false
+        run: mvn verify -DskipTests=false
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
           SPRING_DATASOURCE_USERNAME: notification_user

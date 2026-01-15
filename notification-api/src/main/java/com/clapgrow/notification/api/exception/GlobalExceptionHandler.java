@@ -38,6 +38,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalStateException(IllegalStateException e) {
+        log.warn("Illegal state: {}", e.getMessage());
+        ErrorResponse error = new ErrorResponse(
+            "BAD_REQUEST",
+            e.getMessage(),
+            LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationExceptions(
             MethodArgumentNotValidException e) {
@@ -59,10 +70,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception e) {
-        log.error("Unexpected error", e);
+        log.error("Unexpected error: {}", e.getMessage(), e);
         ErrorResponse error = new ErrorResponse(
             "INTERNAL_SERVER_ERROR",
-            "An unexpected error occurred",
+            e.getMessage() != null ? e.getMessage() : "An unexpected error occurred",
             LocalDateTime.now()
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);

@@ -1,142 +1,180 @@
-# Notification System - High Throughput Multi-Tenant Microservice
+# Notification System
 
 A production-grade, multi-tenant notification platform built with Spring Boot, Kafka, and gRPC, supporting WhatsApp (via WASender) and Email (via SendGrid) delivery.
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    External Clients                          │
-│              (Frappe, External Systems)                     │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ HTTPS/REST
-┌──────────────────────▼──────────────────────────────────────┐
-│                  Notification API                           │
-│  ┌────────────────────────────────────────────────────┐   │
-│  │  REST Controllers + Authentication + Kafka Producer│   │
-│  └────────────────────────────────────────────────────┘   │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ Kafka Topics
-        ┌──────────────┴──────────────┐
-        │                             │
-┌───────▼────────┐          ┌────────▼────────┐
-│  Email Worker  │          │ WhatsApp Worker  │
-│  (SendGrid)    │          │  (WASender)      │
-└───────┬────────┘          └────────┬────────┘
-        │                             │
-        └──────────────┬──────────────┘
-                       │ JDBC
-        ┌──────────────▼──────────────┐
-        │      PostgreSQL Database     │
-        │  - frappe_sites             │
-        │  - message_logs             │
-        │  - site_metrics_daily       │
-        └──────────────────────────────┘
-```
-
-### Components
-
-1. **notification-api**: REST API gateway with authentication and Kafka message dispatcher
-2. **email-worker**: Kafka consumer that sends emails via SendGrid
-3. **whatsapp-worker**: Kafka consumer that sends WhatsApp messages via WASender
-4. **common-proto**: Shared gRPC protocol buffer definitions
-
-### Data Flow
-
-1. **Client** sends notification request to API with `X-Site-Key` header
-2. **API** validates API key, creates message log (status: PENDING), publishes to Kafka topic
-3. **Worker** consumes from Kafka, sends via provider (SendGrid/WASender)
-4. **Worker** updates message log status (SENT → DELIVERED or FAILED)
-5. **Metrics** are automatically aggregated daily via database triggers
-
-### Security
-
-- **API Key Authentication**: BCrypt hashed keys (12 rounds)
-- **Site Isolation**: Each site can only access its own data
-- **One-time Key Generation**: API keys shown only once during registration
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Docker & Docker Compose
-- Maven 3.9+
-- Java 17+
-- SendGrid API Key
-- WASender API Key
+- **Docker & Docker Compose** (for infrastructure)
+- **Maven 3.9+** (for local development)
+- **Java 17+** (for local development)
+- **SendGrid API Key** - Get from [SendGrid](https://sendgrid.com)
+- **WASender API Key** - Get from [WASender](https://wasenderapi.com)
 
-### Environment Variables
+### Environment Setup
 
 Create a `.env` file in the root directory:
 
 ```bash
+WASENDER_API_KEY=your-wasender-api-key-here
 SENDGRID_API_KEY=your-sendgrid-api-key
 SENDGRID_FROM_EMAIL=noreply@yourdomain.com
-SENDGRID_FROM_NAME=Your Company
-WASENDER_API_KEY=your-wasender-api-key
+SENDGRID_FROM_NAME=Your Company Name
 ```
 
-### Running with Docker Compose
+### Running with Docker Compose (Recommended)
 
 ```bash
 # Start all services
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
-# Stop all services
-docker-compose down
+# Check status
+docker compose ps
+
+# Stop services
+docker compose down
 ```
 
-### Running Locally
+**Service URLs:**
 
-1. **Start Infrastructure**:
+- **Notification API**: http://localhost:8080
+- **API Documentation (Swagger UI)**: http://localhost:8080/swagger-ui.html
+- **Admin Dashboard**: http://localhost:8080/admin/dashboard
+- **Email Worker Health**: http://localhost:8081/actuator/health
+- **WhatsApp Worker Health**: http://localhost:8083/actuator/health
+- **Kafka UI**: http://localhost:8089
+
+### Running Locally (Development)
+
+1. **Start Infrastructure:**
+
 ```bash
-docker-compose up -d postgres zookeeper kafka
+docker compose up -d postgres zookeeper kafka
 ```
 
-2. **Build Common Proto**:
+Wait ~30 seconds for services to be healthy, then verify:
+
 ```bash
-cd common-proto
-mvn clean install
-cd ..
+docker compose ps
 ```
 
-3. **Run Services**:
+**Connection Details:**
+
+- PostgreSQL: `localhost:5433` (username: `notification_user`, password: `notification_pass`, database: `notification_db`)
+- Kafka: `localhost:9092`
+
+2. **Build Common Proto:**
+
 ```bash
-# Terminal 1 - API
+cd common-proto && mvn clean install && cd ..
+```
+
+Or build everything:
+
+```bash
+mvn clean install -DskipTests
+```
+
+3. **Set Environment Variables:**
+
+```bash
+export WASENDER_API_KEY=your-wasender-api-key
+export SENDGRID_API_KEY=your-sendgrid-api-key
+export SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+export SENDGRID_FROM_NAME=Your Company Name
+```
+
+4. **Run Services** (each in a separate terminal):
+
+**Terminal 1 - Notification API:**
+
+```bash
 cd notification-api
-mvn spring-boot:run
-
-# Terminal 2 - Email Worker
-cd email-worker
-mvn spring-boot:run
-
-# Terminal 3 - WhatsApp Worker
-cd whatsapp-worker
-mvn spring-boot:run
+mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-## 📚 Documentation
+**Terminal 2 - Email Worker:**
 
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete deployment guide (Docker, local, production)
-- **[API.md](API.md)** - Complete API reference documentation
-- **[GITFLOW.md](GITFLOW.md)** - GitFlow workflow guide
+```bash
+cd email-worker
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
 
-## 📡 Quick API Examples
+**Terminal 3 - WhatsApp Worker:**
 
-See [API.md](API.md) for complete API documentation.
+```bash
+cd whatsapp-worker
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+5. **Verify Setup:**
+
+```bash
+# Check API health
+curl http://localhost:8080/actuator/health
+
+# Register a site
+curl -X POST http://localhost:8080/api/v1/site/register \
+  -H "Content-Type: application/json" \
+  -d '{"siteName": "test-site"}'
+
+# Send test notification (use API key from registration)
+curl -X POST http://localhost:8080/api/v1/notifications/send \
+  -H "Content-Type: application/json" \
+  -H "X-Site-Key: YOUR_API_KEY" \
+  -d '{
+    "channel": "WHATSAPP",
+    "recipient": "+1234567890",
+    "body": "Test message"
+  }'
+```
+
+## 📡 API Documentation
+
+**OpenAPI/Swagger UI:**
+
+- **Notification API**: http://localhost:8080/swagger-ui.html
+- **Email Worker**: http://localhost:8081/swagger-ui.html
+- **WhatsApp Worker**: http://localhost:8083/swagger-ui.html
+
+**API Docs (JSON):**
+
+- http://localhost:8080/api-docs
+- http://localhost:8081/api-docs
+- http://localhost:8083/api-docs
+
+See [API.md](API.md) for additional API reference.
 
 ### Register Site
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/site/register \
   -H "Content-Type: application/json" \
-  -d '{"siteName": "my-site"}'
+  -d '{"siteName": "my-site", "description": "Production site"}'
 ```
 
-### Send Notification
+**⚠️ Important:** Save the `apiKey` from the response - it's only shown once!
+
+### Send Email Notification
+
+```bash
+curl -X POST http://localhost:8080/api/v1/notifications/send \
+  -H "Content-Type: application/json" \
+  -H "X-Site-Key: your-api-key" \
+  -d '{
+    "channel": "EMAIL",
+    "recipient": "user@example.com",
+    "subject": "Welcome!",
+    "body": "Welcome to our service",
+    "isHtml": true
+  }'
+```
+
+### Send WhatsApp Notification
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/notifications/send \
@@ -145,58 +183,9 @@ curl -X POST http://localhost:8080/api/v1/notifications/send \
   -d '{
     "channel": "WHATSAPP",
     "recipient": "+1234567890",
-    "body": "Hello!"
+    "body": "Hello from WhatsApp!"
   }'
 ```
-
-## 🔐 Security
-
-- **API Key Authentication**: All requests (except registration) require `X-Site-Key` header
-- **Key Hashing**: API keys are hashed using BCrypt (12 rounds) before storage
-- **One-time Generation**: API keys are generated once during registration
-- **Site Isolation**: Each site can only access its own metrics and logs
-
-## 📊 Monitoring
-
-### Prometheus Metrics
-
-All services expose Prometheus metrics at `/actuator/prometheus`:
-
-- `notification_messages_total`: Total messages processed
-- `notification_messages_success`: Successfully delivered messages
-- `notification_messages_failed`: Failed messages
-- `kafka_messages_consumed`: Kafka consumer lag
-
-### Health Checks
-
-- API: `http://localhost:8080/actuator/health`
-- Email Worker: `http://localhost:8081/actuator/health`
-- WhatsApp Worker: `http://localhost:8082/actuator/health`
-
-### Kafka UI
-
-Access Kafka UI at `http://localhost:8089` to monitor topics and consumer groups.
-
-## 🗄️ Database Schema
-
-### Tables
-
-- **frappe_sites**: Registered sites with API keys
-- **message_logs**: All notification attempts with status tracking
-- **site_metrics_daily**: Aggregated daily metrics per site and channel
-
-### Enums
-
-- `delivery_status`: PENDING, SENT, DELIVERED, FAILED, BOUNCED, REJECTED
-- `notification_channel`: EMAIL, WHATSAPP, SMS, PUSH
-
-## 🔄 Message Flow
-
-1. **Client** sends notification request to API with `X-Site-Key`
-2. **API** validates key, creates message log, publishes to Kafka topic
-3. **Worker** consumes from Kafka, sends via provider (SendGrid/WASender)
-4. **Worker** updates message log status (SENT/DELIVERED/FAILED)
-5. **Metrics** are automatically aggregated daily via database triggers
 
 ## 🛠️ Development
 
@@ -227,68 +216,296 @@ cd notification-api && mvn test
 - Lombok for boilerplate reduction
 - MapStruct for DTO mapping (where applicable)
 
-## 📝 Configuration
+### Project Structure
 
-### Application Properties
+```
+cg-notification/
+├── notification-api/      # REST API gateway
+├── email-worker/          # Email processing worker
+├── whatsapp-worker/       # WhatsApp processing worker
+├── common-proto/          # Shared gRPC protocol definitions
+└── deployment/            # Database migrations and SQL scripts
+```
 
-Each service has its own `application.yml`:
+## 🚢 Deployment
 
-- **notification-api**: Port 8080, Kafka producer config
-- **email-worker**: Port 8081, SendGrid config, Kafka consumer config
-- **whatsapp-worker**: Port 8082, WASender config, Kafka consumer config
+### Production Checklist
 
-### Kafka Topics
+- [ ] Change default database passwords
+- [ ] Use Docker secrets or external secret management (e.g., AWS Secrets Manager, HashiCorp Vault)
+- [ ] Enable HTTPS/TLS
+- [ ] Configure firewall rules
+- [ ] Set up monitoring and alerting (Prometheus, Grafana)
+- [ ] Configure log aggregation (ELK stack, CloudWatch)
+- [ ] Set up backup strategy for PostgreSQL
+- [ ] Enable authentication for admin dashboard
+- [ ] Configure rate limiting
+- [ ] Set up health check monitoring
 
-- `notifications-email`: Email notifications queue
-- `notifications-whatsapp`: WhatsApp notifications queue
-- `notifications-email-dlq`: Dead letter queue for failed emails
-- `notifications-whatsapp-dlq`: Dead letter queue for failed WhatsApp messages
+### Production Environment Variables
 
-## 🚨 Error Handling
+```bash
+# Database
+SPRING_DATASOURCE_URL=jdbc:postgresql://your-db-host:5432/notification_db
+SPRING_DATASOURCE_USERNAME=your-db-user
+SPRING_DATASOURCE_PASSWORD=your-secure-password
 
-- **Retry Logic**: Automatic retry with exponential backoff (max 3 retries)
-- **DLQ**: Failed messages after max retries are sent to Dead Letter Queue
-- **Logging**: Comprehensive logging at all levels
-- **Status Tracking**: All message states tracked in database
+# Kafka
+SPRING_KAFKA_BOOTSTRAP_SERVERS=your-kafka-host:9092
 
-## 📈 Performance
+# API Keys
+SENDGRID_API_KEY=your-production-sendgrid-key
+WASENDER_API_KEY=your-production-wasender-key
+SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+SENDGRID_FROM_NAME=Your Company
+```
 
-- **Async Processing**: Kafka-based async message processing
-- **Batch Operations**: Bulk notification support
-- **Connection Pooling**: Database connection pooling configured
-- **Kafka Batching**: Producer batching enabled for throughput
+### Docker Compose Override
+
+Create `docker-compose.override.yml` for production:
+
+```yaml
+services:
+  notification-api:
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+    restart: unless-stopped
+
+  email-worker:
+    environment:
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+    restart: unless-stopped
+
+  whatsapp-worker:
+    environment:
+      WASENDER_API_KEY: ${WASENDER_API_KEY}
+    restart: unless-stopped
+```
+
+### Rebuilding After Code Changes
+
+```bash
+# Rebuild specific service
+docker compose build notification-api
+docker compose up -d notification-api
+
+# Rebuild all services
+docker compose build --no-cache
+docker compose up -d
+```
+
+## ⚙️ Configuration
+
+### Environment Variables Reference
+
+| Variable                         | Description                   | Example                                           | Required For                      |
+| -------------------------------- | ----------------------------- | ------------------------------------------------- | --------------------------------- |
+| `WASENDER_API_KEY`               | WASender API key for WhatsApp | `your-wasender-api-key`                           | notification-api, whatsapp-worker |
+| `SENDGRID_API_KEY`               | SendGrid API key for emails   | `SG.xxxxx`                                        | email-worker                      |
+| `SENDGRID_FROM_EMAIL`            | Default sender email          | `noreply@yourdomain.com`                          | email-worker                      |
+| `SENDGRID_FROM_NAME`             | Default sender name           | `Your Company`                                    | email-worker                      |
+| `SPRING_DATASOURCE_URL`          | Database URL                  | `jdbc:postgresql://postgres:5432/notification_db` | All services                      |
+| `SPRING_DATASOURCE_USERNAME`     | Database username             | `notification_user`                               | All services                      |
+| `SPRING_DATASOURCE_PASSWORD`     | Database password             | `notification_pass`                               | All services                      |
+| `SPRING_KAFKA_BOOTSTRAP_SERVERS` | Kafka brokers                 | `kafka:29092`                                     | All services                      |
+
+### WhatsApp Session Configuration
+
+Each site can have its own WhatsApp session. To set up:
+
+1. Navigate to Admin Dashboard → WhatsApp Sessions (http://localhost:8080/admin/sessions)
+2. Create a new session with a unique name
+3. Scan the QR code with WhatsApp
+4. Link the session to your site
+
+**Session Architecture Options:**
+
+- **One Session Per Site**: Each site has its own WhatsApp account (isolated)
+- **Shared Session**: All sites use the same WhatsApp account/number
+- **Hybrid**: Some sites share, others have dedicated sessions
 
 ## 🔧 Troubleshooting
 
-### Kafka Connection Issues
+### Services Won't Start
 
 ```bash
-# Check Kafka is running
-docker-compose ps kafka
+# Check if ports are available
+netstat -tulpn | grep -E '8080|8081|8083|5433|9092'
 
-# View Kafka logs
-docker-compose logs kafka
+# Check Docker logs
+docker compose logs [service-name]
 
-# Check topics
-docker exec -it notification-kafka kafka-topics --list --bootstrap-server localhost:9092
+# Verify Docker is running
+docker info
 ```
 
 ### Database Connection Issues
 
 ```bash
-# Check PostgreSQL is running
-docker-compose ps postgres
-
 # Connect to database
 docker exec -it notification-postgres psql -U notification_user -d notification_db
+
+# Check tables
+\dt
+
+# Check message logs
+SELECT COUNT(*) FROM message_logs;
+
+# Check sites
+SELECT site_name, is_active FROM frappe_sites;
+```
+
+### Kafka Issues
+
+```bash
+# List topics
+docker exec -it notification-kafka kafka-topics --list --bootstrap-server localhost:9092
+
+# Check consumer groups
+docker exec -it notification-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --list
+
+# View Kafka UI
+open http://localhost:8089
 ```
 
 ### Worker Not Processing Messages
 
-1. Check worker logs: `docker-compose logs email-worker`
-2. Verify Kafka consumer group: Check Kafka UI
-3. Verify API keys are configured correctly
-4. Check message logs table for error messages
+1. **Check worker logs:**
+
+```bash
+docker compose logs email-worker
+docker compose logs whatsapp-worker
+```
+
+2. **Verify API keys are set:**
+
+```bash
+docker compose config | grep -E "SENDGRID|WASENDER"
+```
+
+3. **Check message logs for errors:**
+
+```bash
+docker exec -it notification-postgres psql -U notification_user -d notification_db \
+  -c "SELECT message_id, status, error_message FROM message_logs WHERE status = 'FAILED' LIMIT 10;"
+```
+
+4. **Verify Kafka consumer groups:**
+
+```bash
+docker exec -it notification-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --list
+```
+
+### WASender API Key Issues
+
+**Problem**: `401 Unauthorized` from WASender API
+
+**Solutions:**
+
+1. Verify API key is set:
+
+   ```bash
+   echo $WASENDER_API_KEY
+   docker exec notification-api env | grep WASENDER
+   ```
+
+2. Set it if missing:
+
+   ```bash
+   export WASENDER_API_KEY=your-actual-key
+   docker restart notification-api
+   ```
+
+3. Verify API key is valid and not expired
+
+### Local Development Issues
+
+**Port Conflicts:**
+
+```bash
+lsof -i :8080  # API
+lsof -i :8081  # Email Worker
+lsof -i :8082  # WhatsApp Worker
+lsof -i :5433  # PostgreSQL
+lsof -i :9092  # Kafka
+```
+
+**Database Connection:**
+
+- Ensure using correct port: `5433` for Docker, `5432` for local PostgreSQL
+- Verify connection string in `application-local.yml` when using `local` profile
+
+**Kafka Connection:**
+
+- Wait for Kafka to be fully ready (can take 30-60 seconds)
+- Check Kafka logs: `docker compose logs kafka`
+
+### Build Failures
+
+```bash
+# Clean and rebuild
+mvn clean install -DskipTests
+
+# Rebuild Docker images
+docker compose build --no-cache
+
+# Check Maven version
+mvn -version  # Should be 3.9+
+```
+
+### Health Check Failures
+
+```bash
+# Check API health
+curl http://localhost:8080/actuator/health
+
+# Check worker health
+curl http://localhost:8081/actuator/health
+curl http://localhost:8083/actuator/health
+
+# View detailed health info
+curl http://localhost:8080/actuator/health | jq
+```
+
+## 📊 Monitoring
+
+### Health Endpoints
+
+- API: `http://localhost:8080/actuator/health`
+- Email Worker: `http://localhost:8081/actuator/health`
+- WhatsApp Worker: `http://localhost:8083/actuator/health`
+
+### Prometheus Metrics
+
+- API: `http://localhost:8080/actuator/prometheus`
+- Email Worker: `http://localhost:8081/actuator/prometheus`
+- WhatsApp Worker: `http://localhost:8083/actuator/prometheus`
+
+### Kafka UI
+
+Access at `http://localhost:8089` to monitor:
+
+- Topics and partitions
+- Consumer groups
+- Message throughput
+- Consumer lag
+
+### Admin Dashboard
+
+Access at `http://localhost:8080/admin/dashboard` for:
+
+- Overall metrics
+- Site-wise statistics
+- Recent messages
+- Success rates
+
+## 📚 Documentation
+
+- **OpenAPI/Swagger UI**: http://localhost:8080/swagger-ui.html
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture, design patterns, and technical details
+- **[API.md](API.md)** - Complete API reference with examples
 
 ## 📚 Additional Resources
 
@@ -304,4 +521,3 @@ This project is proprietary software.
 ## 👥 Support
 
 For issues and questions, please contact the development team.
-

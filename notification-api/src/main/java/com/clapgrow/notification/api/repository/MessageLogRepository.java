@@ -75,16 +75,42 @@ public interface MessageLogRepository extends JpaRepository<MessageLog, UUID> {
     
     List<MessageLog> findBySiteId(UUID siteId);
     
-    @Query("SELECT m FROM MessageLog m WHERE m.status = :status AND m.scheduledAt <= :now")
+    @Query(value = "SELECT * FROM message_logs m WHERE m.status = CAST(:status AS delivery_status) AND m.scheduled_at <= :now ORDER BY m.scheduled_at ASC", nativeQuery = true)
     List<MessageLog> findByStatusAndScheduledAtLessThanEqual(
-        @Param("status") DeliveryStatus status,
+        @Param("status") String status,
         @Param("now") LocalDateTime now
     );
     
-    @Query("SELECT m FROM MessageLog m WHERE m.status = :status ORDER BY m.scheduledAt ASC")
+    @Query(value = "SELECT * FROM message_logs m WHERE m.status = CAST(:status AS delivery_status) ORDER BY m.scheduled_at ASC", nativeQuery = true)
     Page<MessageLog> findByStatusOrderByScheduledAtAsc(
-        @Param("status") DeliveryStatus status,
+        @Param("status") String status,
         Pageable pageable
+    );
+    
+    // Methods for messages without sites (siteId is null)
+    @Query(value = "SELECT COUNT(m) FROM message_logs m WHERE m.site_id IS NULL AND m.status = CAST(:status AS delivery_status)", nativeQuery = true)
+    Long countByNullSiteIdAndStatus(@Param("status") String status);
+    
+    @Query(value = "SELECT COUNT(m) FROM message_logs m WHERE m.site_id IS NULL AND m.channel = CAST(:channel AS notification_channel)", nativeQuery = true)
+    Long countByNullSiteIdAndChannel(@Param("channel") String channel);
+    
+    @Query(value = "SELECT COUNT(m) FROM message_logs m WHERE m.site_id IS NULL AND m.channel = CAST(:channel AS notification_channel) AND m.status = CAST(:status AS delivery_status)", nativeQuery = true)
+    Long countByNullSiteIdAndChannelAndStatus(
+        @Param("channel") String channel,
+        @Param("status") String status
+    );
+    
+    // Methods for all messages (with or without sites)
+    @Query(value = "SELECT COUNT(m) FROM message_logs m WHERE m.status = CAST(:status AS delivery_status)", nativeQuery = true)
+    Long countAllByStatus(@Param("status") String status);
+    
+    @Query(value = "SELECT COUNT(m) FROM message_logs m WHERE m.channel = CAST(:channel AS notification_channel)", nativeQuery = true)
+    Long countAllByChannel(@Param("channel") String channel);
+    
+    @Query(value = "SELECT COUNT(m) FROM message_logs m WHERE m.channel = CAST(:channel AS notification_channel) AND m.status = CAST(:status AS delivery_status)", nativeQuery = true)
+    Long countAllByChannelAndStatus(
+        @Param("channel") String channel,
+        @Param("status") String status
     );
 }
 

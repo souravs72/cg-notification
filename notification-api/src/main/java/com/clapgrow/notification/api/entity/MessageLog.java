@@ -32,15 +32,15 @@ public class MessageLog extends BaseAuditableEntity {
     @Column(name = "message_id", nullable = false, unique = true, length = 100)
     private String messageId;
 
-    @Column(name = "site_id", nullable = false)
+    @Column(name = "site_id", nullable = true)
     private UUID siteId;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "channel", nullable = false, columnDefinition = "notification_channel")
+    @org.hibernate.annotations.Type(com.clapgrow.notification.api.config.PostgreSQLNotificationChannelType.class)
     private NotificationChannel channel;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, columnDefinition = "delivery_status")
+    @org.hibernate.annotations.Type(com.clapgrow.notification.api.config.PostgreSQLDeliveryStatusType.class)
     private DeliveryStatus status;
 
     @Column(name = "recipient", nullable = false, length = 255)
@@ -65,6 +65,7 @@ public class MessageLog extends BaseAuditableEntity {
     private LocalDateTime deliveredAt;
 
     @Column(name = "metadata", columnDefinition = "JSONB")
+    @org.hibernate.annotations.Type(com.clapgrow.notification.api.config.PostgreSQLJSONBType.class)
     private String metadata;
 
     // WhatsApp specific fields
