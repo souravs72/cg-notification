@@ -9,7 +9,6 @@ import com.clapgrow.notification.api.repository.MessageLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import jakarta.persistence.EntityManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -40,20 +39,16 @@ class MessageLogControllerIT extends BaseIntegrationTest {
 
     @Autowired
     private MessageLogRepository messageLogRepository;
-    
-    @Autowired
-    private EntityManager entityManager;
 
     private FrappeSite testSite;
     private String testApiKey;
 
     @BeforeEach
     void setUp() {
-        // Note: We don't clean up data here because:
-        // 1. Hibernate with create-drop handles table lifecycle
-        // 2. @Transactional ensures each test gets a fresh transaction
-        // 3. Attempting to delete from non-existent tables aborts the transaction in PostgreSQL
-        
+        // Clean up any existing test data
+        messageLogRepository.deleteAll();
+        siteRepository.deleteAll();
+
         // Create test site
         testApiKey = UUID.randomUUID().toString();
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
@@ -65,32 +60,9 @@ class MessageLogControllerIT extends BaseIntegrationTest {
         testSite.setApiKeyHash(apiKeyHash);
         testSite.setIsActive(true);
         testSite = siteRepository.save(testSite);
-        
-        // Flush to ensure frappe_sites table is created
-        entityManager.flush();
-        
-        // Trigger message_logs table creation by saving a dummy entity first
-        // Hibernate creates tables lazily, so we need to trigger creation before querying
-        // We do this by saving and immediately deleting a dummy entity
-        MessageLog dummyLog = new MessageLog();
-        dummyLog.setMessageId(UUID.randomUUID().toString() + "-dummy");
-        dummyLog.setSiteId(testSite.getId());
-        dummyLog.setChannel(NotificationChannel.EMAIL);
-        dummyLog.setRecipient("dummy@example.com");
-        dummyLog.setSubject("Dummy");
-        dummyLog.setBody("Dummy");
-        dummyLog.setStatus(DeliveryStatus.PENDING);
-        dummyLog.setRetryCount(0);
-        messageLogRepository.save(dummyLog);
-        entityManager.flush();
-        messageLogRepository.delete(dummyLog);
-        entityManager.flush();
 
         // Create test message logs
         createTestMessageLogs();
-        
-        // Flush to ensure data is persisted
-        entityManager.flush();
     }
 
     private void createTestMessageLogs() {
@@ -195,4 +167,3 @@ class MessageLogControllerIT extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.totalElements").value(5));
     }
 }
-

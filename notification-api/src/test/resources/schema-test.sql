@@ -1,10 +1,11 @@
--- Create enum types required for integration tests
+-- Initialize database for integration tests
 -- This script runs before Hibernate creates tables
 
+-- Create extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
--- Create enum types if they don't exist
+-- Create enum types (must be created before Hibernate creates tables)
 DO $$ BEGIN
     CREATE TYPE delivery_status AS ENUM ('PENDING', 'SCHEDULED', 'SENT', 'DELIVERED', 'FAILED', 'BOUNCED', 'REJECTED');
 EXCEPTION
@@ -16,4 +17,3 @@ DO $$ BEGIN
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
-

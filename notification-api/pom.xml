@@ -241,6 +241,8 @@
                     </includes>
                     <argLine>--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED -Dnet.bytebuddy.experimental=true</argLine>
                     <skipTests>${skipITs}</skipTests>
+                    <forkCount>1</forkCount>
+                    <reuseForks>false</reuseForks>
                     <dependenciesToScan>
                         <dependency>com.clapgrow:notification-api</dependency>
                     </dependenciesToScan>
