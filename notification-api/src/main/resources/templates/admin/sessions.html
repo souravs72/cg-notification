@@ -223,12 +223,21 @@
             margin: 20px 0;
         }
 
-        .qr-code-container img {
+        .qr-code-container canvas,
+        .qr-code-container table {
             max-width: 300px;
             border: 2px solid #dee2e6;
             border-radius: 8px;
             padding: 10px;
             background-color: white;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .qr-code-container > div {
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
         .qr-code-loading {
