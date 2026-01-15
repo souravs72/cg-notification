@@ -24,6 +24,20 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
+# Check if port 5432 is already in use
+if lsof -i :5432 &> /dev/null || netstat -tuln 2>/dev/null | grep -q ":5432 "; then
+    echo -e "${YELLOW}⚠${NC}  Port 5432 is already in use."
+    echo "   This might be a local PostgreSQL instance."
+    echo "   Please stop it or use a different port."
+    echo ""
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Exiting. To stop local PostgreSQL: sudo systemctl stop postgresql (or equivalent)"
+        exit 1
+    fi
+fi
+
 # Stop and remove existing test containers if clean is requested
 if [ "$CLEAN" = "clean" ] || [ "$CLEAN" = "true" ]; then
     echo "Cleaning up existing test containers..."
