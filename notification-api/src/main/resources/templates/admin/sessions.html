@@ -6,15 +6,8 @@
     <title>WhatsApp Sessions - Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <!-- QRCode.js library - served locally to avoid CSP/proxy/adblock issues -->
-    <script src="/js/qrcode.min.js"></script>
-    <script>
-        // Hard-fail if QRCode.js didn't load (prevents silent failures)
-        if (!window.QRCode || typeof QRCode.toCanvas !== 'function') {
-            console.error('QRCode library failed to load. Check /js/qrcode.min.js');
-            alert('QRCode library failed to load. Please check the browser console and ensure /js/qrcode.min.js is accessible.');
-        }
-    </script>
+    <!-- QRCodeJS library - loaded synchronously, no defer -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         :root {
             --sidebar-width: 250px;
@@ -843,116 +836,24 @@
             startQRCodePolling(currentSessionId);
         }
 
-        // Store QR strings in memory only - NEVER in HTML attributes
-        const qrCodeDataStore = new Map();
-        
-        // Helper function to generate QR code from string
-        // IMPORTANT: QR string is a binary payload, NOT base64/image/URL
-        // MUST only use QRCode.toCanvas(qrString) - nothing else
-        function generateQRFromString(qrString, container, sessionName, sessionId) {
-            console.log('Generating QR code from WhatsApp QR string');
-            console.log('  - Length:', qrString.length);
-            console.log('  - Type: Binary payload (NOT base64/image/URL)');
-            
-            // Store QR string in memory only (keyed by sessionId)
-            // CRITICAL: Always use String(sessionId) - never use sessionName or fallback
-            // If sessionId is missing, we cannot store the QR - fail early
-            if (!sessionId) {
-                console.error('Cannot store QR code: sessionId is missing');
-                container.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-exclamation-triangle"></i> Error: Session ID is required to display QR code.
-                    </div>
-                `;
+        // Simple QR code generation using qrcodejs
+        function generateQRCode(qrCodeString, container) {
+            if (!qrCodeString) {
+                container.innerHTML = '<div class="alert alert-warning">QR data missing</div>';
                 return;
             }
-            
-            const storeKey = String(sessionId);
-            qrCodeDataStore.set(storeKey, qrString);
-            
-            // Show loading state
-            container.innerHTML = `
-                <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
-                <div id="qrCodeCanvas" style="text-align: center; margin: 20px 0;">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Generating QR code...</span>
-                    </div>
-                </div>
-                <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(sessionName || sessionId)}</small></p>
-            `;
-            
-            // Generate QR code using QRCode.js library ONLY
-            // This is the ONLY safe way to handle WhatsApp QR strings
-            // CRITICAL: Pass sessionId - function will use String(sessionId) as key
-            generateQRCodeWithLibrary(null, container, sessionName, sessionId);
-        }
-        
-        // Generate QR code using QRCode.js library
-        // QRCode.js is loaded in <head> - just use it directly
-        function generateQRCodeWithLibrary(storeKey, container, sessionName, sessionId) {
-            const qrContainer = document.getElementById('qrCodeCanvas');
-            if (!qrContainer) {
-                console.error('QR container not found');
-                return;
-            }
-            
-            // Retrieve QR string from memory store
-            const qrString = qrCodeDataStore.get(String(sessionId));
-            if (!qrString) {
-                console.error('QR string not found in memory store for sessionId:', sessionId);
-                qrContainer.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-exclamation-triangle"></i> QR code data not available. Please try again.
-                    </div>
-                `;
-                return;
-            }
-            
-            console.log('Generating QR code with QRCode.toCanvas()');
-            console.log('  - QR string length:', qrString.length);
-            
-            // Safety check: Ensure QRCode is loaded (should always be, but defensive programming)
-            // QRCode.js is loaded synchronously in <head> (no defer), so it should be available
-            if (typeof QRCode === 'undefined' || typeof QRCode.toCanvas !== 'function') {
-                console.error('QRCode library not loaded');
-                qrContainer.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-exclamation-triangle"></i> Error: QR code library not loaded. Please refresh the page.
-                    </div>
-                `;
-                return;
-            }
-            
-            // Clear container and create canvas
-            qrContainer.innerHTML = '';
-            const canvas = document.createElement('canvas');
-            qrContainer.appendChild(canvas);
-            
-            // Generate QR code - QRCode.js is loaded synchronously in <head> (no defer)
-            QRCode.toCanvas(canvas, qrString, {
+
+            container.innerHTML = '';
+            const div = document.createElement('div');
+            container.appendChild(div);
+
+            new QRCode(div, {
+                text: qrCodeString,
                 width: 300,
-                margin: 2,
-                errorCorrectionLevel: 'H'
-            }, function(err) {
-                if (err) {
-                    console.error('Error generating QR code:', err);
-                    qrContainer.innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="bi bi-exclamation-triangle"></i> Error: ${escapeHtml(err.message || 'Failed to generate QR code')}
-                        </div>
-                    `;
-                } else {
-                    console.log('QR code generated successfully!');
-                    // Add styling to the canvas
-                    canvas.style.border = '2px solid #dee2e6';
-                    canvas.style.borderRadius = '8px';
-                    canvas.style.padding = '10px';
-                    canvas.style.backgroundColor = 'white';
-                    canvas.style.display = 'block';
-                    canvas.style.margin = '0 auto';
-                    canvas.style.maxWidth = '300px';
-                    canvas.className = 'img-fluid';
-                }
+                height: 300,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.M
             });
         }
         
@@ -1069,11 +970,14 @@
                         throw new Error('QR code string is empty');
                     }
                     
-                    // Generate QR code image from the string using QR code library
-                    // This follows WASender documentation: "This is the QR string. Use a QR code library to generate an image."
-                    // The QR string may contain commas (multi-part WhatsApp QR codes)
-                    // CRITICAL: Always use currentSessionId (never sessionIdentifier/name)
-                    generateQRFromString(qrCodeString, container, currentSessionName, currentSessionId);
+                    // Generate QR code using qrcodejs
+                    container.innerHTML = `
+                        <p class="fw-bold mb-3">Scan this QR code with WhatsApp:</p>
+                        <div id="qrCodeImage" style="text-align: center; margin: 20px 0;"></div>
+                        <p class="mt-3"><small class="text-muted">Session: ${escapeHtml(currentSessionName || currentSessionId)}</small></p>
+                    `;
+                    const qrCodeContainer = document.getElementById('qrCodeImage');
+                    generateQRCode(qrCodeString, qrCodeContainer);
                     
                     statusDiv.className = 'alert alert-info';
                     statusDiv.innerHTML = '<i class="bi bi-info-circle"></i> QR code generated. Scan with WhatsApp to connect.';
