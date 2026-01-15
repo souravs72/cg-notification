@@ -69,10 +69,22 @@ class MessageLogControllerIT extends BaseIntegrationTest {
         // Flush to ensure frappe_sites table is created
         entityManager.flush();
         
-        // Trigger message_logs table creation by accessing the entity
-        // Hibernate creates tables lazily, so we need to trigger creation before saving
-        // We do this by performing a query that will cause Hibernate to create the table
-        entityManager.createQuery("SELECT COUNT(m) FROM MessageLog m").getSingleResult();
+        // Trigger message_logs table creation by saving a dummy entity first
+        // Hibernate creates tables lazily, so we need to trigger creation before querying
+        // We do this by saving and immediately deleting a dummy entity
+        MessageLog dummyLog = new MessageLog();
+        dummyLog.setMessageId(UUID.randomUUID().toString() + "-dummy");
+        dummyLog.setSiteId(testSite.getId());
+        dummyLog.setChannel(NotificationChannel.EMAIL);
+        dummyLog.setRecipient("dummy@example.com");
+        dummyLog.setSubject("Dummy");
+        dummyLog.setBody("Dummy");
+        dummyLog.setStatus(DeliveryStatus.PENDING);
+        dummyLog.setRetryCount(0);
+        messageLogRepository.save(dummyLog);
+        entityManager.flush();
+        messageLogRepository.delete(dummyLog);
+        entityManager.flush();
 
         // Create test message logs
         createTestMessageLogs();
