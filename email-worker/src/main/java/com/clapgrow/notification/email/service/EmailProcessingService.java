@@ -85,7 +85,6 @@ public class EmailProcessingService {
             
             // Set status to PENDING for retry
             emailLogService.updateStatus(messageId, "PENDING", errorMessage);
-            emailLogService.incrementRetryCount(messageId);
             
             // Exponential backoff with longer delay for API errors
             long backoffMs = 2000L * (retryCount + 1); // 2s, 4s, 6s
@@ -93,6 +92,8 @@ public class EmailProcessingService {
             try {
                 Thread.sleep(backoffMs);
                 kafkaTemplate.send("notifications-email", messageId, payload);
+                // Only increment retry count after successful Kafka send
+                emailLogService.incrementRetryCount(messageId);
                 log.info("Re-queued email notification {} for retry", messageId);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -100,6 +101,12 @@ public class EmailProcessingService {
                 sendToDLQ(messageId, payload, errorMessage);
                 emailLogService.updateStatus(messageId, "FAILED", 
                     "Retry interrupted: " + errorMessage);
+            } catch (Exception e) {
+                // If Kafka send fails, don't increment retry count and send to DLQ
+                log.error("Failed to re-queue email notification {} for retry", messageId, e);
+                sendToDLQ(messageId, payload, errorMessage);
+                emailLogService.updateStatus(messageId, "FAILED", 
+                    "Failed to re-queue: " + errorMessage);
             }
         } else {
             log.error("Max retries ({}) reached for email notification {}. Sending to DLQ", 

@@ -24,6 +24,13 @@ public class AuthInterceptor implements HandlerInterceptor {
 
         // Check if user is authenticated for admin routes
         if (path.startsWith("/admin/")) {
+            // For API endpoints, let the controller handle authentication
+            // (supports both session and X-Admin-Key header authentication)
+            if (path.contains("/api/")) {
+                return true;
+            }
+            
+            // For non-API admin routes (dashboard pages), require session authentication
             HttpSession session = request.getSession(false);
             if (session == null || session.getAttribute("userId") == null) {
                 response.sendRedirect("/auth/login");

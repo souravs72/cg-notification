@@ -14,12 +14,11 @@ services:
       - ./deployment/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
       - ./deployment/migration-add-whatsapp-session.sql:/docker-entrypoint-initdb.d/migration-add-whatsapp-session.sql
       - ./deployment/migration-add-email-config.sql:/docker-entrypoint-initdb.d/migration-add-email-config.sql
-      - ./deployment/migration-add-wasender-api-key.sql:/docker-entrypoint-initdb.d/migration-add-wasender-api-key.sql
       - ./deployment/migration-add-users.sql:/docker-entrypoint-initdb.d/migration-add-users.sql
       - ./deployment/migration-make-site-id-nullable.sql:/docker-entrypoint-initdb.d/migration-make-site-id-nullable.sql
       - ./deployment/migration-add-whatsapp-sessions-table.sql:/docker-entrypoint-initdb.d/migration-add-whatsapp-sessions-table.sql
       - ./deployment/migration-add-sendgrid-config.sql:/docker-entrypoint-initdb.d/migration-add-sendgrid-config.sql
-      - ./deployment/migration-add-email-config-to-sendgrid.sql:/docker-entrypoint-initdb.d/migration-add-email-config-to-sendgrid.sql
+      - ./deployment/migration-add-sendgrid-email-config.sql:/docker-entrypoint-initdb.d/migration-add-sendgrid-email-config.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U notification_user -d notification_db"]
       interval: 10s
