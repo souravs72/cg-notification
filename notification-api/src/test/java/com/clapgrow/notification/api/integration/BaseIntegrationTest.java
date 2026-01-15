@@ -35,6 +35,8 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.sql.init.mode", () -> "always");
         registry.add("spring.sql.init.schema-locations", () -> "classpath:schema-test.sql");
         registry.add("spring.sql.init.continue-on-error", () -> "true");
+        // Ensure SQL scripts run before Hibernate DDL
+        registry.add("spring.jpa.defer-datasource-initialization", () -> "true");
     }
 }
 
