@@ -1349,24 +1349,20 @@
         }
         
         // Helper function to show QR code fallback
+        // NEVER treat QR string as base64 image - WhatsApp QR is raw pairing data
         function showQRCodeFallback(qrCodeString, qrCodeContainer, errorMessage) {
             qrCodeContainer.innerHTML = '';
             
-            // Fallback: try to display as base64 if it's already an image
-            if (qrCodeString.startsWith('data:image') || qrCodeString.length > 1000) {
-                qrCodeContainer.innerHTML = `<img src="${qrCodeString}" alt="QR Code" class="img-fluid">`;
-            } else {
-                // Show QR code string as text as last resort
-                qrCodeContainer.innerHTML = `<div class="alert alert-warning">
-                    <strong>QR Code Library Unavailable</strong><br>
-                    <p>Please scan this QR code manually:</p>
-                    <div style="background: white; padding: 1rem; border: 2px solid #dee2e6; border-radius: 0.5rem; font-family: monospace; word-break: break-all; max-width: 100%; overflow-x: auto; text-align: left;">
-                        ${qrCodeString}
-                    </div>
-                    <small class="mt-2 d-block">Error: ${errorMessage}</small>
-                    <small class="mt-1 d-block">You can also try refreshing the page or check your internet connection.</small>
-                </div>`;
-            }
+            // Show QR code string as text as last resort (never as image)
+            qrCodeContainer.innerHTML = `<div class="alert alert-warning">
+                <strong>QR Code Library Unavailable</strong><br>
+                <p>Please scan this QR code manually or refresh the page:</p>
+                <div style="background: white; padding: 1rem; border: 2px solid #dee2e6; border-radius: 0.5rem; font-family: monospace; word-break: break-all; max-width: 100%; overflow-x: auto; text-align: left;">
+                    ${escapeHtml(qrCodeString)}
+                </div>
+                <small class="mt-2 d-block">Error: ${escapeHtml(errorMessage)}</small>
+                <small class="mt-1 d-block">You can also try refreshing the page or check your internet connection.</small>
+            </div>`;
         }
 
         async function showQRCode(sessionName, sessionId = null) {
