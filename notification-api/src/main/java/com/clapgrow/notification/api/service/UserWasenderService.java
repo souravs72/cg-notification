@@ -18,21 +18,15 @@ public class UserWasenderService {
     private final UserRepository userRepository;
 
     /**
-     * Get WASender API key from user session
-     * Prioritizes HttpSession attribute, then falls back to database
+     * Get WASender API key from user session.
+     * Always fetches fresh data from database to avoid stale session data.
      */
     public Optional<String> getApiKeyFromSession(HttpSession session) {
         if (session == null) {
             return Optional.empty();
         }
         
-        // First, try to get from HttpSession attribute (set when PAT is saved)
-        String patFromSession = (String) session.getAttribute("wasenderApiKey");
-        if (patFromSession != null && !patFromSession.trim().isEmpty()) {
-            return Optional.of(patFromSession);
-        }
-        
-        // Fallback to database
+        // Always fetch from database to get fresh data
         String userId = (String) session.getAttribute("userId");
         if (userId == null) {
             return Optional.empty();
@@ -46,7 +40,7 @@ public class UserWasenderService {
                 return Optional.of(user.getWasenderApiKey());
             }
         } catch (Exception e) {
-            log.error("Error getting API key from session", e);
+            log.error("Error getting API key from database", e);
         }
         
         return Optional.empty();
@@ -60,8 +54,12 @@ public class UserWasenderService {
     }
 
     /**
-     * Get current user from session
+     * Get current user from session.
+     * Always fetches fresh data from database to avoid stale session data.
+     * 
+     * @deprecated Use UserService.getCurrentUser() instead for consistency
      */
+    @Deprecated
     public Optional<User> getCurrentUser(HttpSession session) {
         if (session == null) {
             return Optional.empty();
@@ -75,7 +73,7 @@ public class UserWasenderService {
         try {
             return userRepository.findByIdAndIsDeletedFalse(UUID.fromString(userId));
         } catch (Exception e) {
-            log.error("Error getting user from session", e);
+            log.error("Error getting user from database", e);
             return Optional.empty();
         }
     }

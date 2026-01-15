@@ -481,102 +481,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- QR Code library - Using qrcodejs (davidshimjs/qrcodejs) for better reliability -->
-    <!-- Load library dynamically for better error handling -->
-    <script>
-        // Initialize QR code library state
-        let qrCodeLibraryReady = false;
-        let qrCodeLibraryLoading = false;
-        
-        // Check if QRCode is available (qrcodejs uses QRCode constructor)
-        function checkQRCodeLibrary() {
-            if (typeof QRCode !== 'undefined' && typeof QRCode.CorrectLevel !== 'undefined') {
-                qrCodeLibraryReady = true;
-                console.log('QRCode library (qrcodejs) is ready');
-                return true;
-            }
-            return false;
-        }
-        
-        // Function to load QR code library with multiple CDN fallbacks
-        function initQRCodeLibrary() {
-            if (qrCodeLibraryLoading) {
-                return; // Already loading
-            }
-            
-            if (checkQRCodeLibrary()) {
-                return; // Already loaded
-            }
-            
-            qrCodeLibraryLoading = true;
-            
-            // Try multiple CDNs for reliability
-            const cdns = [
-                'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
-                'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
-                'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js',
-                'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@gh-pages/qrcode.min.js'
-            ];
-            
-            let cdnIndex = 0;
-            
-            function tryLoadCDN(index) {
-                if (index >= cdns.length) {
-                    console.error('All CDN attempts failed for qrcodejs library');
-                    qrCodeLibraryLoading = false;
-                    return;
-                }
-                
-                // Check if already loaded
-                if (checkQRCodeLibrary()) {
-                    qrCodeLibraryLoading = false;
-                    return;
-                }
-                
-                const script = document.createElement('script');
-                script.src = cdns[index];
-                script.onload = function() {
-                    console.log(`QRCode library (qrcodejs) loaded successfully from CDN ${index + 1}`);
-                    // Give it a moment to initialize
-                    setTimeout(function() {
-                        qrCodeLibraryReady = checkQRCodeLibrary();
-                        qrCodeLibraryLoading = false;
-                        if (qrCodeLibraryReady) {
-                            console.log('QRCode library initialized and ready to use');
-                        } else {
-                            console.warn('QRCode library loaded but not properly initialized');
-                        }
-                    }, 50);
-                };
-                script.onerror = function() {
-                    console.warn(`Failed to load QRCode library from CDN ${index + 1}, trying next...`);
-                    tryLoadCDN(index + 1);
-                };
-                document.head.appendChild(script);
-            }
-            
-            // Start loading
-            tryLoadCDN(0);
-        }
-        
-        // Wait for DOM to be ready, then initialize
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initQRCodeLibrary);
-        } else {
-            initQRCodeLibrary();
-        }
-        
-        // Also poll for library availability
-        let checkCount = 0;
-        const checkInterval = setInterval(function() {
-            if (checkQRCodeLibrary() || checkCount++ > 30) { // Check for 3 seconds
-                clearInterval(checkInterval);
-                if (!qrCodeLibraryReady) {
-                    console.warn('QRCode library may not be loaded. Will attempt dynamic loading when needed.');
-                }
-            }
-        }, 100);
-    </script>
     <script>
         
         let currentSessionName = null;
@@ -1220,149 +1124,15 @@
             }
         }
 
-        // Helper function to dynamically load QR code library with multiple CDN attempts
-        function loadQRCodeLibrary(qrCodeString, qrCodeContainer) {
-            console.log('Loading QRCode library (qrcodejs) dynamically...');
-            
-            const cdns = [
-                'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
-                'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
-                'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js',
-                'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@gh-pages/qrcode.min.js'
-            ];
-            
-            let cdnIndex = 0;
-            
-            function tryLoadCDN(index) {
-                if (index >= cdns.length) {
-                    // All CDNs failed, show QR code as text
-                    console.error('All CDN attempts failed. Showing QR code as text.');
-                    qrCodeContainer.innerHTML = `
-                        <div class="alert alert-warning">
-                            <strong>QR Code Library Unavailable</strong><br>
-                            <p>Please scan this QR code manually:</p>
-                            <div style="background: white; padding: 1rem; border: 2px solid #dee2e6; border-radius: 0.5rem; font-family: monospace; word-break: break-all; max-width: 100%; overflow-x: auto;">
-                                ${qrCodeString}
-                            </div>
-                            <p class="mt-2"><small>You can also try refreshing the page or check your internet connection.</small></p>
-                        </div>`;
-                    return;
-                }
-                
-                // Check if library is already loaded
-                if (typeof QRCode !== 'undefined') {
-                    qrCodeLibraryReady = true;
-                    generateQRCode(qrCodeString, qrCodeContainer);
-                    return;
-                }
-                
-                const script = document.createElement('script');
-                script.src = cdns[index];
-                script.onload = function() {
-                    console.log(`QRCode library (qrcodejs) loaded from CDN ${index + 1}`);
-                    // Wait a moment for the library to initialize
-                    setTimeout(function() {
-                        if (typeof QRCode !== 'undefined') {
-                            qrCodeLibraryReady = true;
-                            generateQRCode(qrCodeString, qrCodeContainer);
-                        } else {
-                            console.warn('Library loaded but QRCode not defined, trying next CDN...');
-                            tryLoadCDN(index + 1);
-                        }
-                    }, 100);
-                };
-                script.onerror = function() {
-                    console.warn(`Failed to load from CDN ${index + 1}, trying next...`);
-                    tryLoadCDN(index + 1);
-                };
-                document.head.appendChild(script);
-            }
-            
-            tryLoadCDN(0);
-        }
-        
-        // Helper function to generate QR code using qrcodejs library
-        function generateQRCode(qrCodeString, qrCodeContainer) {
-            console.log('generateQRCode called with:', qrCodeString ? qrCodeString.substring(0, 50) + '...' : 'empty');
-            
-            // Validate input
-            if (!qrCodeString || qrCodeString.trim() === '') {
-                qrCodeContainer.innerHTML = '<div class="alert alert-warning">QR code data is empty.</div>';
-                return;
-            }
-            
-            // Clear container first
-            qrCodeContainer.innerHTML = '';
-            
-            // Check if library is available
-            if (typeof QRCode === 'undefined') {
-                console.error('QRCode library is not defined');
-                showQRCodeFallback(qrCodeString, qrCodeContainer, 'QRCode library (qrcodejs) is not defined');
-                return;
-            }
-            
-            // Create a div element for QR code (qrcodejs generates QR code in a container)
-            const qrDiv = document.createElement('div');
-            qrDiv.id = 'qr-code-' + Date.now(); // Unique ID
-            qrCodeContainer.appendChild(qrDiv);
-            
-            try {
-                console.log('Creating QRCode instance with text length:', qrCodeString.length);
-                
-                // qrcodejs uses constructor: new QRCode(element, options)
-                // Options can be: {text, width, height, colorDark, colorLight, correctLevel}
-                const qrcode = new QRCode(qrDiv, {
-                    text: qrCodeString,
-                    width: 300,
-                    height: 300,
-                    colorDark: '#000000',
-                    colorLight: '#FFFFFF',
-                    correctLevel: QRCode.CorrectLevel.M // Error correction level
-                });
-                
-                console.log('QRCode instance created successfully');
-                
-                // Add styling to the QR code container
-                qrDiv.style.border = '2px solid #dee2e6';
-                qrDiv.style.borderRadius = '0.5rem';
-                qrDiv.style.padding = '1rem';
-                qrDiv.style.background = 'white';
-                qrDiv.style.display = 'inline-block';
-                qrDiv.style.margin = '0 auto';
-                qrDiv.style.textAlign = 'center';
-                
-                // Verify QR code was generated
-                setTimeout(function() {
-                    if (qrDiv.children.length === 0) {
-                        console.warn('QR code div is empty after generation');
-                        showQRCodeFallback(qrCodeString, qrCodeContainer, 'QR code generation produced no output');
-                    } else {
-                        console.log('QR code generated successfully using qrcodejs');
-                    }
-                }, 100);
-                
-            } catch (e) {
-                console.error('Error generating QR code with qrcodejs:', e);
-                console.error('Error stack:', e.stack);
-                showQRCodeFallback(qrCodeString, qrCodeContainer, e.message);
-            }
-        }
-        
-        // Helper function to show QR code fallback
-        // NEVER treat QR string as base64 image - WhatsApp QR is raw pairing data
-        function showQRCodeFallback(qrCodeString, qrCodeContainer, errorMessage) {
-            qrCodeContainer.innerHTML = '';
-            
-            // Show QR code string as text as last resort (never as image)
-            qrCodeContainer.innerHTML = `<div class="alert alert-warning">
-                <strong>QR Code Library Unavailable</strong><br>
-                <p>Please scan this QR code manually or refresh the page:</p>
-                <div style="background: white; padding: 1rem; border: 2px solid #dee2e6; border-radius: 0.5rem; font-family: monospace; word-break: break-all; max-width: 100%; overflow-x: auto; text-align: left;">
-                    ${escapeHtml(qrCodeString)}
-                </div>
-                <small class="mt-2 d-block">Error: ${escapeHtml(errorMessage)}</small>
-                <small class="mt-1 d-block">You can also try refreshing the page or check your internet connection.</small>
-            </div>`;
+        // Generate QR code using qrcodejs library
+        function generateQRCode(qrCodeString, container) {
+            container.innerHTML = "";
+            new QRCode(container, {
+                text: qrCodeString,
+                width: 300,
+                height: 300,
+                correctLevel: QRCode.CorrectLevel.M
+            });
         }
 
         async function showQRCode(sessionName, sessionId = null) {
@@ -1401,31 +1171,8 @@
                     // Generate QR code image from the string
                     const qrCodeString = data.qrCode;
                     const qrCodeContainer = document.getElementById('qrCodeImage');
-                    qrCodeContainer.innerHTML = '<div class="text-center"><small>Loading QR code...</small></div>'; // Show loading state
                     
-                    // Ensure QRCode library is loaded before generating QR code
-                    // Function to attempt QR code generation with retries
-                    function attemptQRCodeGeneration(retries = 0) {
-                        console.log(`Attempting QR code generation, attempt ${retries + 1}, QRCode defined: ${typeof QRCode !== 'undefined'}`);
-                        
-                        if (typeof QRCode !== 'undefined' && typeof QRCode.CorrectLevel !== 'undefined') {
-                            qrCodeLibraryReady = true;
-                            console.log('QRCode library (qrcodejs) is available, generating QR code...');
-                            generateQRCode(qrCodeString, qrCodeContainer);
-                        } else if (retries < 30) {
-                            // Wait up to 3 seconds (30 * 100ms) for library to load
-                            console.log(`Waiting for QRCode library (qrcodejs)... (attempt ${retries + 1}/30)`);
-                            setTimeout(() => attemptQRCodeGeneration(retries + 1), 100);
-                        } else {
-                            // Library still not loaded after waiting, try dynamic loading
-                            console.warn('QRCode library still not loaded after waiting, attempting dynamic load...');
-                            loadQRCodeLibrary(qrCodeString, qrCodeContainer);
-                        }
-                    }
-                    
-                    // Start attempting to generate QR code
-                    attemptQRCodeGeneration();
-                    
+                    generateQRCode(qrCodeString, qrCodeContainer);
                     document.getElementById('qrCodeSection').style.display = 'block';
                     
                     // Show status if available
@@ -1656,6 +1403,7 @@
             return div.innerHTML;
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </body>
 </html>
 

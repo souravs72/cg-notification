@@ -60,9 +60,8 @@ public class AdminController {
 
     @GetMapping("/dashboard")
     public String dashboard(Model model, HttpSession session) {
-        // Get user info from session
-        User user = userWasenderService.getCurrentUser(session)
-            .orElseThrow(() -> new IllegalStateException("User not found in session"));
+        // Get fresh user info from database
+        User user = userService.getCurrentUser(session);
         
         model.addAttribute("user", user);
         AdminDashboardResponse metrics = adminService.getDashboardMetrics();
@@ -615,9 +614,8 @@ public class AdminController {
             // Save to global config
             wasenderConfigService.saveApiKey(pat);
             
-            // Get current user and update their PAT
-            User user = userWasenderService.getCurrentUser(session)
-                .orElseThrow(() -> new IllegalStateException("User not found in session"));
+            // Get current user and update their PAT (fresh from database)
+            User user = userService.getCurrentUser(session);
             
             try {
                 // Try to update with validation (to get subscription info)
@@ -627,8 +625,8 @@ public class AdminController {
                 userService.updateWasenderApiKeyWithoutValidation(user.getId(), pat);
             }
             
-            // Set PAT in session immediately
-            session.setAttribute("wasenderApiKey", pat);
+            // Note: We don't store API key in session - it's fetched from DB on demand
+            // This ensures we always have fresh data, even if updated in another tab
             
             WasenderApiKeyResponse response = new WasenderApiKeyResponse(true, "WASender PAT saved successfully");
             return ResponseEntity.ok(response);

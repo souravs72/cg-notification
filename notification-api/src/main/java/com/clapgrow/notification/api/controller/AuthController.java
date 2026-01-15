@@ -52,14 +52,8 @@ public class AuthController {
                 return "auth/login";
             }
 
-            // Set user in session
+            // Set only userId in session - all other data fetched from DB on demand
             session.setAttribute("userId", user.getId().toString());
-            session.setAttribute("userEmail", user.getEmail());
-            session.setAttribute("wasenderApiKey", user.getWasenderApiKey());
-            session.setAttribute("subscriptionType", user.getSubscriptionType());
-            session.setAttribute("subscriptionStatus", user.getSubscriptionStatus());
-            session.setAttribute("sessionsAllowed", user.getSessionsAllowed());
-            session.setAttribute("sessionsUsed", user.getSessionsUsed());
 
             log.info("User logged in: {}", user.getEmail());
             return "redirect:/admin/dashboard";
@@ -103,14 +97,8 @@ public class AuthController {
             // Register user (this will validate WASender API key and get subscription info)
             User user = userService.registerUser(email, password, wasenderApiKey);
 
-            // Set user in session
+            // Set only userId in session - all other data fetched from DB on demand
             session.setAttribute("userId", user.getId().toString());
-            session.setAttribute("userEmail", user.getEmail());
-            session.setAttribute("wasenderApiKey", user.getWasenderApiKey());
-            session.setAttribute("subscriptionType", user.getSubscriptionType());
-            session.setAttribute("subscriptionStatus", user.getSubscriptionStatus());
-            session.setAttribute("sessionsAllowed", user.getSessionsAllowed());
-            session.setAttribute("sessionsUsed", user.getSessionsUsed());
 
             log.info("User registered: {}", user.getEmail());
             return "redirect:/admin/dashboard";
@@ -126,32 +114,41 @@ public class AuthController {
         }
     }
 
-    @PostMapping("/logout")
+    @GetMapping("/logout")
     public String logout(HttpSession session) {
-        String email = (String) session.getAttribute("userEmail");
+        String userId = (String) session.getAttribute("userId");
         session.invalidate();
-        log.info("User logged out: {}", email);
+        log.info("User logged out: userId={}", userId);
+        return "redirect:/auth/login";
+    }
+    
+    @PostMapping("/logout")
+    public String logoutPost(HttpSession session) {
+        String userId = (String) session.getAttribute("userId");
+        session.invalidate();
+        log.info("User logged out: userId={}", userId);
         return "redirect:/auth/login";
     }
 
     @GetMapping("/api/current-user")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> getCurrentUser(HttpSession session) {
-        Map<String, Object> userInfo = new HashMap<>();
-        
-        String userId = (String) session.getAttribute("userId");
-        if (userId == null) {
+        try {
+            // Fetch fresh user data from database
+            User user = userService.getCurrentUser(session);
+            
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("userId", user.getId().toString());
+            userInfo.put("email", user.getEmail());
+            userInfo.put("subscriptionType", user.getSubscriptionType());
+            userInfo.put("subscriptionStatus", user.getSubscriptionStatus());
+            userInfo.put("sessionsAllowed", user.getSessionsAllowed());
+            userInfo.put("sessionsUsed", user.getSessionsUsed());
+
+            return ResponseEntity.ok(userInfo);
+        } catch (IllegalStateException e) {
             return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         }
-
-        userInfo.put("userId", userId);
-        userInfo.put("email", session.getAttribute("userEmail"));
-        userInfo.put("subscriptionType", session.getAttribute("subscriptionType"));
-        userInfo.put("subscriptionStatus", session.getAttribute("subscriptionStatus"));
-        userInfo.put("sessionsAllowed", session.getAttribute("sessionsAllowed"));
-        userInfo.put("sessionsUsed", session.getAttribute("sessionsUsed"));
-
-        return ResponseEntity.ok(userInfo);
     }
 
     @Data

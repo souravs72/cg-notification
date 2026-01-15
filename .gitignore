@@ -64,3 +64,5 @@ docker-compose.override.yml
 *.war
 *.ear
 
+send-bulk-test.py
+send-bulk-test.sh

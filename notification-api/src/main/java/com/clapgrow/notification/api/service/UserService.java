@@ -2,6 +2,7 @@ package com.clapgrow.notification.api.service;
 
 import com.clapgrow.notification.api.entity.User;
 import com.clapgrow.notification.api.repository.UserRepository;
+import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -141,6 +142,32 @@ public class UserService {
 
         userRepository.save(user);
         log.info("Refreshed subscription info for user: {}", user.getEmail());
+    }
+
+    /**
+     * Get current user from session, fetching fresh data from database.
+     * This ensures we always have up-to-date user information, not stale session data.
+     * 
+     * @param session HTTP session containing userId
+     * @return User entity with fresh data from database
+     * @throws IllegalStateException if user is not authenticated or not found
+     */
+    public User getCurrentUser(HttpSession session) {
+        if (session == null) {
+            throw new IllegalStateException("User not authenticated: no session");
+        }
+        
+        String userId = (String) session.getAttribute("userId");
+        if (userId == null) {
+            throw new IllegalStateException("User not authenticated: no userId in session");
+        }
+        
+        try {
+            return userRepository.findByIdAndIsDeletedFalse(UUID.fromString(userId))
+                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("Invalid user ID in session: " + userId, e);
+        }
     }
 }
 
