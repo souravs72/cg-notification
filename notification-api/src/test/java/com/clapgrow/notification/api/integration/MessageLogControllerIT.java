@@ -65,12 +65,19 @@ class MessageLogControllerIT extends BaseIntegrationTest {
         testSite.setApiKeyHash(apiKeyHash);
         testSite.setIsActive(true);
         testSite = siteRepository.save(testSite);
+        
+        // Flush to ensure frappe_sites table is created
+        entityManager.flush();
+        
+        // Trigger message_logs table creation by accessing the entity
+        // Hibernate creates tables lazily, so we need to trigger creation before saving
+        // We do this by performing a query that will cause Hibernate to create the table
+        entityManager.createQuery("SELECT COUNT(m) FROM MessageLog m").getSingleResult();
 
         // Create test message logs
         createTestMessageLogs();
         
-        // Flush to ensure tables are created before tests run
-        // This triggers Hibernate to create any missing tables
+        // Flush to ensure data is persisted
         entityManager.flush();
     }
 
