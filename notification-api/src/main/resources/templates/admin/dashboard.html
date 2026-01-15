@@ -1328,8 +1328,8 @@
                     }
                     
                     container.innerHTML = data.map(msg => {
-                        const time = msg.sentAt ? new Date(msg.sentAt).toLocaleString() : 
-                                    (msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : 'N/A');
+                        const time = msg.sentAt ? formatDateTimeLocal(msg.sentAt) : 
+                                    (msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : 'N/A');
                         const statusClass = msg.status === 'DELIVERED' ? 'success' : 
                                           msg.status === 'FAILED' ? 'danger' : 
                                           msg.status === 'PENDING' ? 'warning' : 'info';
@@ -1462,6 +1462,82 @@
                 month: 'short',
                 day: 'numeric'
             }).format(date);
+        }
+
+        // Utility function to format UTC date strings to user's local timezone
+        // This intelligently handles UTC dates and converts them to local timezone
+        function formatDateTimeLocal(utcDateString) {
+            if (!utcDateString) return '-';
+            
+            try {
+                // Parse the UTC date string (handles ISO 8601 format with Z or +00:00)
+                let date;
+                if (typeof utcDateString === 'string') {
+                    // Ensure UTC dates are properly parsed
+                    if (utcDateString.endsWith('Z') || utcDateString.includes('+00:00')) {
+                        date = new Date(utcDateString);
+                    } else {
+                        // If no timezone indicator, assume UTC
+                        date = new Date(utcDateString + (utcDateString.includes('T') ? 'Z' : ''));
+                    }
+                } else {
+                    date = new Date(utcDateString);
+                }
+                
+                // Check if date is valid
+                if (isNaN(date.getTime())) {
+                    return utcDateString; // Return original if invalid
+                }
+                
+                // Format in user's local timezone with full date and time
+                const timezone = getUserTimezone();
+                return new Intl.DateTimeFormat('en-US', {
+                    timeZone: timezone,
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                }).format(date);
+            } catch (e) {
+                console.error('Error formatting date:', e, utcDateString);
+                return utcDateString; // Return original on error
+            }
+        }
+
+        // Format date only (without time) in user's local timezone
+        function formatDateOnlyLocal(utcDateString) {
+            if (!utcDateString) return '-';
+            
+            try {
+                let date;
+                if (typeof utcDateString === 'string') {
+                    if (utcDateString.endsWith('Z') || utcDateString.includes('+00:00')) {
+                        date = new Date(utcDateString);
+                    } else {
+                        date = new Date(utcDateString + (utcDateString.includes('T') ? 'Z' : ''));
+                    }
+                } else {
+                    date = new Date(utcDateString);
+                }
+                
+                if (isNaN(date.getTime())) {
+                    return utcDateString;
+                }
+                
+                const timezone = getUserTimezone();
+                return new Intl.DateTimeFormat('en-US', {
+                    timeZone: timezone,
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                }).format(date);
+            } catch (e) {
+                console.error('Error formatting date:', e, utcDateString);
+                return utcDateString;
+            }
         }
 
         // Message Activity Chart
@@ -1806,9 +1882,9 @@
                                     msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
                                 }">${msg.status}</span>
                             </td>
-                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
+                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}</small></td>
+                            <td><small>${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}</small></td>
+                            <td><small>${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}</small></td>
                             <td>
                                 <button class="btn btn-sm btn-outline-primary" onclick="showMessageDetails(${msgIndex})" title="View Details">
                                     <i class="bi bi-eye"></i> Details
@@ -1942,15 +2018,15 @@
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <strong>Scheduled At:</strong><br>
-                            ${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}
+                            ${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}
                         </div>
                         <div class="col-md-4">
                             <strong>Sent At:</strong><br>
-                            ${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}
+                            ${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}
                         </div>
                         <div class="col-md-4">
                             <strong>Delivered At:</strong><br>
-                            ${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}
+                            ${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}
                         </div>
                     </div>
                 `;
@@ -2094,9 +2170,9 @@
                                     msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
                                 }">${msg.status}</span>
                             </td>
-                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
+                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}</small></td>
+                            <td><small>${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}</small></td>
+                            <td><small>${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}</small></td>
                             <td>
                                 <button class="btn btn-sm btn-outline-primary" onclick="showMessageDetails(${msgIndex})" title="View Details">
                                     <i class="bi bi-eye"></i> Details
