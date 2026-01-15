@@ -2,7 +2,6 @@ package com.clapgrow.notification.api.integration;
 
 import com.clapgrow.notification.api.NotificationApiApplication;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
