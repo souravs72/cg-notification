@@ -201,13 +201,53 @@ cd notification-api && mvn clean package
 
 ### Testing
 
+#### Unit Tests
+
 ```bash
-# Run all tests
+# Run all unit tests (no database required)
 mvn test
 
 # Run specific module tests
 cd notification-api && mvn test
 ```
+
+#### Integration Tests
+
+Integration tests require PostgreSQL and Kafka to be running. You can use Docker to run them locally:
+
+**Option 1: Using the test script (Recommended)**
+
+```bash
+# Start Docker services and run all tests
+./run-tests-local.sh
+
+# Clean up and start fresh
+./run-tests-local.sh clean
+```
+
+**Option 2: Manual setup**
+
+```bash
+# Start test services (uses port 5432 to match CI)
+docker compose -f docker-compose.test.yml up -d
+
+# Wait for services to be ready (~30 seconds)
+docker compose -f docker-compose.test.yml ps
+
+# Set environment variables
+export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/notification_db"
+export SPRING_DATASOURCE_USERNAME="notification_user"
+export SPRING_DATASOURCE_PASSWORD="notification_pass"
+export SPRING_KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
+
+# Run integration tests
+mvn clean verify -DskipTests=false
+
+# Stop test services when done
+docker compose -f docker-compose.test.yml down
+```
+
+**Note:** The test Docker Compose file (`docker-compose.test.yml`) uses port 5432 to match the CI environment. The regular `docker-compose.yml` uses port 5433 to avoid conflicts.
 
 ### Code Style
 
