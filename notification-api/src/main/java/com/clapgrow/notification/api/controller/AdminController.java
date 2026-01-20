@@ -206,11 +206,19 @@ public class AdminController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Scheduled messages retrieved successfully")
     })
-    public ResponseEntity<List<MessageDetailResponse>> getScheduledMessages(
+    public ResponseEntity<?> getScheduledMessages(
             @Parameter(description = "Maximum number of messages to retrieve", example = "50")
             @RequestParam(name = "limit", defaultValue = "50") int limit) {
-        List<MessageDetailResponse> messages = adminService.getScheduledMessages(limit);
-        return ResponseEntity.ok(messages);
+        try {
+            List<MessageDetailResponse> messages = adminService.getScheduledMessages(limit);
+            return ResponseEntity.ok(messages);
+        } catch (Exception e) {
+            log.error("Error retrieving scheduled messages", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("error", "Failed to retrieve scheduled messages: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
     }
 
     @DeleteMapping("/api/sites/{siteId}")
@@ -567,8 +575,6 @@ public class AdminController {
                                             whatsAppSessionService.updateSessionApiKey(sessionId, sessionApiKey, session);
                                             log.info("Session API key successfully fetched from field '{}' and saved for session: {} (ID: {})", 
                                                     foundInField, actualSessionName, sessionId);
-                                            log.debug("API key prefix: {}...", 
-                                                    sessionApiKey.length() > 10 ? sessionApiKey.substring(0, 10) : sessionApiKey);
                                         } catch (Exception updateEx) {
                                             log.error("Failed to update session API key in database for session: {} (ID: {}). Error: {}", 
                                                     actualSessionName, sessionId, updateEx.getMessage(), updateEx);

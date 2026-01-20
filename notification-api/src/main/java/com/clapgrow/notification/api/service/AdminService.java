@@ -202,35 +202,40 @@ public class AdminService {
     }
 
     public List<MessageDetailResponse> getScheduledMessages(int limit) {
-        Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.ASC, "scheduledAt"));
-        Page<MessageLog> messagePage = messageLogRepository.findByStatusOrderByScheduledAtAsc(
-            DeliveryStatus.SCHEDULED.name(), pageable
-        );
-        List<MessageLog> messages = messagePage.getContent();
-        
-        Map<java.util.UUID, String> siteNameMap = siteService.getAllSites().stream()
-            .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
-        
-        return messages.stream()
-            .map(msg -> {
-                MessageDetailResponse detail = new MessageDetailResponse();
-                detail.setMessageId(msg.getMessageId());
-                detail.setSiteName(msg.getSiteId() != null 
-                    ? siteNameMap.getOrDefault(msg.getSiteId(), "Unknown") 
-                    : "No Site");
-                detail.setChannel(msg.getChannel());
-                detail.setStatus(msg.getStatus());
-                detail.setRecipient(msg.getRecipient());
-                detail.setSubject(msg.getSubject());
-                detail.setBody(msg.getBody());
-                detail.setErrorMessage(msg.getErrorMessage());
-                detail.setSentAt(msg.getSentAt());
-                detail.setDeliveredAt(msg.getDeliveredAt());
-                detail.setScheduledAt(msg.getScheduledAt());
-                detail.setCreatedAt(msg.getCreatedAt());
-                return detail;
-            })
-            .collect(Collectors.toList());
+        try {
+            Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.ASC, "scheduledAt"));
+            Page<MessageLog> messagePage = messageLogRepository.findByStatusOrderByScheduledAtAsc(
+                DeliveryStatus.SCHEDULED.name(), pageable
+            );
+            List<MessageLog> messages = messagePage.getContent();
+            
+            Map<java.util.UUID, String> siteNameMap = siteService.getAllSites().stream()
+                .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
+            
+            return messages.stream()
+                .map(msg -> {
+                    MessageDetailResponse detail = new MessageDetailResponse();
+                    detail.setMessageId(msg.getMessageId());
+                    detail.setSiteName(msg.getSiteId() != null 
+                        ? siteNameMap.getOrDefault(msg.getSiteId(), "Unknown") 
+                        : "No Site");
+                    detail.setChannel(msg.getChannel());
+                    detail.setStatus(msg.getStatus());
+                    detail.setRecipient(msg.getRecipient());
+                    detail.setSubject(msg.getSubject());
+                    detail.setBody(msg.getBody());
+                    detail.setErrorMessage(msg.getErrorMessage());
+                    detail.setSentAt(msg.getSentAt());
+                    detail.setDeliveredAt(msg.getDeliveredAt());
+                    detail.setScheduledAt(msg.getScheduledAt());
+                    detail.setCreatedAt(msg.getCreatedAt());
+                    return detail;
+                })
+                .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Error in getScheduledMessages with limit: {}", limit, e);
+            throw new RuntimeException("Failed to retrieve scheduled messages: " + e.getMessage(), e);
+        }
     }
 }
 

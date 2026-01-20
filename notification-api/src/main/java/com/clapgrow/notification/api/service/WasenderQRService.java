@@ -321,11 +321,7 @@ public class WasenderQRService {
                 requestBody.put("ignore_broadcasts", ignoreBroadcasts);
             }
             
-            log.info("Creating WASender session: {} with API key length: {} (prefix: {})", 
-                sessionName, 
-                apiKey != null ? apiKey.length() : 0,
-                apiKey != null && apiKey.length() > 10 ? apiKey.substring(0, 10) + "..." : "null");
-            log.debug("Full API key being used: {}", apiKey);
+            log.info("Creating WASender session: {} with API key configured", sessionName);
             
             String response = webClient.post()
                 .uri(createUrl)
@@ -420,10 +416,6 @@ public class WasenderQRService {
                     
                     log.info("Session creation response parsed - ID: {}, Name: {}, Has API Key: {}", 
                             sessionId, actualSessionName, sessionApiKey != null);
-                    if (sessionApiKey != null && log.isDebugEnabled()) {
-                        log.debug("API key prefix: {}...", 
-                                sessionApiKey.length() > 10 ? sessionApiKey.substring(0, 10) : sessionApiKey);
-                    }
                 } else {
                     log.warn("Empty response from WASender API when creating session");
                 }
@@ -519,8 +511,7 @@ public class WasenderQRService {
             // Use session ID directly (WASender API expects integer ID in URL)
             String connectUrl = wasenderBaseUrl + "/whatsapp-sessions/" + sessionId + "/connect";
             
-            log.info("Connecting WASender session: {} with API key length: {}", 
-                sessionIdentifier, apiKey != null ? apiKey.length() : 0);
+            log.info("Connecting WASender session: {}", sessionIdentifier);
             
             String response = webClient.post()
                 .uri(connectUrl)

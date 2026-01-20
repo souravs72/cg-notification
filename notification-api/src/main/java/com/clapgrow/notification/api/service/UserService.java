@@ -44,28 +44,50 @@ public class UserService {
             throw new IllegalArgumentException("User with this email already exists");
         }
 
-        if (wasenderApiKey == null || wasenderApiKey.trim().isEmpty()) {
-            throw new IllegalArgumentException("WASender API key is required");
-        }
-
-        // Validate WASender API key and get subscription info
-        WasenderSubscriptionService.SubscriptionInfo subscriptionInfo = 
-            wasenderSubscriptionService.getSubscriptionInfo(wasenderApiKey);
-
         User user = new User();
         user.setEmail(email.toLowerCase().trim());
         user.setPasswordHash(passwordEncoder.encode(password));
-        user.setWasenderApiKey(wasenderApiKey.trim());
-        user.setSubscriptionType(subscriptionInfo.getSubscriptionType());
-        user.setSubscriptionStatus(subscriptionInfo.getSubscriptionStatus());
-        user.setSessionsAllowed(subscriptionInfo.getSessionsAllowed());
         user.setSessionsUsed(0);
         user.setCreatedBy("SYSTEM");
         user.setIsDeleted(false);
 
+        // WASender API key is optional - if provided, validate and get subscription info
+        if (wasenderApiKey != null && !wasenderApiKey.trim().isEmpty()) {
+            try {
+                // Validate WASender API key and get subscription info
+                WasenderSubscriptionService.SubscriptionInfo subscriptionInfo = 
+                    wasenderSubscriptionService.getSubscriptionInfo(wasenderApiKey.trim());
+                
+                user.setWasenderApiKey(wasenderApiKey.trim());
+                user.setSubscriptionType(subscriptionInfo.getSubscriptionType());
+                user.setSubscriptionStatus(subscriptionInfo.getSubscriptionStatus());
+                user.setSessionsAllowed(subscriptionInfo.getSessionsAllowed());
+                
+                log.info("Registered new user: {} with WASender API key and subscription: {}", 
+                    email, subscriptionInfo.getSubscriptionType());
+            } catch (Exception e) {
+                // If validation fails, log warning but continue with default values
+                log.warn("WASender API key validation failed during registration for {}: {}. " +
+                    "User will be created with default subscription. API key can be added later.", 
+                    email, e.getMessage());
+                
+                // Use default subscription info
+                user.setWasenderApiKey(null); // Don't save invalid key
+                user.setSubscriptionType("FREE_TRIAL");
+                user.setSubscriptionStatus("ACTIVE");
+                user.setSessionsAllowed(10);
+            }
+        } else {
+            // No API key provided - use default subscription info
+            user.setWasenderApiKey(null);
+            user.setSubscriptionType("FREE_TRIAL");
+            user.setSubscriptionStatus("ACTIVE");
+            user.setSessionsAllowed(10);
+            
+            log.info("Registered new user: {} without WASender API key (default subscription)", email);
+        }
+
         user = userRepository.save(user);
-        log.info("Registered new user: {} with subscription: {}", email, subscriptionInfo.getSubscriptionType());
-        
         return user;
     }
 

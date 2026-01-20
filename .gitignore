@@ -66,3 +66,18 @@ docker-compose.override.yml
 
 send-bulk-test.py
 send-bulk-test.sh
+scripts/setup-github-secrets.sh
+
+# IDE generated directories
+bin/
+
+# User uploads
+uploads/
+**/uploads/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python

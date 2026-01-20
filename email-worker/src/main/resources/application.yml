@@ -1,12 +1,11 @@
----
 spring:
   application:
     name: email-worker
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/notification_db
-    username: notification_user
-    password: notification_pass
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/notification_db}
+    username: ${SPRING_DATASOURCE_USERNAME:notification_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:notification_pass}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -15,23 +14,27 @@ spring:
     show-sql: false
 
   kafka:
-    bootstrap-servers: localhost:9092
-
-sendgrid:
-  api:
-    key: ${SENDGRID_API_KEY:your-sendgrid-api-key}
-  from:
-    email: ${SENDGRID_FROM_EMAIL:noreply@example.com}
-    name: ${SENDGRID_FROM_NAME:Notification Service}
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
 
 server:
   port: 8081
+
+sendgrid:
+  api:
+    key: ${SENDGRID_API_KEY}
+  from:
+    email: ${SENDGRID_FROM_EMAIL}
+    name: ${SENDGRID_FROM_NAME}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
   metrics:
     export:
       prometheus:
@@ -44,8 +47,5 @@ logging:
     org.springframework.kafka: INFO
 
 springdoc:
-  api-docs:
-    path: /api-docs
   swagger-ui:
-    path: /swagger-ui.html
-    enabled: true
+    enabled: false

@@ -2,6 +2,7 @@ package com.clapgrow.notification.api.controller;
 
 import com.clapgrow.notification.api.entity.User;
 import com.clapgrow.notification.api.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,7 @@ public class AuthController {
     @PostMapping("/login")
     public String login(@RequestParam String email, 
                        @RequestParam String password,
+                       HttpServletRequest request,
                        HttpSession session,
                        Model model) {
         try {
@@ -52,10 +54,16 @@ public class AuthController {
                 return "auth/login";
             }
 
+            // CRITICAL SECURITY FIX: Regenerate session ID to prevent session fixation attacks
+            // This ensures that even if an attacker knows the session ID before login,
+            // they cannot use it after the user authenticates
+            request.changeSessionId();
+            
             // Set only userId in session - all other data fetched from DB on demand
+            // Note: changeSessionId() modifies the session in place, so we can continue using the same session object
             session.setAttribute("userId", user.getId().toString());
 
-            log.info("User logged in: {}", user.getEmail());
+            log.info("User logged in: {} (session regenerated for security)", user.getEmail());
             return "redirect:/admin/dashboard";
 
         } catch (Exception e) {
@@ -69,7 +77,8 @@ public class AuthController {
     public String register(@RequestParam String email,
                           @RequestParam String password,
                           @RequestParam String confirmPassword,
-                          @RequestParam String wasenderApiKey,
+                          @RequestParam(required = false) String wasenderApiKey,
+                          HttpServletRequest request,
                           HttpSession session,
                           Model model) {
         try {
@@ -89,18 +98,19 @@ public class AuthController {
                 return "auth/register";
             }
 
-            if (wasenderApiKey == null || wasenderApiKey.trim().isEmpty()) {
-                model.addAttribute("error", "WASender API key is required");
-                return "auth/register";
-            }
-
-            // Register user (this will validate WASender API key and get subscription info)
+            // Register user (WASender API key is optional - can be added later)
             User user = userService.registerUser(email, password, wasenderApiKey);
 
+            // CRITICAL SECURITY FIX: Regenerate session ID to prevent session fixation attacks
+            // This ensures that even if an attacker knows the session ID before registration,
+            // they cannot use it after the user authenticates
+            request.changeSessionId();
+            
             // Set only userId in session - all other data fetched from DB on demand
+            // Note: changeSessionId() modifies the session in place, so we can continue using the same session object
             session.setAttribute("userId", user.getId().toString());
 
-            log.info("User registered: {}", user.getEmail());
+            log.info("User registered: {} (session regenerated for security)", user.getEmail());
             return "redirect:/admin/dashboard";
 
         } catch (IllegalArgumentException e) {

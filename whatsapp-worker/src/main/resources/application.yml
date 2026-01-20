@@ -1,12 +1,11 @@
----
 spring:
   application:
     name: whatsapp-worker
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/notification_db
-    username: notification_user
-    password: notification_pass
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/notification_db}
+    username: ${SPRING_DATASOURCE_USERNAME:notification_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:notification_pass}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -15,21 +14,25 @@ spring:
     show-sql: false
 
   kafka:
-    bootstrap-servers: localhost:9092
-
-wasender:
-  api:
-    base-url: https://wasenderapi.com/api
-    key: ${WASENDER_API_KEY:your-wasender-api-key}
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
 
 server:
   port: 8082
+
+wasender:
+  api:
+    base-url: ${WASENDER_API_BASE_URL:https://wasenderapi.com/api}
+    key: ${WASENDER_API_KEY}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true   # 🔥 IMPORTANT
   metrics:
     export:
       prometheus:
@@ -45,5 +48,4 @@ springdoc:
   api-docs:
     path: /api-docs
   swagger-ui:
-    path: /swagger-ui.html
-    enabled: true
+    enabled: false   # ❌ disable for worker

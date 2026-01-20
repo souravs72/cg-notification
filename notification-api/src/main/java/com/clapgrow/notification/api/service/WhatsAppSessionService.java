@@ -9,9 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -135,7 +137,7 @@ public class WhatsAppSessionService {
             session.setStatus(status);
             if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
                 session.setSessionApiKey(sessionApiKey.trim());
-                log.info("Stored API key for session {}: {}", sessionName, sessionApiKey.substring(0, Math.min(10, sessionApiKey.length())) + "...");
+                log.info("Stored API key for session {}", sessionName);
             }
             if ("CONNECTED".equalsIgnoreCase(status) || "connected".equalsIgnoreCase(status)) {
                 session.setConnectedAt(LocalDateTime.now());
@@ -206,13 +208,10 @@ public class WhatsAppSessionService {
         
         if (sessionOpt.isPresent()) {
             WhatsAppSession session = sessionOpt.get();
-            String oldApiKey = session.getSessionApiKey();
             session.setSessionApiKey(sessionApiKey != null ? sessionApiKey.trim() : null);
             sessionRepository.save(session);
-            log.info("Updated session API key for session: {} (ID: {}). Old key: {}, New key: {}", 
-                    session.getSessionName(), session.getSessionId(),
-                    oldApiKey != null ? oldApiKey.substring(0, Math.min(10, oldApiKey.length())) + "..." : "null",
-                    sessionApiKey != null ? sessionApiKey.substring(0, Math.min(10, sessionApiKey.length())) + "..." : "null");
+            log.info("Updated session API key for session: {} (ID: {})", 
+                    session.getSessionName(), session.getSessionId());
         } else {
             log.error("Session not found in database for identifier: {} (user: {}). Cannot update API key.", 
                     sessionIdentifier, userId);
@@ -259,6 +258,10 @@ public class WhatsAppSessionService {
             return;
         }
         
+        // Collect session identifiers from WASender (both sessionId and sessionName)
+        Set<String> wasenderSessionIds = new HashSet<>();
+        Set<String> wasenderSessionNames = new HashSet<>();
+        
         for (Map<String, Object> sessionData : sessions) {
             try {
                 String sessionId = sessionData.get("id") != null ? sessionData.get("id").toString() : null;
@@ -270,6 +273,14 @@ public class WhatsAppSessionService {
                 
                 if (sessionName == null && sessionId == null) {
                     continue;
+                }
+                
+                // Track WASender session identifiers
+                if (sessionId != null) {
+                    wasenderSessionIds.add(sessionId);
+                }
+                if (sessionName != null) {
+                    wasenderSessionNames.add(sessionName);
                 }
                 
                 // Find or create session
@@ -292,6 +303,8 @@ public class WhatsAppSessionService {
                     if (phoneNumber != null) {
                         session.setPhoneNumber(phoneNumber);
                     }
+                    // Ensure it's not marked as deleted
+                    session.setIsDeleted(false);
                 } else {
                     // Create new session
                     session = new WhatsAppSession();
@@ -305,6 +318,28 @@ public class WhatsAppSessionService {
                 sessionRepository.save(session);
             } catch (Exception e) {
                 log.warn("Error syncing session from WASender: {}", e.getMessage());
+            }
+        }
+        
+        // Mark sessions as deleted if they no longer exist in WASender
+        List<WhatsAppSession> allUserSessions = sessionRepository.findByUserIdAndIsDeletedFalseOrderByCreatedAtDesc(userId);
+        for (WhatsAppSession dbSession : allUserSessions) {
+            boolean existsInWasender = false;
+            
+            // Check if session exists in WASender by sessionId or sessionName
+            if (dbSession.getSessionId() != null && wasenderSessionIds.contains(dbSession.getSessionId())) {
+                existsInWasender = true;
+            }
+            if (!existsInWasender && dbSession.getSessionName() != null && wasenderSessionNames.contains(dbSession.getSessionName())) {
+                existsInWasender = true;
+            }
+            
+            // Mark as deleted if not found in WASender
+            if (!existsInWasender) {
+                log.info("Marking session as deleted (not found in WASender): {} (ID: {}, Name: {})", 
+                        dbSession.getId(), dbSession.getSessionId(), dbSession.getSessionName());
+                dbSession.setIsDeleted(true);
+                sessionRepository.save(dbSession);
             }
         }
     }

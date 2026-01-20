@@ -107,6 +107,7 @@
     </dependencies>
 
     <build>
+        <finalName>email-worker</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

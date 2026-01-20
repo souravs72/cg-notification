@@ -81,7 +81,7 @@ public interface MessageLogRepository extends JpaRepository<MessageLog, UUID> {
         @Param("now") LocalDateTime now
     );
     
-    @Query(value = "SELECT * FROM message_logs m WHERE m.status = CAST(:status AS delivery_status) ORDER BY m.scheduled_at ASC", nativeQuery = true)
+    @Query(value = "SELECT * FROM message_logs m WHERE m.status = CAST(:status AS delivery_status) AND m.scheduled_at IS NOT NULL ORDER BY m.scheduled_at ASC", nativeQuery = true)
     Page<MessageLog> findByStatusOrderByScheduledAtAsc(
         @Param("status") String status,
         Pageable pageable

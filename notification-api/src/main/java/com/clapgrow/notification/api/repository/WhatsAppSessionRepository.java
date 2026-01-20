@@ -15,6 +15,9 @@ public interface WhatsAppSessionRepository extends JpaRepository<WhatsAppSession
     List<WhatsAppSession> findByUserIdAndIsDeletedFalseOrderByCreatedAtDesc(UUID userId);
     Optional<WhatsAppSession> findByUserIdAndSessionNameAndIsDeletedFalseAndStatus(UUID userId, String sessionName, String status);
     List<WhatsAppSession> findByUserIdAndIsDeletedFalseAndStatusOrderByCreatedAtDesc(UUID userId, String status);
+    
+    // Find session by name without user filter (for scheduled messages)
+    Optional<WhatsAppSession> findFirstBySessionNameAndIsDeletedFalse(String sessionName);
 }
 
 

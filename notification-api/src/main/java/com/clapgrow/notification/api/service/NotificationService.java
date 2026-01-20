@@ -39,6 +39,7 @@ public class NotificationService {
     private final UserWasenderService userWasenderService;
     private final WasenderQRService wasenderQRService;
     private final com.clapgrow.notification.api.service.WhatsAppSessionService whatsAppSessionService;
+    private final com.clapgrow.notification.api.repository.WhatsAppSessionRepository sessionRepository;
 
     @Transactional
     public NotificationResponse sendNotification(NotificationRequest request, FrappeSite site) {
@@ -274,8 +275,37 @@ public class NotificationService {
                             }
                         }
                     } else {
-                        // Session is null - cannot retrieve session API key without user context
-                        log.warn("HTTP session is null but session name '{}' was provided. Cannot retrieve session API key without user context.", requestedSessionName);
+                        // Session is null - try to get session API key without user context (for site-based authentication)
+                        log.info("HTTP session is null, attempting to retrieve session API key for site-configured session: {}", requestedSessionName);
+                        try {
+                            Optional<com.clapgrow.notification.api.entity.WhatsAppSession> sessionEntity = 
+                                sessionRepository.findFirstBySessionNameAndIsDeletedFalse(requestedSessionName);
+                            
+                            if (sessionEntity.isPresent()) {
+                                com.clapgrow.notification.api.entity.WhatsAppSession whatsAppSession = sessionEntity.get();
+                                String retrievedApiKey = whatsAppSession.getSessionApiKey();
+                                
+                                if (retrievedApiKey != null && !retrievedApiKey.trim().isEmpty()) {
+                                    sessionApiKey = retrievedApiKey.trim();
+                                    sessionApiKeyFound = true;
+                                    log.info("Found session API key for site-configured session: {} (ID: {})", requestedSessionName, whatsAppSession.getSessionId());
+                                } else {
+                                    log.warn("Session '{}' found in database but session_api_key is empty. Session ID: {}. Falling back to global WASender API key.", requestedSessionName, whatsAppSession.getSessionId());
+                                    // Fallback to global WASender API key if session API key is not available
+                                    Optional<String> globalApiKey = wasenderConfigService.getApiKey();
+                                    if (globalApiKey.isPresent() && !globalApiKey.get().trim().isEmpty()) {
+                                        sessionApiKey = globalApiKey.get().trim();
+                                        sessionApiKeyFound = true;
+                                        log.info("Using global WASender API key for session: {}", requestedSessionName);
+                                    }
+                                }
+                            } else {
+                                log.warn("Session '{}' not found in database (without user filter)", requestedSessionName);
+                            }
+                        } catch (Exception e) {
+                            log.error("Error retrieving session API key without user context for session: {}. Error: {}", 
+                                    requestedSessionName, e.getMessage(), e);
+                        }
                     }
                     
                     // If session was explicitly chosen but API key not found, throw an error

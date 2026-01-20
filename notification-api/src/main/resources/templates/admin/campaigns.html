@@ -222,13 +222,22 @@
                             <label class="form-label">Media (Optional)</label>
                             <div class="row">
                                 <div class="col-md-4">
-                                    <input type="url" class="form-control" id="singleImageUrl" placeholder="Image URL">
+                                    <label class="form-label small">Image</label>
+                                    <input type="file" class="form-control" id="singleImageFile" accept="image/jpeg,image/png" style="margin-bottom: 5px;">
+                                    <input type="url" class="form-control" id="singleImageUrl" placeholder="Or enter Image URL">
+                                    <small class="text-muted">Max 5MB (JPEG, PNG)</small>
                                 </div>
                                 <div class="col-md-4">
-                                    <input type="url" class="form-control" id="singleVideoUrl" placeholder="Video URL">
+                                    <label class="form-label small">Video</label>
+                                    <input type="file" class="form-control" id="singleVideoFile" accept="video/mp4,video/3gpp" style="margin-bottom: 5px;">
+                                    <input type="url" class="form-control" id="singleVideoUrl" placeholder="Or enter Video URL">
+                                    <small class="text-muted">Max 50MB (MP4, 3GPP)</small>
                                 </div>
                                 <div class="col-md-4">
-                                    <input type="url" class="form-control" id="singleDocumentUrl" placeholder="Document URL">
+                                    <label class="form-label small">Document</label>
+                                    <input type="file" class="form-control" id="singleDocumentFile" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.ppt,.pptx" style="margin-bottom: 5px;">
+                                    <input type="url" class="form-control" id="singleDocumentUrl" placeholder="Or enter Document URL">
+                                    <small class="text-muted">Max 100MB (PDF, DOCX, XLSX, etc.)</small>
                                 </div>
                             </div>
                             <div class="row mt-2">
@@ -722,6 +731,69 @@
             document.getElementById('singleWhatsAppSessionGroup').style.display = 'block';
         }
 
+        // File upload helper function
+        async function uploadFile(file, fileType) {
+            if (!file) return null;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            let endpoint = '';
+            switch(fileType) {
+                case 'image':
+                    endpoint = '/admin/api/files/upload/image';
+                    break;
+                case 'video':
+                    endpoint = '/admin/api/files/upload/video';
+                    break;
+                case 'document':
+                    endpoint = '/admin/api/files/upload/document';
+                    break;
+                default:
+                    throw new Error('Invalid file type');
+            }
+            
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    return result.url;
+                } else {
+                    throw new Error(result.error || 'File upload failed');
+                }
+            } catch (error) {
+                console.error(`Error uploading ${fileType}:`, error);
+                throw error;
+            }
+        }
+        
+        // Handle file input changes - show preview or clear URL field
+        document.getElementById('singleImageFile').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                document.getElementById('singleImageUrl').value = '';
+            }
+        });
+        
+        document.getElementById('singleVideoFile').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                document.getElementById('singleVideoUrl').value = '';
+            }
+        });
+        
+        document.getElementById('singleDocumentFile').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                document.getElementById('singleDocumentUrl').value = '';
+                // Auto-fill filename if not already set
+                if (!document.getElementById('singleFileName').value) {
+                    document.getElementById('singleFileName').value = e.target.files[0].name;
+                }
+            }
+        });
+
         // Single Message Form
         document.getElementById('singleMessageForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -733,28 +805,58 @@
                 return;
             }
             
-            const siteId = document.getElementById('singleSiteId').value;
-            const payload = {
-                channel: channel,
-                recipient: document.getElementById('singleRecipient').value,
-                body: document.getElementById('singleBody').value,
-                imageUrl: document.getElementById('singleImageUrl').value || null,
-                videoUrl: document.getElementById('singleVideoUrl').value || null,
-                documentUrl: document.getElementById('singleDocumentUrl').value || null,
-                fileName: document.getElementById('singleFileName').value || null,
-                caption: document.getElementById('singleCaption').value || null
-            };
-            if (channel === 'EMAIL') {
-                payload.subject = document.getElementById('singleSubject').value || null;
-            }
-            if (channel === 'WHATSAPP') {
-                const whatsappSession = document.getElementById('singleWhatsAppSession').value;
-                if (whatsappSession && whatsappSession.trim() !== '') {
-                    payload.whatsappSessionName = whatsappSession.trim();
-                }
-            }
-
+            // Show loading state
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading files...';
+            
             try {
+                // Upload files if selected
+                const imageFile = document.getElementById('singleImageFile').files[0];
+                const videoFile = document.getElementById('singleVideoFile').files[0];
+                const documentFile = document.getElementById('singleDocumentFile').files[0];
+                
+                let imageUrl = document.getElementById('singleImageUrl').value || null;
+                let videoUrl = document.getElementById('singleVideoUrl').value || null;
+                let documentUrl = document.getElementById('singleDocumentUrl').value || null;
+                
+                // Upload files if they exist
+                if (imageFile) {
+                    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading image...';
+                    imageUrl = await uploadFile(imageFile, 'image');
+                }
+                if (videoFile) {
+                    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading video...';
+                    videoUrl = await uploadFile(videoFile, 'video');
+                }
+                if (documentFile) {
+                    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading document...';
+                    documentUrl = await uploadFile(documentFile, 'document');
+                }
+                
+                const siteId = document.getElementById('singleSiteId').value;
+                const payload = {
+                    channel: channel,
+                    recipient: document.getElementById('singleRecipient').value,
+                    body: document.getElementById('singleBody').value,
+                    imageUrl: imageUrl,
+                    videoUrl: videoUrl,
+                    documentUrl: documentUrl,
+                    fileName: document.getElementById('singleFileName').value || null,
+                    caption: document.getElementById('singleCaption').value || null
+                };
+                if (channel === 'EMAIL') {
+                    payload.subject = document.getElementById('singleSubject').value || null;
+                }
+                if (channel === 'WHATSAPP') {
+                    const whatsappSession = document.getElementById('singleWhatsAppSession').value;
+                    if (whatsappSession && whatsappSession.trim() !== '') {
+                        payload.whatsappSessionName = whatsappSession.trim();
+                    }
+                }
+
+                submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
                 const adminKey = getAdminKey();
                 // Build URL - only include siteId if provided
                 let url = '/admin/campaigns/api/send';
@@ -773,9 +875,16 @@
                 showResults(result, result.success);
                 if (result.success) {
                     this.reset();
+                    // Clear file inputs
+                    document.getElementById('singleImageFile').value = '';
+                    document.getElementById('singleVideoFile').value = '';
+                    document.getElementById('singleDocumentFile').value = '';
                 }
             } catch (error) {
                 showResults({ error: error.message }, false);
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonText;
             }
         });
 

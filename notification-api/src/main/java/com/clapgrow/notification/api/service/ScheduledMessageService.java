@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -36,6 +37,8 @@ public class ScheduledMessageService {
     private final ObjectMapper objectMapper;
     private final WasenderConfigService wasenderConfigService;
     private final SendGridConfigService sendGridConfigService;
+    private final com.clapgrow.notification.api.repository.WhatsAppSessionRepository whatsAppSessionRepository;
+    private final WasenderQRService wasenderQRService;
 
     @Transactional
     public NotificationResponse scheduleNotification(ScheduledNotificationRequest request, FrappeSite site) {
@@ -196,7 +199,86 @@ public class ScheduledMessageService {
             
             // Include WASender API key for WhatsApp messages
             if (messageLog.getChannel() == com.clapgrow.notification.api.enums.NotificationChannel.WHATSAPP) {
-                wasenderConfigService.getApiKey().ifPresent(payload::setWasenderApiKey);
+                String sessionApiKey = null;
+                String requestedSessionName = site.getWhatsappSessionName();
+                
+                // If a session is specified, try to get session-specific API key
+                if (requestedSessionName != null && !requestedSessionName.trim().isEmpty()) {
+                    try {
+                        // Try to find session by name in database
+                        Optional<com.clapgrow.notification.api.entity.WhatsAppSession> sessionOpt = 
+                            whatsAppSessionRepository.findFirstBySessionNameAndIsDeletedFalse(requestedSessionName.trim());
+                        
+                        if (sessionOpt.isPresent()) {
+                            com.clapgrow.notification.api.entity.WhatsAppSession session = sessionOpt.get();
+                            sessionApiKey = session.getSessionApiKey();
+                            
+                            if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
+                                log.info("Using session API key from database for scheduled message, session: {}", requestedSessionName);
+                            } else {
+                                log.warn("Session API key not found in database for session: {}, attempting to fetch from WASender", requestedSessionName);
+                                
+                                // Try to fetch from WASender API if we have a global API key
+                                String globalApiKey = wasenderConfigService.getApiKey().orElse(null);
+                                if (globalApiKey != null && session.getSessionId() != null) {
+                                    try {
+                                        Map<String, Object> sessionDetails = wasenderQRService.getSessionDetails(
+                                            session.getSessionId(), globalApiKey);
+                                        
+                                        if (sessionDetails != null && Boolean.TRUE.equals(sessionDetails.get("success"))) {
+                                            @SuppressWarnings("unchecked")
+                                            Map<String, Object> data = (Map<String, Object>) sessionDetails.get("data");
+                                            if (data != null) {
+                                                // Look for API key in the response
+                                                if (data.get("api_key") != null) {
+                                                    sessionApiKey = data.get("api_key").toString();
+                                                } else if (data.get("apiKey") != null) {
+                                                    sessionApiKey = data.get("apiKey").toString();
+                                                } else if (data.get("token") != null) {
+                                                    sessionApiKey = data.get("token").toString();
+                                                } else if (data.get("session_api_key") != null) {
+                                                    sessionApiKey = data.get("session_api_key").toString();
+                                                }
+                                                
+                                                if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
+                                                    // Update the session in database
+                                                    session.setSessionApiKey(sessionApiKey.trim());
+                                                    whatsAppSessionRepository.save(session);
+                                                    log.info("Fetched and saved session API key for scheduled message, session: {}", requestedSessionName);
+                                                }
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        log.warn("Failed to fetch session API key from WASender for scheduled message, session: {}. Error: {}", 
+                                                requestedSessionName, e.getMessage());
+                                    }
+                                }
+                            }
+                        } else {
+                            log.warn("Session not found in database for scheduled message, session: {}", requestedSessionName);
+                        }
+                    } catch (Exception e) {
+                        log.error("Error retrieving session API key for scheduled message, session: {}. Error: {}", 
+                                requestedSessionName, e.getMessage(), e);
+                    }
+                }
+                
+                // Use session-specific API key if found, otherwise fallback to global API key
+                if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
+                    payload.setWasenderApiKey(sessionApiKey.trim());
+                    log.info("Using session-specific API key for scheduled WhatsApp message, session: {}", requestedSessionName);
+                } else {
+                    // Fallback to global config
+                    wasenderConfigService.getApiKey().ifPresent(payload::setWasenderApiKey);
+                    if (requestedSessionName != null && !requestedSessionName.trim().isEmpty()) {
+                        log.warn("Session API key not found for scheduled message, session: {}. Using global API key as fallback.", requestedSessionName);
+                    }
+                }
+                
+                // Validate that we have an API key
+                if (payload.getWasenderApiKey() == null || payload.getWasenderApiKey().trim().isEmpty()) {
+                    throw new IllegalStateException("WASender API key is required for WhatsApp scheduled messages. Please configure it first or ensure the session API key is available.");
+                }
             }
             
             if (messageLog.getMetadata() != null) {
