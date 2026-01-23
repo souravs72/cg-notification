@@ -22,11 +22,12 @@ CREATE INDEX IF NOT EXISTS idx_retry_query ON message_logs(status, failure_type,
 WHERE status = 'FAILED' AND failure_type IS NOT NULL;
 
 -- Backfill existing FAILED messages based on error_message pattern
--- Messages with "Kafka" in error_message are KAFKA failures, others are CONSUMER
+-- Messages with "Kafka" in error_message are KAFKA failures; all other FAILED (including
+-- error_message IS NULL) get CONSUMER so the constraint migration can require NOT NULL.
 UPDATE message_logs 
 SET failure_type = CASE 
     WHEN status = 'FAILED' AND error_message LIKE '%Kafka%' THEN 'KAFKA'::failure_type
-    WHEN status = 'FAILED' AND error_message IS NOT NULL THEN 'CONSUMER'::failure_type
+    WHEN status = 'FAILED' THEN 'CONSUMER'::failure_type
     ELSE NULL
 END
 WHERE status = 'FAILED' AND failure_type IS NULL;
