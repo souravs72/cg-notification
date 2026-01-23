@@ -46,7 +46,7 @@
         <!-- CI can override with: mvn verify -DskipITs=false (requires Docker) -->
         <skipITs>true</skipITs>
         <!-- Dependency version alignment -->
-        <guava.version>33.2.1-jre</guava.version>
+        <guava.version>33.5.0-jre</guava.version>
         <errorprone.version>2.46.0</errorprone.version>
         <checkerqual.version>3.42.0</checkerqual.version>
         <j2objc.version>3.1</j2objc.version>
