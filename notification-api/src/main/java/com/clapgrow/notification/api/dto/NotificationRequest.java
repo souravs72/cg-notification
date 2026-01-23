@@ -26,6 +26,13 @@ public class NotificationRequest {
     private String documentUrl;
     private String fileName;
     private String caption;
+    private String whatsappSessionName; // Specific WhatsApp session to use
+    /**
+     * WASender API key for WhatsApp messages.
+     * Required for WhatsApp channel when no site is provided.
+     * ⚠️ SECURITY: This field is sensitive and should never be logged or exposed in responses.
+     */
+    private String wasenderApiKey;
 
     // Email specific fields
     private String fromEmail;

@@ -4,6 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+
+/**
+ * Admin authentication service using API key validation.
+ * Uses MessageDigest.isEqual for constant-time comparison to prevent timing attacks.
+ */
 @Service
 @Slf4j
 public class AdminAuthService {
@@ -33,18 +40,22 @@ public class AdminAuthService {
         }
     }
     
+    /**
+     * Constant-time string comparison using MessageDigest.isEqual.
+     * This prevents timing attacks by ensuring comparison always takes the same time.
+     * 
+     * @param a First string to compare
+     * @param b Second string to compare
+     * @return true if strings are equal, false otherwise
+     */
     private boolean constantTimeEquals(String a, String b) {
         if (a == null || b == null) {
             return a == b;
         }
-        int maxLength = Math.max(a.length(), b.length());
-        int result = 0;
-        for (int i = 0; i < maxLength; i++) {
-            char charA = (i < a.length()) ? a.charAt(i) : 0;
-            char charB = (i < b.length()) ? b.charAt(i) : 0;
-            result |= charA ^ charB;
-        }
-        return result == 0 && a.length() == b.length();
+        return MessageDigest.isEqual(
+            a.getBytes(StandardCharsets.UTF_8),
+            b.getBytes(StandardCharsets.UTF_8)
+        );
     }
 }
 

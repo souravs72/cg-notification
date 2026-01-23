@@ -1,3 +1,4 @@
+---
 name: PR Checks
 
 on:
@@ -44,7 +45,10 @@ jobs:
       - name: Check for large files
         run: |
           MAX_SIZE=10485760
-          large_files=$(find . -type f -size +${MAX_SIZE}c -not -path './.git/*' -not -path './target/*' -not -path './node_modules/*')
+          large_files=$(find . -type f -size +${MAX_SIZE}c \
+            -not -path './.git/*' \
+            -not -path './target/*' \
+            -not -path './node_modules/*')
           if [ -n "$large_files" ]; then
             echo "❌ Large files detected:"
             echo "$large_files"

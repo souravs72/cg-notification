@@ -1,17 +1,24 @@
 #!/bin/bash
 
-# Script to set up GitHub Secrets for the notification system
+# Set up GitHub Secrets for CI/CD
 # Usage: ./scripts/setup-github-secrets.sh
 
-set -e
+set -euo pipefail
 
-REPO="souravs72/cg-notification"
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# Repository (update if different)
+REPO=${GITHUB_REPO:-"souravs72/cg-notification"}
 
 echo "=========================================="
 echo "GitHub Secrets Setup"
 echo "=========================================="
 echo ""
-echo "This script will help you set up GitHub Secrets for:"
+echo "This script will help you set up GitHub Secrets for CI/CD:"
 echo "  - SENDGRID_API_KEY"
 echo "  - WASENDER_API_KEY"
 echo "  - DB_PASSWORD"
@@ -22,19 +29,19 @@ echo ""
 
 # Check if gh CLI is installed
 if ! command -v gh &> /dev/null; then
-    echo "❌ GitHub CLI (gh) is not installed"
+    echo -e "${RED}✗${NC} GitHub CLI (gh) is not installed"
     echo "Install it from: https://cli.github.com/"
     exit 1
 fi
 
 # Check if authenticated
 if ! gh auth status &> /dev/null; then
-    echo "❌ Not authenticated with GitHub"
+    echo -e "${RED}✗${NC} Not authenticated with GitHub"
     echo "Run: gh auth login"
     exit 1
 fi
 
-echo "✅ GitHub CLI is installed and authenticated"
+echo -e "${GREEN}✓${NC} GitHub CLI is installed and authenticated"
 echo ""
 
 # Function to set secret
@@ -43,13 +50,17 @@ set_secret() {
     local secret_value=$2
     
     if [ -z "$secret_value" ]; then
-        echo "⚠️  Skipping $secret_name (no value provided)"
-        return
+        echo -e "${YELLOW}⚠${NC}  Skipping $secret_name (no value provided)"
+        return 0
     fi
     
     echo "Setting $secret_name..."
-    echo "$secret_value" | gh secret set "$secret_name" --repo "$REPO"
-    echo "✅ $secret_name set successfully"
+    if echo "$secret_value" | gh secret set "$secret_name" --repo "$REPO" 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} $secret_name set successfully"
+    else
+        echo -e "${RED}✗${NC} Failed to set $secret_name"
+        return 1
+    fi
     echo ""
 }
 
@@ -71,7 +82,7 @@ echo ""
 set_secret "DB_USERNAME" "$DB_USER"
 
 echo "=========================================="
-echo "✅ GitHub Secrets setup complete!"
+echo -e "${GREEN}✓ GitHub Secrets setup complete!${NC}"
 echo "=========================================="
 echo ""
 echo "You can verify secrets at:"

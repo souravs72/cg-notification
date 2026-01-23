@@ -32,15 +32,23 @@ public class MessageLog extends BaseAuditableEntity {
     @Column(name = "message_id", nullable = false, unique = true, length = 100)
     private String messageId;
 
-    @Column(name = "site_id", nullable = false)
+    @Column(name = "site_id", nullable = true)
     private UUID siteId;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "channel", nullable = false, columnDefinition = "notification_channel")
+    @org.hibernate.annotations.Type(com.clapgrow.notification.api.config.PostgreSQLNotificationChannelType.class)
     private NotificationChannel channel;
 
-    @Enumerated(EnumType.STRING)
+    /**
+     * Current delivery status.
+     * 
+     * Status history is automatically appended to message_status_history table
+     * when status changes. See MessageStatusHistoryService for details.
+     * 
+     * Benefits: Retry timelines, failure analysis, compliance audit trails
+     */
     @Column(name = "status", nullable = false, columnDefinition = "delivery_status")
+    @org.hibernate.annotations.Type(com.clapgrow.notification.api.config.PostgreSQLDeliveryStatusType.class)
     private DeliveryStatus status;
 
     @Column(name = "recipient", nullable = false, length = 255)
@@ -55,6 +63,15 @@ public class MessageLog extends BaseAuditableEntity {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    /**
+     * Type of failure (KAFKA or CONSUMER).
+     * Only set when status is FAILED.
+     * Used to efficiently query retry candidates without filtering in Java.
+     */
+    @Column(name = "failure_type", columnDefinition = "failure_type")
+    @org.hibernate.annotations.Type(com.clapgrow.notification.api.config.PostgreSQLFailureTypeType.class)
+    private com.clapgrow.notification.api.enums.FailureType failureType;
+
     @Column(name = "retry_count", nullable = false)
     private Integer retryCount = 0;
 
@@ -65,6 +82,7 @@ public class MessageLog extends BaseAuditableEntity {
     private LocalDateTime deliveredAt;
 
     @Column(name = "metadata", columnDefinition = "JSONB")
+    @org.hibernate.annotations.Type(com.clapgrow.notification.api.config.PostgreSQLJSONBType.class)
     private String metadata;
 
     // WhatsApp specific fields

@@ -36,6 +36,13 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
+        <!-- Common utilities -->
+        <dependency>
+            <groupId>com.clapgrow</groupId>
+            <artifactId>common-proto</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Kafka -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>
@@ -46,35 +53,19 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>${postgresql.version}</version>
+            <exclusions>
+                <!-- Exclude conflicting checker-qual version, use managed version -->
+                <exclusion>
+                    <groupId>org.checkerframework</groupId>
+                    <artifactId>checker-qual</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- SendGrid -->
         <dependency>
             <groupId>com.sendgrid</groupId>
             <artifactId>sendgrid-java</artifactId>
-            <version>4.10.1</version>
-        </dependency>
-
-        <!-- gRPC -->
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-netty-shaded</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-protobuf</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-stub</artifactId>
-        </dependency>
-
-        <!-- Common Proto -->
-        <dependency>
-            <groupId>com.clapgrow</groupId>
-            <artifactId>common-proto</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <!-- Utilities -->
@@ -82,10 +73,6 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
         </dependency>
 
         <!-- Test -->
@@ -97,6 +84,7 @@
     </dependencies>
 
     <build>
+        <finalName>email-worker</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
