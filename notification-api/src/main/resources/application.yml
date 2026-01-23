@@ -7,21 +7,35 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:notification_user}
     password: ${SPRING_DATASOURCE_PASSWORD:notification_pass}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      pool-name: NotificationApiHikariPool
+      auto-commit: false  # Disable autocommit for proper transaction management
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${HIBERNATE_DDL_AUTO:validate}
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: false
         jdbc:
           lob:
             non_contextual_creation: true
+        connection:
+          provider_disables_autocommit: true
 
   kafka:
-    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    # IMPORTANT:
+    # Default matches Docker internal Kafka listener (kafka:29092).
+    # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -42,27 +56,44 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: ${ACTUATOR_ENDPOINTS:health,info,prometheus,metrics}
+      base-path: /actuator
   endpoint:
     health:
       probes:
         enabled: true
+      show-details: ${ACTUATOR_HEALTH_DETAILS:never}
   metrics:
     export:
       prometheus:
         enabled: true
+  info:
+    env:
+      enabled: true
+
+actuator:
+  enabled: ${ACTUATOR_ENABLED:false}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+  allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,DELETE,PATCH,OPTIONS}
+  allowed-headers: ${CORS_ALLOWED_HEADERS:*}
+  max-age: ${CORS_MAX_AGE:3600}
 
 logging:
   level:
-    root: INFO
-    com.clapgrow.notification: DEBUG
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.clapgrow.notification: ${LOG_LEVEL_APP:INFO}
     org.springframework.kafka: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: ${LOG_SQL:false}
+    org.hibernate.type.descriptor.sql.BasicBinder: ${LOG_SQL_PARAMS:false}
 
 springdoc:
   api-docs:
     path: /api-docs
   swagger-ui:
-    enabled: true
+    enabled: ${SWAGGER_UI_ENABLED:false}
     operations-sorter: method
     tags-sorter: alpha
     try-it-out-enabled: true
@@ -70,12 +101,29 @@ springdoc:
 admin:
   api-key: ${ADMIN_API_KEY}
 
+whatsapp-worker:
+  api:
+    base-url: ${WHATSAPP_WORKER_API_BASE_URL:http://whatsapp-worker:8082}
+
 wasender:
   api:
     base-url: ${WASENDER_API_BASE_URL:https://wasenderapi.com/api}
     key: ${WASENDER_API_KEY}
 
+subscription:
+  defaults:
+    free-trial-sessions: ${SUBSCRIPTION_DEFAULT_FREE_TRIAL_SESSIONS:3}
+    paid-sessions: ${SUBSCRIPTION_DEFAULT_PAID_SESSIONS:100}
+
 file:
   upload:
     dir: ${FILE_UPLOAD_DIR:/app/uploads}
     base-url: ${FILE_UPLOAD_BASE_URL:http://localhost:8080/files}
+
+# Encryption configuration for sensitive fields at rest
+# To enable: Set encryption.enabled=true and encryption.key=<base64-key>
+# To generate a key, use: EncryptedStringAttributeConverter.generateEncryptionKey()
+# Default: disabled (fields stored in plaintext for backward compatibility)
+encryption:
+  enabled: ${ENCRYPTION_ENABLED:false}
+  key: ${ENCRYPTION_KEY:}

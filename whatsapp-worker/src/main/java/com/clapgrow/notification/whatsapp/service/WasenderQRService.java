@@ -1,4 +1,4 @@
-package com.clapgrow.notification.api.service;
+package com.clapgrow.notification.whatsapp.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +10,8 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 
+import reactor.util.retry.Retry;
+
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -17,6 +19,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * WASender QR code and session management service.
+ * 
+ * ⚠️ ARCHITECTURE: This service belongs in whatsapp-worker as it contains
+ * provider-specific control-plane logic. It directly calls WASender API.
+ * 
+ * This service handles:
+ * - QR code generation and management
+ * - Session lifecycle (create, connect, disconnect, delete, update)
+ * - Session status and details retrieval
+ * - Message and session logs
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -27,6 +41,137 @@ public class WasenderQRService {
     
     @Value("${wasender.api.base-url:https://wasenderapi.com/api}")
     private String wasenderBaseUrl;
+
+    /**
+     * Check if a session identifier is numeric (session ID) or a name.
+     * @param identifier Session identifier to check
+     * @return true if identifier is numeric (all digits), false otherwise
+     */
+    boolean isNumericSessionId(String identifier) {
+        return identifier != null && identifier.trim().matches("^\\d+$");
+    }
+
+    /**
+     * Determine if the /connect endpoint should be used based on error response.
+     * @param statusCode HTTP status code from the response
+     * @param errorBody Error response body (may be null)
+     * @return true if /connect endpoint should be used, false otherwise
+     */
+    boolean shouldUseConnectEndpoint(int statusCode, String errorBody) {
+        // 404 means session doesn't exist - use /connect to initialize
+        if (statusCode == 404) {
+            return true;
+        }
+        
+        // NEED_SCAN error means session needs to be initialized
+        if (errorBody != null && errorBody.contains("NEED_SCAN")) {
+            return true;
+        }
+        
+        // "No query results" or "not found" errors indicate session doesn't exist
+        if (errorBody != null && (errorBody.contains("No query results") || errorBody.contains("not found"))) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Check if error indicates session is already connected.
+     * @param errorBody Error response body (may be null)
+     * @return true if session is already connected, false otherwise
+     */
+    boolean isSessionAlreadyConnected(String errorBody) {
+        return errorBody != null && 
+               (errorBody.contains("already connected") || errorBody.contains("is already connected"));
+    }
+
+    /**
+     * Build QR code URL for a session.
+     * @param sessionId Session ID
+     * @return Full URL for QR code endpoint
+     */
+    String buildQRCodeUrl(String sessionId) {
+        return wasenderBaseUrl + "/whatsapp-sessions/" + sessionId + "/qrcode";
+    }
+
+    /**
+     * Build connect URL for a session.
+     * @param sessionId Session ID (must be numeric)
+     * @return Full URL for connect endpoint
+     */
+    String buildConnectUrl(String sessionId) {
+        return wasenderBaseUrl + "/whatsapp-sessions/" + sessionId + "/connect";
+    }
+
+    /**
+     * Resolve session name to session ID.
+     * This method ALWAYS resolves names to IDs - never returns a name.
+     * 
+     * @param sessionName Session name to resolve
+     * @param apiKey WASender API key
+     * @return Session ID (numeric string)
+     * @throws IllegalArgumentException if session name cannot be resolved
+     */
+    private String resolveSessionIdByName(String sessionName, String apiKey) {
+        if (sessionName == null || sessionName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Session name cannot be null or empty");
+        }
+        
+        log.info("Resolving session name '{}' to session ID", sessionName);
+        
+        try {
+            Map<String, Object> allSessions = getAllSessions(apiKey);
+            if (allSessions != null && allSessions.containsKey("data")) {
+                Object dataObj = allSessions.get("data");
+                if (dataObj instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> sessions = (List<Map<String, Object>>) dataObj;
+                    for (Map<String, Object> session : sessions) {
+                        Object sessionNameObj = session.get("name");
+                        if (sessionNameObj != null && sessionNameObj.toString().equals(sessionName.trim())) {
+                            Object idObj = session.get("id");
+                            if (idObj != null) {
+                                String sessionId = idObj.toString();
+                                log.info("Resolved session name '{}' to session ID: {}", sessionName, sessionId);
+                                return sessionId;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            throw new IllegalArgumentException("Session not found with name: " + sessionName);
+        } catch (Exception e) {
+            if (e instanceof IllegalArgumentException) {
+                throw e;
+            }
+            log.error("Failed to resolve session name '{}' to session ID", sessionName, e);
+            throw new IllegalArgumentException("Failed to resolve session name '" + sessionName + "': " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Ensure session identifier is a numeric ID.
+     * If it's a name, resolve it to an ID first.
+     * 
+     * @param sessionIdentifier Session ID or name
+     * @param apiKey WASender API key (required if identifier is a name)
+     * @return Numeric session ID
+     * @throws IllegalArgumentException if name cannot be resolved
+     */
+    private String ensureNumericSessionId(String sessionIdentifier, String apiKey) {
+        if (sessionIdentifier == null || sessionIdentifier.trim().isEmpty()) {
+            throw new IllegalArgumentException("Session identifier cannot be null or empty");
+        }
+        
+        if (isNumericSessionId(sessionIdentifier)) {
+            return sessionIdentifier.trim();
+        }
+        
+        // It's a name - resolve it to an ID
+        return resolveSessionIdByName(sessionIdentifier.trim(), apiKey);
+    }
 
     /**
      * Get QR code for a WhatsApp session.
@@ -51,53 +196,15 @@ public class WasenderQRService {
                 return errorResponse;
             }
             
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
-            // Determine if identifier is an ID (numeric) or a name
-            String sessionId = null;
-            boolean isNumeric = sessionIdentifier.trim().matches("^\\d+$");
-            
-            if (isNumeric) {
-                // It's already an ID, use it directly
-                sessionId = sessionIdentifier.trim();
-                log.info("Using session ID: {}", sessionId);
-            } else {
-                // It's a name - we need to look up the session by name to get its ID
-                // Note: WASender API doesn't have a direct "get by name" endpoint,
-                // so we'll try to use the name directly first, and if that fails, we'll use /connect
-                // which might work with the name
-                log.info("Session identifier '{}' appears to be a name, not an ID. Attempting to use name directly. If this fails, we'll try to look it up.", sessionIdentifier);
-                sessionId = sessionIdentifier.trim();
-                
-                // Try to look up the session by name to get its ID
-                try {
-                    Map<String, Object> allSessions = getAllSessions(apiKey);
-                    if (allSessions != null && allSessions.containsKey("data")) {
-                        Object dataObj = allSessions.get("data");
-                        if (dataObj instanceof List) {
-                            @SuppressWarnings("unchecked")
-                            List<Map<String, Object>> sessions = (List<Map<String, Object>>) dataObj;
-                            for (Map<String, Object> session : sessions) {
-                                Object sessionNameObj = session.get("name");
-                                if (sessionNameObj != null && sessionNameObj.toString().equals(sessionIdentifier)) {
-                                    Object idObj = session.get("id");
-                                    if (idObj != null) {
-                                        sessionId = idObj.toString();
-                                        log.info("Found session ID {} for name '{}'", sessionId, sessionIdentifier);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    log.warn("Could not look up session by name, will try using name directly: {}", e.getMessage());
-                }
-            }
+            // CRITICAL: Always resolve session name to numeric ID before calling WASender endpoints
+            // WASender requires numeric session ID in URLs - never use names directly
+            String sessionId = ensureNumericSessionId(sessionIdentifier, apiKey);
             
             // First, try to get QR code using /qrcode endpoint (for refreshing existing QR codes)
             // WASender API requires the session ID (integer) in the URL
-            String qrCodeUrl = wasenderBaseUrl + "/whatsapp-sessions/" + sessionId + "/qrcode";
+            String qrCodeUrl = buildQRCodeUrl(sessionId);
             String qrCodeResponse = null;
             boolean useConnectEndpoint = false;
             
@@ -108,37 +215,35 @@ public class WasenderQRService {
                     .retrieve()
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(30))
+                    .retryWhen(Retry.fixedDelay(2, Duration.ofSeconds(2))
+                        .filter(throwable -> !(throwable instanceof WebClientResponseException 
+                            && ((WebClientResponseException) throwable).getStatusCode().is4xxClientError())))
                     .block();
             } catch (WebClientResponseException e) {
                 String errorBody = e.getResponseBodyAsString();
-                // If we get a 404, the session doesn't exist - try /connect to create/initialize it
-                if (e.getStatusCode().value() == 404) {
-                    log.info("Session not found (404), using /connect endpoint to initialize session: {}", sessionId);
-                    useConnectEndpoint = true;
-                } else if (errorBody != null && errorBody.contains("NEED_SCAN")) {
-                    // If we get an error saying session is not in NEED_SCAN state, use /connect endpoint
-                    log.info("Session not in NEED_SCAN state, using /connect endpoint for session: {}", sessionId);
-                    useConnectEndpoint = true;
-                } else if (errorBody != null && (errorBody.contains("already connected") || errorBody.contains("is already connected"))) {
-                    // Session is already connected - return error with status information
+                int statusCode = e.getStatusCode().value();
+                
+                // Check if session is already connected
+                if (isSessionAlreadyConnected(errorBody)) {
                     log.info("Session {} is already connected, cannot generate QR code", sessionId);
                     Map<String, Object> errorResponse = new HashMap<>();
                     errorResponse.put("success", false);
                     errorResponse.put("error", "WhatsApp session is already connected");
                     errorResponse.put("status", "connected");
-                    errorResponse.put("statusCode", e.getStatusCode().value());
+                    errorResponse.put("statusCode", statusCode);
                     errorResponse.put("statusText", e.getStatusCode().toString());
                     errorResponse.put("sessionId", sessionId);
                     return errorResponse;
+                }
+                
+                // Check if we should use /connect endpoint
+                if (shouldUseConnectEndpoint(statusCode, errorBody)) {
+                    log.info("Using /connect endpoint to initialize session: {} (status: {}, error: {})", 
+                        sessionId, statusCode, errorBody != null ? "present" : "none");
+                    useConnectEndpoint = true;
                 } else {
-                    // For other errors, check if it's a "session not found" type error
-                    if (errorBody != null && (errorBody.contains("No query results") || errorBody.contains("not found"))) {
-                        log.info("Session not found in WASender, using /connect endpoint to initialize: {}", sessionId);
-                        useConnectEndpoint = true;
-                    } else {
-                        // Re-throw if it's a different error
-                        throw e;
-                    }
+                    // Re-throw if it's a different error
+                    throw e;
                 }
             }
             
@@ -146,7 +251,7 @@ public class WasenderQRService {
             if (useConnectEndpoint || (qrCodeResponse == null)) {
                 log.info("Calling /connect endpoint to initialize session and get QR code: {}", sessionId);
                 // WASender API requires session ID (integer) in the URL
-                String connectUrl = wasenderBaseUrl + "/whatsapp-sessions/" + sessionId + "/connect";
+                String connectUrl = buildConnectUrl(sessionId);
                 qrCodeResponse = webClient.post()
                     .uri(connectUrl)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
@@ -154,6 +259,9 @@ public class WasenderQRService {
                     .retrieve()
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(30))
+                    .retryWhen(Retry.fixedDelay(2, Duration.ofSeconds(2))
+                        .filter(throwable -> !(throwable instanceof WebClientResponseException 
+                            && ((WebClientResponseException) throwable).getStatusCode().is4xxClientError())))
                     .block();
             }
             
@@ -217,8 +325,8 @@ public class WasenderQRService {
             response.put("qrCode", qrCodeData);
             // Always include session ID - use the one from response if available, otherwise use the one we tried
             response.put("sessionId", actualSessionId);
-            if (!isNumeric && !actualSessionId.equals(sessionId)) {
-                // Only include name if it was provided and we didn't get a different ID from response
+            // Include original identifier if it was a name (for user reference)
+            if (!isNumericSessionId(sessionIdentifier) && !actualSessionId.equals(sessionId)) {
                 response.put("sessionName", sessionIdentifier);
             }
             if (status != null) {
@@ -231,13 +339,14 @@ public class WasenderQRService {
             String errorMessage = e.getMessage();
             String responseBody = e.getResponseBodyAsString();
             
-            log.error("WASender API error fetching QR code for session '{}': Status={}, Response={}", 
-                sessionIdentifier, e.getStatusCode(), responseBody);
+            // SECURITY: Do not log raw response body - may contain secrets
+            log.error("WASender API error fetching QR code for session '{}': Status={}, response redacted", 
+                sessionIdentifier, e.getStatusCode());
             
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             
-            // Try to extract a more user-friendly error message from the response
+            // Use only parsed message/error fields; never expose raw response body
             if (responseBody != null && !responseBody.trim().isEmpty()) {
                 try {
                     JsonNode errorJson = objectMapper.readTree(responseBody);
@@ -249,10 +358,10 @@ public class WasenderQRService {
                     } else if (errorJson.has("error")) {
                         errorResponse.put("error", errorJson.get("error").asText());
                     } else {
-                        errorResponse.put("error", responseBody);
+                        errorResponse.put("error", "Provider error (details redacted)");
                     }
                 } catch (Exception parseException) {
-                    errorResponse.put("error", responseBody);
+                    errorResponse.put("error", "Provider error (details redacted)");
                 }
             } else {
                 errorResponse.put("error", errorMessage);
@@ -283,7 +392,7 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
             
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
             String createUrl = wasenderBaseUrl + "/whatsapp-sessions";
             
@@ -447,30 +556,30 @@ public class WasenderQRService {
             String errorMessage = e.getMessage();
             String responseBody = e.getResponseBodyAsString();
             
-            log.error("WASender API error creating session '{}': Status={}, Response={}", 
-                sessionName, e.getStatusCode(), responseBody);
+            // SECURITY: Do not log raw response body - may contain secrets
+            log.error("WASender API error creating session '{}': Status={}, response redacted", 
+                sessionName, e.getStatusCode());
             
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             
-            // Try to extract a more user-friendly error message from the response
+            // Use only parsed message/error fields; never expose raw response body
             if (responseBody != null && !responseBody.trim().isEmpty()) {
                 try {
                     JsonNode errorJson = objectMapper.readTree(responseBody);
                     if (errorJson.has("message")) {
                         String message = errorJson.get("message").asText();
                         errorResponse.put("error", message);
-                        // Also include help text if available
                         if (errorJson.has("help")) {
                             errorResponse.put("help", errorJson.get("help").asText());
                         }
                     } else if (errorJson.has("error")) {
                         errorResponse.put("error", errorJson.get("error").asText());
                     } else {
-                        errorResponse.put("error", responseBody);
+                        errorResponse.put("error", "Provider error (details redacted)");
                     }
                 } catch (Exception parseException) {
-                    errorResponse.put("error", responseBody);
+                    errorResponse.put("error", "Provider error (details redacted)");
                 }
             } else {
                 errorResponse.put("error", errorMessage);
@@ -497,21 +606,14 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
             
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
-            // WASender API requires session ID (integer) in the URL, not the name
-            // Check if identifier is numeric (ID) or a name
-            boolean isNumeric = sessionIdentifier.trim().matches("^\\d+$");
-            String sessionId = sessionIdentifier.trim();
+            // CRITICAL: Always resolve session name to numeric ID before calling WASender endpoints
+            String sessionId = ensureNumericSessionId(sessionIdentifier, apiKey);
             
-            if (!isNumeric) {
-                log.warn("connectSession called with session name '{}' instead of ID. WASender API requires session ID. This may fail.", sessionIdentifier);
-            }
+            String connectUrl = buildConnectUrl(sessionId);
             
-            // Use session ID directly (WASender API expects integer ID in URL)
-            String connectUrl = wasenderBaseUrl + "/whatsapp-sessions/" + sessionId + "/connect";
-            
-            log.info("Connecting WASender session: {}", sessionIdentifier);
+            log.info("Connecting WASender session: {} (ID: {})", sessionIdentifier, sessionId);
             
             String response = webClient.post()
                 .uri(connectUrl)
@@ -520,6 +622,9 @@ public class WasenderQRService {
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(30))
+                .retryWhen(Retry.fixedDelay(2, Duration.ofSeconds(2))
+                    .filter(throwable -> !(throwable instanceof WebClientResponseException 
+                        && ((WebClientResponseException) throwable).getStatusCode().is4xxClientError())))
                 .block();
             
             // Parse response to extract QR code and status
@@ -547,8 +652,9 @@ public class WasenderQRService {
             result.put("success", true);
             result.put("response", response);
             result.put("sessionId", sessionId);
-            if (!isNumeric) {
-                result.put("sessionName", sessionIdentifier); // Only include if it was a name
+            // Include original identifier if it was a name (for user reference)
+            if (!isNumericSessionId(sessionIdentifier)) {
+                result.put("sessionName", sessionIdentifier);
             }
             if (qrCodeData != null) {
                 result.put("qrCode", qrCodeData);
@@ -563,8 +669,9 @@ public class WasenderQRService {
             String errorMessage = e.getMessage();
             String responseBody = e.getResponseBodyAsString();
             
-            log.error("WASender API error connecting session '{}': Status={}, Response={}", 
-                sessionIdentifier, e.getStatusCode(), responseBody);
+            // SECURITY: Do not log raw response body - may contain secrets
+            log.error("WASender API error connecting session '{}': Status={}, response redacted", 
+                sessionIdentifier, e.getStatusCode());
             
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
@@ -573,18 +680,17 @@ public class WasenderQRService {
                 try {
                     JsonNode errorJson = objectMapper.readTree(responseBody);
                     if (errorJson.has("message")) {
-                        String message = errorJson.get("message").asText();
-                        errorResponse.put("error", message);
+                        errorResponse.put("error", errorJson.get("message").asText());
                         if (errorJson.has("help")) {
                             errorResponse.put("help", errorJson.get("help").asText());
                         }
                     } else if (errorJson.has("error")) {
                         errorResponse.put("error", errorJson.get("error").asText());
                     } else {
-                        errorResponse.put("error", responseBody);
+                        errorResponse.put("error", "Provider error (details redacted)");
                     }
                 } catch (Exception parseException) {
-                    errorResponse.put("error", responseBody);
+                    errorResponse.put("error", "Provider error (details redacted)");
                 }
             } else {
                 errorResponse.put("error", errorMessage);
@@ -626,15 +732,10 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
             
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
-            // WASender API requires session ID (integer) in the URL, not the name
-            boolean isNumeric = sessionIdentifier.trim().matches("^\\d+$");
-            String sessionId = sessionIdentifier.trim();
-            
-            if (!isNumeric) {
-                log.warn("getMessageLogs called with session name '{}' instead of ID. WASender API requires session ID.", sessionIdentifier);
-            }
+            // CRITICAL: Always resolve session name to numeric ID before calling WASender endpoints
+            String sessionId = ensureNumericSessionId(sessionIdentifier, apiKey);
             
             // Build URL with pagination parameters - use message-logs endpoint
             String logsUrl = wasenderBaseUrl + "/whatsapp-sessions/" + URLEncoder.encode(sessionId, StandardCharsets.UTF_8) + "/message-logs";
@@ -698,10 +799,10 @@ public class WasenderQRService {
                     } else if (errorJson.has("error")) {
                         errorResponse.put("error", errorJson.get("error").asText());
                     } else {
-                        errorResponse.put("error", responseBody);
+                        errorResponse.put("error", "Provider error (details redacted)");
                     }
                 } catch (Exception parseException) {
-                    errorResponse.put("error", responseBody);
+                    errorResponse.put("error", "Provider error (details redacted)");
                 }
             } else {
                 errorResponse.put("error", errorMessage);
@@ -743,15 +844,11 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
             
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
             // WASender API requires session ID (integer) in the URL, not the name
-            boolean isNumeric = sessionIdentifier.trim().matches("^\\d+$");
-            String sessionId = sessionIdentifier.trim();
-            
-            if (!isNumeric) {
-                log.warn("getSessionLogs called with session name '{}' instead of ID. WASender API requires session ID.", sessionIdentifier);
-            }
+            // CRITICAL: Always resolve session name to numeric ID before calling WASender endpoints
+            String sessionId = ensureNumericSessionId(sessionIdentifier, apiKey);
             
             // Build URL with pagination parameters - use session-logs endpoint
             String logsUrl = wasenderBaseUrl + "/whatsapp-sessions/" + URLEncoder.encode(sessionId, StandardCharsets.UTF_8) + "/session-logs";
@@ -804,8 +901,8 @@ public class WasenderQRService {
             String errorMessage = e.getMessage();
             String responseBody = e.getResponseBodyAsString();
             
-            log.error("WASender API error fetching session logs for session '{}': Status={}, Response={}", 
-                sessionIdentifier, e.getStatusCode(), responseBody);
+            log.error("WASender API error fetching session logs for session '{}': Status={}, response redacted", 
+                sessionIdentifier, e.getStatusCode());
             
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
@@ -821,10 +918,10 @@ public class WasenderQRService {
                     } else if (errorJson.has("error")) {
                         errorResponse.put("error", errorJson.get("error").asText());
                     } else {
-                        errorResponse.put("error", responseBody);
+                        errorResponse.put("error", "Provider error (details redacted)");
                     }
                 } catch (Exception parseException) {
-                    errorResponse.put("error", responseBody);
+                    errorResponse.put("error", "Provider error (details redacted)");
                 }
             } else {
                 errorResponse.put("error", errorMessage);
@@ -855,7 +952,7 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
             
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
             String sessionsUrl = wasenderBaseUrl + "/whatsapp-sessions";
             
@@ -906,8 +1003,8 @@ public class WasenderQRService {
             String errorMessage = e.getMessage();
             String responseBody = e.getResponseBodyAsString();
             
-            log.error("WASender API error fetching all sessions: Status={}, Response={}", 
-                e.getStatusCode(), responseBody);
+            log.error("WASender API error fetching all sessions: Status={}, response redacted", 
+                e.getStatusCode());
             
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
@@ -923,10 +1020,10 @@ public class WasenderQRService {
                     } else if (errorJson.has("error")) {
                         errorResponse.put("error", errorJson.get("error").asText());
                     } else {
-                        errorResponse.put("error", responseBody);
+                        errorResponse.put("error", "Provider error (details redacted)");
                     }
                 } catch (Exception parseException) {
-                    errorResponse.put("error", responseBody);
+                    errorResponse.put("error", "Provider error (details redacted)");
                 }
             } else {
                 errorResponse.put("error", errorMessage);
@@ -958,18 +1055,14 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
             
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
-            boolean isNumeric = sessionIdentifier.trim().matches("^\\d+$");
-            String sessionId = sessionIdentifier.trim();
-            
-            if (!isNumeric) {
-                log.warn("getSessionDetails called with session name '{}' instead of ID. WASender API requires session ID.", sessionIdentifier);
-            }
+            // CRITICAL: Always resolve session name to numeric ID before calling WASender endpoints
+            String sessionId = ensureNumericSessionId(sessionIdentifier, apiKey);
             
             String sessionUrl = wasenderBaseUrl + "/whatsapp-sessions/" + URLEncoder.encode(sessionId, StandardCharsets.UTF_8);
             
-            log.info("Fetching session details for: {}", sessionId);
+            log.info("Fetching session details for: {} (ID: {})", sessionIdentifier, sessionId);
             
             String response = webClient.get()
                 .uri(sessionUrl)
@@ -977,6 +1070,9 @@ public class WasenderQRService {
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(30))
+                .retryWhen(Retry.fixedDelay(2, Duration.ofSeconds(2))
+                    .filter(throwable -> !(throwable instanceof WebClientResponseException 
+                        && ((WebClientResponseException) throwable).getStatusCode().is4xxClientError())))
                 .block();
             
             if (response == null || response.trim().isEmpty()) {
@@ -1025,8 +1121,8 @@ public class WasenderQRService {
             String errorMessage = e.getMessage();
             String responseBody = e.getResponseBodyAsString();
             
-            log.error("WASender API error fetching session details for '{}': Status={}, Response={}", 
-                sessionIdentifier, e.getStatusCode(), responseBody);
+            log.error("WASender API error fetching session details for '{}': Status={}, response redacted", 
+                sessionIdentifier, e.getStatusCode());
             
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
@@ -1042,10 +1138,10 @@ public class WasenderQRService {
                     } else if (errorJson.has("error")) {
                         errorResponse.put("error", errorJson.get("error").asText());
                     } else {
-                        errorResponse.put("error", responseBody);
+                        errorResponse.put("error", "Provider error (details redacted)");
                     }
                 } catch (Exception parseException) {
-                    errorResponse.put("error", responseBody);
+                    errorResponse.put("error", "Provider error (details redacted)");
                 }
             } else {
                 errorResponse.put("error", errorMessage);
@@ -1077,14 +1173,10 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
             
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
-            boolean isNumeric = sessionIdentifier.trim().matches("^\\d+$");
-            String sessionId = sessionIdentifier.trim();
-            
-            if (!isNumeric) {
-                log.warn("deleteSession called with session name '{}' instead of ID. WASender API requires session ID.", sessionIdentifier);
-            }
+            // CRITICAL: Always resolve session name to numeric ID before calling WASender endpoints
+            String sessionId = ensureNumericSessionId(sessionIdentifier, apiKey);
             
             String deleteUrl = wasenderBaseUrl + "/whatsapp-sessions/" + URLEncoder.encode(sessionId, StandardCharsets.UTF_8);
             
@@ -1118,8 +1210,8 @@ public class WasenderQRService {
             String errorMessage = e.getMessage();
             String responseBody = e.getResponseBodyAsString();
             
-            log.error("WASender API error deleting session '{}': Status={}, Response={}", 
-                sessionIdentifier, e.getStatusCode(), responseBody);
+            log.error("WASender API error deleting session '{}': Status={}, response redacted", 
+                sessionIdentifier, e.getStatusCode());
             
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
@@ -1135,10 +1227,10 @@ public class WasenderQRService {
                     } else if (errorJson.has("error")) {
                         errorResponse.put("error", errorJson.get("error").asText());
                     } else {
-                        errorResponse.put("error", responseBody);
+                        errorResponse.put("error", "Provider error (details redacted)");
                     }
                 } catch (Exception parseException) {
-                    errorResponse.put("error", responseBody);
+                    errorResponse.put("error", "Provider error (details redacted)");
                 }
             } else {
                 errorResponse.put("error", errorMessage);
@@ -1171,14 +1263,10 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
 
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
-            boolean isNumeric = sessionIdentifier.trim().matches("^\\d+$");
-            String sessionId = sessionIdentifier.trim();
-            
-            if (!isNumeric) {
-                log.warn("updateSession called with session name '{}' instead of ID. WASender API requires session ID.", sessionIdentifier);
-            }
+            // CRITICAL: Always resolve session name to numeric ID before calling WASender endpoints
+            String sessionId = ensureNumericSessionId(sessionIdentifier, apiKey);
             
             String updateUrl = wasenderBaseUrl + "/whatsapp-sessions/" + URLEncoder.encode(sessionId, StandardCharsets.UTF_8);
             
@@ -1224,7 +1312,7 @@ public class WasenderQRService {
             return result;
             
         } catch (WebClientResponseException.Unauthorized e) {
-            log.error("Unauthorized error updating WASender session '{}': {}", sessionIdentifier, e.getResponseBodyAsString());
+            log.error("Unauthorized error updating WASender session '{}': response redacted", sessionIdentifier);
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("error", "Unauthorized: Invalid API key");
@@ -1236,11 +1324,11 @@ public class WasenderQRService {
             errorResponse.put("error", "Session not found");
             return errorResponse;
         } catch (WebClientResponseException e) {
-            log.error("WASender API error updating session '{}': Status={}, Response={}", 
-                sessionIdentifier, e.getStatusCode(), e.getResponseBodyAsString());
+            log.error("WASender API error updating session '{}': Status={}, response redacted", 
+                sessionIdentifier, e.getStatusCode());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
-            errorResponse.put("error", "WASender API error: " + e.getResponseBodyAsString());
+            errorResponse.put("error", "WASender API error (details redacted)");
             return errorResponse;
         } catch (Exception e) {
             log.error("Error updating WASender session '{}'", sessionIdentifier, e);
@@ -1263,14 +1351,10 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
 
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
-            boolean isNumeric = sessionIdentifier.trim().matches("^\\d+$");
-            String sessionId = sessionIdentifier.trim();
-            
-            if (!isNumeric) {
-                log.warn("disconnectSession called with session name '{}' instead of ID. WASender API requires session ID.", sessionIdentifier);
-            }
+            // CRITICAL: Always resolve session name to numeric ID before calling WASender endpoints
+            String sessionId = ensureNumericSessionId(sessionIdentifier, apiKey);
             
             String disconnectUrl = wasenderBaseUrl + "/whatsapp-sessions/" + URLEncoder.encode(sessionId, StandardCharsets.UTF_8) + "/disconnect";
             
@@ -1314,7 +1398,7 @@ public class WasenderQRService {
             return result;
             
         } catch (WebClientResponseException.Unauthorized e) {
-            log.error("Unauthorized error disconnecting WASender session '{}': {}", sessionIdentifier, e.getResponseBodyAsString());
+            log.error("Unauthorized error disconnecting WASender session '{}': response redacted", sessionIdentifier);
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("error", "Unauthorized: Invalid API key");
@@ -1326,11 +1410,11 @@ public class WasenderQRService {
             errorResponse.put("error", "Session not found");
             return errorResponse;
         } catch (WebClientResponseException e) {
-            log.error("WASender API error disconnecting session '{}': Status={}, Response={}", 
-                sessionIdentifier, e.getStatusCode(), e.getResponseBodyAsString());
+            log.error("WASender API error disconnecting session '{}': Status={}, response redacted", 
+                sessionIdentifier, e.getStatusCode());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
-            errorResponse.put("error", "WASender API error: " + e.getResponseBodyAsString());
+            errorResponse.put("error", "WASender API error (details redacted)");
             return errorResponse;
         } catch (Exception e) {
             log.error("Error disconnecting WASender session '{}'", sessionIdentifier, e);
@@ -1352,7 +1436,7 @@ public class WasenderQRService {
                 throw new IllegalStateException("WASender API key is required");
             }
 
-            WebClient webClient = webClientBuilder.build();
+            WebClient webClient = webClientBuilder.baseUrl(wasenderBaseUrl).build();
             
             String statusUrl = wasenderBaseUrl + "/status";
             
@@ -1392,17 +1476,17 @@ public class WasenderQRService {
             return result;
             
         } catch (WebClientResponseException.Unauthorized e) {
-            log.error("Unauthorized error fetching WASender session status: {}", e.getResponseBodyAsString());
+            log.error("Unauthorized error fetching WASender session status: response redacted");
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("error", "Unauthorized: Invalid API key");
             return errorResponse;
         } catch (WebClientResponseException e) {
-            log.error("WASender API error fetching session status: Status={}, Response={}", 
-                e.getStatusCode(), e.getResponseBodyAsString());
+            log.error("WASender API error fetching session status: Status={}, response redacted", 
+                e.getStatusCode());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
-            errorResponse.put("error", "WASender API error: " + e.getResponseBodyAsString());
+            errorResponse.put("error", "WASender API error (details redacted)");
             return errorResponse;
         } catch (Exception e) {
             log.error("Error fetching WASender session status", e);
@@ -1413,3 +1497,5 @@ public class WasenderQRService {
         }
     }
 }
+
+

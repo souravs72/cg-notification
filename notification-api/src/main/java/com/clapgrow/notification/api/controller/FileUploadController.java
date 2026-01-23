@@ -154,7 +154,9 @@ public class FileUploadController {
     @GetMapping("/{filename:.+}")
     @Operation(
             summary = "Download a file",
-            description = "Downloads a previously uploaded file"
+            description = "Downloads a previously uploaded file. NOTE: Files are publicly accessible - no authentication required. " +
+                    "This is intentional for media files used in notifications. If you need private file access, " +
+                    "consider implementing signed URLs or authentication checks."
     )
     public ResponseEntity<Resource> downloadFile(@PathVariable String filename) {
         try {
@@ -194,8 +196,4 @@ public class FileUploadController {
         };
     }
 }
-
-
-
-
 

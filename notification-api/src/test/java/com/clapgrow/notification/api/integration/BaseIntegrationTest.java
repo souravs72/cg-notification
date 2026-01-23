@@ -13,6 +13,9 @@ import org.testcontainers.utility.DockerImageName;
 /**
  * Base class for integration tests using Testcontainers.
  * Provides PostgreSQL and Kafka containers for isolated testing.
+ * 
+ * Note: These tests require Docker to be running.
+ * To skip integration tests when Docker is unavailable: mvn verify -DskipITs=true
  */
 @SpringBootTest(
     classes = NotificationApiApplication.class,
@@ -22,6 +25,7 @@ import org.testcontainers.utility.DockerImageName;
 public abstract class BaseIntegrationTest {
 
     @Container
+    @SuppressWarnings("resource") // Testcontainers manages lifecycle automatically
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
         DockerImageName.parse("postgres:15-alpine")
     )
@@ -31,6 +35,7 @@ public abstract class BaseIntegrationTest {
         .withInitScript("schema-test.sql");
 
     @Container
+    @SuppressWarnings("resource") // Testcontainers manages lifecycle automatically
     static KafkaContainer kafka = new KafkaContainer(
         DockerImageName.parse("confluentinc/cp-kafka:7.5.0")
     );

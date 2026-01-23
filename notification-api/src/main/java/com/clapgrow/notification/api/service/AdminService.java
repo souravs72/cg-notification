@@ -9,6 +9,7 @@ import com.clapgrow.notification.api.entity.FrappeSite;
 import com.clapgrow.notification.api.entity.MessageLog;
 import com.clapgrow.notification.api.enums.DeliveryStatus;
 import com.clapgrow.notification.api.enums.NotificationChannel;
+import com.clapgrow.notification.api.exception.AdminServiceException;
 import com.clapgrow.notification.api.repository.MessageLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,32 +60,34 @@ public class AdminService {
             .collect(Collectors.toList());
         
         // Get metrics for messages without sites (siteId is null)
-        long noSiteTotalSent = messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.SENT.name()) +
-                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.DELIVERED.name()) +
-                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.FAILED.name()) +
-                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.BOUNCED.name()) +
-                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.REJECTED.name());
+        // Use enum-based methods for consistency (preferred API)
+        long noSiteTotalSent = messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.SENT) +
+                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.DELIVERED) +
+                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.FAILED) +
+                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.BOUNCED) +
+                              messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.REJECTED);
         
-        long noSiteTotalSuccess = messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.DELIVERED.name());
+        long noSiteTotalSuccess = messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.DELIVERED);
         
-        long noSiteTotalFailed = messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.FAILED.name()) +
-                                messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.BOUNCED.name()) +
-                                messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.REJECTED.name());
+        long noSiteTotalFailed = messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.FAILED) +
+                                messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.BOUNCED) +
+                                messageLogRepository.countByNullSiteIdAndStatus(DeliveryStatus.REJECTED);
         
         // Add "No Site" entry if there are messages without sites
         if (noSiteTotalSent > 0) {
             Map<String, ChannelMetrics> noSiteChannelMetrics = new HashMap<>();
             for (NotificationChannel channel : NotificationChannel.values()) {
-                Long channelSent = messageLogRepository.countByNullSiteIdAndChannel(channel.name());
+                // Use enum-based methods for consistency (preferred API)
+                Long channelSent = messageLogRepository.countByNullSiteIdAndChannel(channel);
                 Long channelSuccess = messageLogRepository.countByNullSiteIdAndChannelAndStatus(
-                    channel.name(), DeliveryStatus.DELIVERED.name()
+                    channel, DeliveryStatus.DELIVERED
                 );
                 Long channelFailed = messageLogRepository.countByNullSiteIdAndChannelAndStatus(
-                    channel.name(), DeliveryStatus.FAILED.name()
+                    channel, DeliveryStatus.FAILED
                 ) + messageLogRepository.countByNullSiteIdAndChannelAndStatus(
-                    channel.name(), DeliveryStatus.BOUNCED.name()
+                    channel, DeliveryStatus.BOUNCED
                 ) + messageLogRepository.countByNullSiteIdAndChannelAndStatus(
-                    channel.name(), DeliveryStatus.REJECTED.name()
+                    channel, DeliveryStatus.REJECTED
                 );
                 
                 ChannelMetrics metrics = new ChannelMetrics();
@@ -169,12 +173,13 @@ public class AdminService {
 
     public List<MessageDetailResponse> getFailedMessages(int limit) {
         Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
-        List<MessageLog> messages = messageLogRepository.findAll(pageable).getContent().stream()
-            .filter(msg -> msg.getStatus() == DeliveryStatus.FAILED || 
-                          msg.getStatus() == DeliveryStatus.BOUNCED || 
-                          msg.getStatus() == DeliveryStatus.REJECTED)
-            .limit(limit)
-            .collect(Collectors.toList());
+        // Filter at database level instead of loading all messages and filtering in memory
+        List<DeliveryStatus> failedStatuses = Arrays.asList(
+            DeliveryStatus.FAILED,
+            DeliveryStatus.BOUNCED,
+            DeliveryStatus.REJECTED
+        );
+        List<MessageLog> messages = messageLogRepository.findByStatusIn(failedStatuses, pageable).getContent();
         
         Map<java.util.UUID, String> siteNameMap = siteService.getAllSites().stream()
             .collect(Collectors.toMap(FrappeSite::getId, FrappeSite::getSiteName));
@@ -234,7 +239,7 @@ public class AdminService {
                 .collect(Collectors.toList());
         } catch (Exception e) {
             log.error("Error in getScheduledMessages with limit: {}", limit, e);
-            throw new RuntimeException("Failed to retrieve scheduled messages: " + e.getMessage(), e);
+            throw new AdminServiceException("Failed to retrieve scheduled messages: " + e.getMessage(), e);
         }
     }
 }

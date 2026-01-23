@@ -1,31 +1,53 @@
 package com.clapgrow.notification.email.service;
 
+import com.clapgrow.notification.common.provider.EmailProvider;
+import com.clapgrow.notification.common.provider.EmailResult;
+import com.clapgrow.notification.common.provider.ProviderErrorCategory;
 import com.clapgrow.notification.email.model.NotificationPayload;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
+/**
+ * Email message processing service.
+ * 
+ * ⚠️ RETRY STRATEGY: Fail-fast consumer (consistent with WhatsApp consumer)
+ * 
+ * This consumer fails fast and does NOT perform retries or sleep.
+ * All retries are handled by KafkaRetryService (producer-side retry authority).
+ * 
+ * Benefits:
+ * - No Thread.sleep() blocking consumer threads
+ * - Single retry authority reduces complexity
+ * - Better throughput and resource utilization
+ * - Consistent retry logic across all channels
+ * 
+ * Flow:
+ * 1. Consumer processes message
+ * 2. On failure: Mark as FAILED (CONSUMER) and acknowledge
+ * 3. KafkaRetryService picks up FAILED messages and retries them
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailProcessingService {
     
-    private static final String DLQ_TOPIC = "notifications-email-dlq";
-    private static final int MAX_RETRIES = 3;
-    
-    private final SendGridService sendGridService;
+    private final EmailProvider<NotificationPayload> emailProvider;
     private final ObjectMapper objectMapper;
-    private final KafkaTemplate<String, String> kafkaTemplate;
     private final EmailLogService emailLogService;
+    
+    // ⚠️ METRICS: Metrics are now emitted automatically by MessageStatusHistoryService.appendStatusChange()
+    // when status changes. This prevents double-counting and ensures single source of truth.
 
-    @KafkaListener(topics = "notifications-email", groupId = "email-worker-group")
+    @KafkaListener(topics = "notifications-email")
     public void processEmailNotification(
             @Payload String payload,
             @Header(KafkaHeaders.RECEIVED_KEY) String messageId,
@@ -33,97 +55,128 @@ public class EmailProcessingService {
         
         try {
             NotificationPayload notification = objectMapper.readValue(payload, NotificationPayload.class);
-            log.info("Processing email notification: {} for recipient: {}", 
-                messageId, notification.getRecipient());
+            log.info("Processing email notification: {} for recipient: {}, payload.siteId={}", 
+                messageId, notification.getRecipient(), notification.getSiteId());
             
-            // Update status to SENT
-            emailLogService.updateStatus(messageId, "SENT", null);
+            // ⚠️ TENANT ISOLATION: siteId handling
+            // If siteId is provided in payload, it MUST match message_logs.site_id for tenant isolation.
+            // If siteId is null in payload, message_logs.site_id must also be null (dashboard message = use global config).
+            // getMessageSiteLookup distinguishes "row not found" from "row found with site_id=null".
+            EmailLogService.MessageSiteLookup lookup = emailLogService.getMessageSiteLookup(messageId);
+            if (!lookup.found()) {
+                log.error("Message {} not found in message_logs - cannot verify tenant isolation", messageId);
+                handleFailure(messageId, "Message not found in database - tenant verification failed", ProviderErrorCategory.CONFIG);
+                acknowledgment.acknowledge();
+                return;
+            }
+
+            UUID messageSiteId = lookup.siteId();
+            UUID payloadSiteId = notification.getSiteId();
+
+            // If payload has siteId, it must match message_logs.site_id
+            if (payloadSiteId != null) {
+                if (!payloadSiteId.equals(messageSiteId)) {
+                    log.error("SECURITY: Tenant isolation violation detected for message {}. Payload siteId={} does not match message_logs site_id={}",
+                        messageId, payloadSiteId, messageSiteId);
+                    handleFailure(messageId, "Tenant isolation violation: payload siteId does not match message tenant", ProviderErrorCategory.CONFIG);
+                    acknowledgment.acknowledge();
+                    return;
+                }
+            } else {
+                // If payload siteId is null, message_logs.site_id must also be null (dashboard message)
+                if (messageSiteId != null) {
+                    log.error("SECURITY: Tenant isolation violation detected for message {}. Payload siteId is null but message_logs site_id={}",
+                        messageId, messageSiteId);
+                    handleFailure(messageId, "Tenant isolation violation: payload siteId is null but message has tenant", ProviderErrorCategory.CONFIG);
+                    acknowledgment.acknowledge();
+                    return;
+                }
+                log.debug("Message {} has no siteId - will use global SendGrid config", messageId);
+            }
             
-            // Send email via SendGrid
-            SendEmailResult result = sendGridService.sendEmail(notification);
+            // ⚠️ FIXED: Don't set SENT before actually sending - message is already PENDING
+            // Send email via provider (provider-agnostic)
+            EmailResult result = emailProvider.sendEmail(notification);
             
             if (result.isSuccess()) {
+                // Only set DELIVERED after successful send
                 emailLogService.updateStatus(messageId, "DELIVERED", null);
+                // Metrics are emitted automatically by MessageStatusHistoryService.appendStatusChange()
                 log.info("Email notification {} processed successfully", messageId);
                 acknowledgment.acknowledge();
             } else {
-                // Get current retry count from database
-                int currentRetryCount = emailLogService.getRetryCount(messageId);
-                handleFailure(messageId, payload, currentRetryCount, result.getErrorMessage());
-                // Acknowledge after handling failure (will retry via Kafka if needed)
+                // Build detailed error message
+                String errorMessage = result.getErrorMessage();
+                
+                log.error("Failed to send email message {} to recipient {} via {}. Error: {}", 
+                    messageId, notification.getRecipient(), emailProvider.getProviderName(), errorMessage);
+                
+                // Fail fast: Mark as FAILED and acknowledge
+                // KafkaRetryService will handle retries based on error category
+                handleFailure(messageId, errorMessage, result.getErrorCategory());
                 acknowledgment.acknowledge();
             }
             
         } catch (Exception e) {
             log.error("Error processing email notification {}", messageId, e);
-            int currentRetryCount = emailLogService.getRetryCount(messageId);
-            handleFailure(messageId, payload, currentRetryCount, e.getMessage());
+            String errorMsg = e.getMessage();
+            if (errorMsg == null) {
+                errorMsg = e.getClass().getSimpleName() + ": " + e.toString();
+            }
+            
+            // Fail fast: Mark as FAILED and acknowledge
+            // KafkaRetryService will handle retries
+            // Treat unexpected exceptions as TEMPORARY (may be transient)
+            handleFailure(messageId, errorMsg, ProviderErrorCategory.TEMPORARY);
             acknowledgment.acknowledge();
         }
     }
 
-    private void handleFailure(String messageId, String payload, int retryCount, String errorMessage) {
-        // Check for permanent failures (invalid API key, unverified sender) - fail faster
-        boolean isPermanentFailure = errorMessage != null && 
-            (errorMessage.contains("invalid, expired, or revoked") || 
-             errorMessage.contains("401") ||
-             errorMessage.contains("does not match a verified Sender Identity") ||
-             errorMessage.contains("403"));
+    /**
+     * Handle processing failure.
+     * 
+     * ⚠️ FAIL-FAST STRATEGY: This method marks the message as FAILED and returns immediately.
+     * No retries, no Thread.sleep(), no re-queuing.
+     * 
+     * KafkaRetryService (producer-side) will pick up FAILED messages and retry them.
+     * Uses error category to determine if failure is permanent or temporary.
+     * 
+     * @param messageId Message ID
+     * @param errorMessage Error message
+     * @param errorCategory Error category (null if not available)
+     */
+    private void handleFailure(String messageId, String errorMessage, ProviderErrorCategory errorCategory) {
+        // Determine if failure is permanent based on error category
+        boolean isPermanentFailure = errorCategory == ProviderErrorCategory.PERMANENT ||
+                                     errorCategory == ProviderErrorCategory.AUTH ||
+                                     errorCategory == ProviderErrorCategory.CONFIG ||
+                                     // Fallback: check error message for known permanent failures
+                                     (errorCategory == null && errorMessage != null && 
+                                      (errorMessage.contains("invalid, expired, or revoked") || 
+                                       errorMessage.contains("401") ||
+                                       errorMessage.contains("does not match a verified Sender Identity") ||
+                                       errorMessage.contains("403") ||
+                                       errorMessage.contains("unauthorized") ||
+                                       errorMessage.contains("authentication")));
         
-        if (isPermanentFailure && retryCount >= 1) {
-            // Don't retry permanent failures more than once
-            log.error("Permanent failure detected for email notification {} (invalid API key/unverified sender). Marking as FAILED immediately.", messageId);
-            sendToDLQ(messageId, payload, errorMessage);
+        // Metrics will be emitted automatically by MessageStatusHistoryService.appendStatusChange()
+        // when status is updated to FAILED
+        
+        if (isPermanentFailure) {
+            // Permanent failures: Mark as FAILED immediately
+            // KafkaRetryService will check retry count and send to DLQ if needed
+            log.error("Permanent failure detected for email notification {} (category: {}). " +
+                "Marking as FAILED. KafkaRetryService will handle DLQ routing.", 
+                messageId, errorCategory != null ? errorCategory : "unknown");
             emailLogService.updateStatus(messageId, "FAILED", 
-                "Permanent failure (invalid API key/unverified sender): " + errorMessage);
-            return;
-        }
-        
-        if (retryCount < MAX_RETRIES) {
-            log.warn("Retrying email notification {} (attempt {}/{})", 
-                messageId, retryCount + 1, MAX_RETRIES);
-            
-            // Set status to PENDING for retry
-            emailLogService.updateStatus(messageId, "PENDING", errorMessage);
-            
-            // Exponential backoff with longer delay for API errors
-            long backoffMs = 2000L * (retryCount + 1); // 2s, 4s, 6s
-            
-            try {
-                Thread.sleep(backoffMs);
-                kafkaTemplate.send("notifications-email", messageId, payload);
-                // Only increment retry count after successful Kafka send
-                emailLogService.incrementRetryCount(messageId);
-                log.info("Re-queued email notification {} for retry", messageId);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.error("Interrupted while retrying email notification {}", messageId);
-                sendToDLQ(messageId, payload, errorMessage);
-                emailLogService.updateStatus(messageId, "FAILED", 
-                    "Retry interrupted: " + errorMessage);
-            } catch (Exception e) {
-                // If Kafka send fails, don't increment retry count and send to DLQ
-                log.error("Failed to re-queue email notification {} for retry", messageId, e);
-                sendToDLQ(messageId, payload, errorMessage);
-                emailLogService.updateStatus(messageId, "FAILED", 
-                    "Failed to re-queue: " + errorMessage);
-            }
+                "Permanent failure: " + errorMessage);
         } else {
-            log.error("Max retries ({}) reached for email notification {}. Sending to DLQ", 
-                MAX_RETRIES, messageId);
-            sendToDLQ(messageId, payload, errorMessage);
-            emailLogService.updateStatus(messageId, "FAILED", 
-                "Max retries exceeded: " + errorMessage);
-        }
-    }
-
-    private void sendToDLQ(String messageId, String payload, String errorMessage) {
-        try {
-            String dlqPayload = payload + "|ERROR:" + errorMessage;
-            kafkaTemplate.send(DLQ_TOPIC, messageId, dlqPayload);
-            log.info("Sent failed email notification {} to DLQ", messageId);
-        } catch (Exception e) {
-            log.error("Failed to send message {} to DLQ", messageId, e);
+            // Transient failures: Mark as FAILED
+            // KafkaRetryService will retry based on retry count and error category
+            log.warn("Transient failure for email notification {} (category: {}). " +
+                "Marking as FAILED. KafkaRetryService will retry.", 
+                messageId, errorCategory != null ? errorCategory : "unknown");
+            emailLogService.updateStatus(messageId, "FAILED", errorMessage);
         }
     }
 }

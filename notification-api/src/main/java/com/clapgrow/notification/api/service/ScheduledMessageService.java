@@ -12,15 +12,17 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -28,17 +30,25 @@ import java.util.UUID;
 @Slf4j
 public class ScheduledMessageService {
     
-    private static final String EMAIL_TOPIC = "notifications-email";
-    private static final String WHATSAPP_TOPIC = "notifications-whatsapp";
+    @Value("${spring.kafka.topics.email:notifications-email}")
+    private String emailTopic;
+    
+    @Value("${spring.kafka.topics.whatsapp:notifications-whatsapp}")
+    private String whatsappTopic;
     
     private final MessageLogRepository messageLogRepository;
     private final FrappeSiteRepository siteRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    @SuppressWarnings("unused") // Reserved for future use
     private final WasenderConfigService wasenderConfigService;
+    @SuppressWarnings("unused") // Reserved for future use
     private final SendGridConfigService sendGridConfigService;
+    @SuppressWarnings("unused") // Reserved for future use
     private final com.clapgrow.notification.api.repository.WhatsAppSessionRepository whatsAppSessionRepository;
-    private final WasenderQRService wasenderQRService;
+    @SuppressWarnings("unused") // Reserved for future use
+    private final WasenderQRServiceClient wasenderQRServiceClient;
+    private final MessageStatusHistoryService messageStatusHistoryService;
 
     @Transactional
     public NotificationResponse scheduleNotification(ScheduledNotificationRequest request, FrappeSite site) {
@@ -85,53 +95,155 @@ public class ScheduledMessageService {
             .toList();
     }
 
+    private static final int SCHEDULED_BATCH_SIZE = 100; // Process max 100 messages per batch for backpressure
+    
+    /**
+     * Process scheduled messages.
+     * Each message is processed in its own transaction to prevent rollback cascading.
+     * This ensures that if one message fails, others are not affected.
+     * 
+     * ⚠️ BACKPRESSURE: Processes messages in batches of SCHEDULED_BATCH_SIZE to prevent
+     * hot-loop when backlog grows. Loops until no more messages found.
+     */
     @Scheduled(fixedRate = 60000) // Check every minute
-    @Transactional
     public void processScheduledMessages() {
         LocalDateTime now = LocalDateTime.now();
-        List<MessageLog> scheduledMessages = messageLogRepository.findByStatusAndScheduledAtLessThanEqual(
-            DeliveryStatus.SCHEDULED.name(), now
-        );
+        int totalProcessed = 0;
+        
+        // Process in batches until no more messages found (backpressure)
+        while (true) {
+            // Fetch only message IDs to avoid loading full entities in the outer transaction
+            List<String> messageIds = messageLogRepository.findMessageIdsByStatusAndScheduledAtLessThanEqual(
+                DeliveryStatus.SCHEDULED.name(), 
+                now,
+                org.springframework.data.domain.PageRequest.of(0, SCHEDULED_BATCH_SIZE)
+            );
 
-        log.info("Processing {} scheduled messages", scheduledMessages.size());
+            if (messageIds.isEmpty()) {
+                if (totalProcessed > 0) {
+                    log.info("Completed scheduled message batch processing. Total processed: {}", totalProcessed);
+                } else {
+                    log.debug("No scheduled messages ready for processing");
+                }
+                break;
+            }
 
-        for (MessageLog messageLog : scheduledMessages) {
-            try {
-                // Update status to PENDING
-                messageLog.setStatus(DeliveryStatus.PENDING);
-                messageLog.setScheduledAt(null); // Clear scheduled time
-                messageLogRepository.save(messageLog);
+            log.info("Processing {} scheduled messages (batch)", messageIds.size());
 
-                // Publish to Kafka
-                String topic = getTopicForChannel(messageLog.getChannel());
-                String payload = serializeNotificationPayload(messageLog);
-                
-                kafkaTemplate.send(topic, messageLog.getMessageId(), payload)
-                    .whenComplete((result, ex) -> {
-                        if (ex != null) {
-                            log.error("Failed to publish scheduled message {} to Kafka", 
-                                messageLog.getMessageId(), ex);
-                            messageLogRepository.findByMessageId(messageLog.getMessageId())
-                                .ifPresent(ml -> {
-                                    ml.setStatus(DeliveryStatus.FAILED);
-                                    ml.setErrorMessage(ex.getMessage());
-                                    messageLogRepository.save(ml);
-                                });
-                        } else {
-                            log.info("Published scheduled message {} to Kafka", messageLog.getMessageId());
-                        }
-                    });
-
-            } catch (Exception e) {
-                log.error("Error processing scheduled message {}", messageLog.getMessageId(), e);
-                messageLogRepository.findByMessageId(messageLog.getMessageId())
-                    .ifPresent(ml -> {
-                        ml.setStatus(DeliveryStatus.FAILED);
-                        ml.setErrorMessage(e.getMessage());
-                        messageLogRepository.save(ml);
-                    });
+            for (String messageId : messageIds) {
+                try {
+                    processSingleScheduledMessage(messageId);
+                    totalProcessed++;
+                } catch (Exception e) {
+                    log.error("Error processing scheduled message {}", messageId, e);
+                    // Update status in a separate transaction
+                    updateMessageLogStatus(messageId, DeliveryStatus.FAILED, e.getMessage(),
+                                         com.clapgrow.notification.api.enums.FailureType.CONSUMER);
+                }
+            }
+            
+            // If we got fewer messages than batch size, we're done
+            if (messageIds.size() < SCHEDULED_BATCH_SIZE) {
+                if (totalProcessed > 0) {
+                    log.info("Completed scheduled message batch processing. Total processed: {}", totalProcessed);
+                }
+                break;
             }
         }
+    }
+    
+    /**
+     * Process a single scheduled message in its own transaction.
+     * Uses atomic update to prevent duplicate processing when multiple scheduler instances run concurrently.
+     * This ensures isolation - if one message fails, others are not affected.
+     */
+    @Transactional
+    public void processSingleScheduledMessage(String messageId) {
+        // Atomically update status from SCHEDULED to PENDING
+        // This prevents duplicate processing if multiple scheduler instances run concurrently
+        int rowsAffected = messageLogRepository.atomicallyUpdateScheduledToPending(messageId);
+        
+        if (rowsAffected == 0) {
+            // Message was already processed or not found
+            log.warn("Message {} was not in SCHEDULED status or not found. Skipping.", messageId);
+            return;
+        }
+        
+        // Fetch the updated message log
+        MessageLog messageLog = messageLogRepository.findByMessageId(messageId)
+            .orElseThrow(() -> new IllegalArgumentException("Message not found after atomic update: " + messageId));
+
+        // Prepare Kafka payload BEFORE transaction commits
+        String topic = getTopicForChannel(messageLog.getChannel());
+        String payload = serializeNotificationPayload(messageLog);
+        
+        // Register synchronization to send Kafka AFTER transaction commits
+        // This ensures Kafka send happens outside the DB transaction boundary
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                // Kafka send happens AFTER successful DB commit
+                kafkaTemplate.send(topic, messageId, payload)
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            log.error("Failed to publish scheduled message {} to Kafka topic {} after commit", 
+                                messageId, topic, ex);
+                            // Update message status to FAILED for reconciliation
+                            // This runs in a separate transaction to avoid conflicts
+                            try {
+                                updateMessageLogStatus(messageId, DeliveryStatus.FAILED, 
+                                    "Kafka publish failed: " + (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName()),
+                                    com.clapgrow.notification.api.enums.FailureType.KAFKA);
+                            } catch (Exception updateEx) {
+                                log.error("Failed to update message log status after Kafka failure for messageId={}", messageId, updateEx);
+                            }
+                        } else {
+                            log.info("Published scheduled message {} to Kafka topic {} after commit", messageId, topic);
+                        }
+                    });
+            }
+        });
+    }
+    
+    private final StatusTransitionValidator statusTransitionValidator;
+    
+    /**
+     * Update message log status.
+     * Uses REQUIRES_NEW propagation to ensure it runs in a separate transaction,
+     * which is safe to call from Kafka callbacks or async operations.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    private void updateMessageLogStatus(String messageId, DeliveryStatus status, String errorMessage,
+                                       com.clapgrow.notification.api.enums.FailureType failureType) {
+        messageLogRepository.findByMessageId(messageId).ifPresent(log -> {
+            DeliveryStatus oldStatus = log.getStatus();
+            
+            // Validate status transition
+            if (oldStatus != status) {
+                statusTransitionValidator.assertValidTransition(oldStatus, status);
+            }
+            
+            log.setStatus(status);
+            log.setErrorMessage(errorMessage);
+            // Set failure_type only when status is FAILED, clear it otherwise
+            if (status == DeliveryStatus.FAILED) {
+                log.setFailureType(failureType);
+            } else {
+                log.setFailureType(null);
+            }
+            log.setUpdatedAt(LocalDateTime.now());
+            messageLogRepository.save(log);
+            
+            // Append to status history if status changed
+            if (oldStatus != status) {
+                messageStatusHistoryService.appendStatusChange(
+                    messageId, 
+                    status, 
+                    errorMessage, 
+                    log.getRetryCount()
+                );
+            }
+        });
     }
 
     private MessageLog createScheduledMessageLog(String messageId, ScheduledNotificationRequest request, FrappeSite site) {
@@ -140,6 +252,9 @@ public class ScheduledMessageService {
         messageLog.setSiteId(site.getId());
         messageLog.setChannel(request.getChannel());
         messageLog.setStatus(DeliveryStatus.SCHEDULED);
+        // ⚠️ EXPLICIT INVARIANT: Set failure_type to null for non-FAILED status
+        // This makes intent explicit and keeps Java model aligned with DB constraint
+        messageLog.setFailureType(null);
         messageLog.setRecipient(request.getRecipient());
         messageLog.setSubject(request.getSubject());
         messageLog.setBody(request.getBody());
@@ -159,9 +274,18 @@ public class ScheduledMessageService {
         messageLog.setFromName(request.getFromName());
         messageLog.setIsHtml(request.getIsHtml() != null ? request.getIsHtml() : false);
         
-        if (request.getMetadata() != null) {
+        // Store metadata including WASender API key if provided
+        // ⚠️ SECURITY: API key is stored in metadata but should NEVER be logged or exposed
+        Map<String, String> metadata = request.getMetadata() != null 
+            ? new java.util.HashMap<>(request.getMetadata()) 
+            : new java.util.HashMap<>();
+        
+        // ⚠️ SECURITY: API keys are NOT stored in metadata - resolved in consumer from database
+        // Consumer will resolve API key using whatsappSessionName or siteId from payload
+        
+        if (!metadata.isEmpty()) {
             try {
-                messageLog.setMetadata(objectMapper.writeValueAsString(request.getMetadata()));
+                messageLog.setMetadata(objectMapper.writeValueAsString(metadata));
             } catch (JsonProcessingException e) {
                 log.warn("Failed to serialize metadata", e);
             }
@@ -180,8 +304,8 @@ public class ScheduledMessageService {
             com.clapgrow.notification.api.model.NotificationPayload payload = 
                 new com.clapgrow.notification.api.model.NotificationPayload();
             payload.setMessageId(messageLog.getMessageId());
-            payload.setSiteId(messageLog.getSiteId().toString());
-            payload.setChannel(messageLog.getChannel().name());
+            payload.setSiteId(messageLog.getSiteId());  // UUID, not String - API key resolved in consumer
+            payload.setChannel(messageLog.getChannel());  // Enum, not String
             payload.setRecipient(messageLog.getRecipient());
             payload.setSubject(messageLog.getSubject());
             payload.setBody(messageLog.getBody());
@@ -194,101 +318,42 @@ public class ScheduledMessageService {
             payload.setFromName(messageLog.getFromName());
             payload.setIsHtml(messageLog.getIsHtml());
             payload.setWhatsappSessionName(site.getWhatsappSessionName());
-            // Use global SendGrid API key
-            sendGridConfigService.getApiKey().ifPresent(payload::setSendgridApiKey);
             
-            // Include WASender API key for WhatsApp messages
+            // ⚠️ SECURITY: API keys are NOT included in payload - resolved in consumer from database
+            // Consumer will resolve API key using whatsappSessionName or siteId from payload
             if (messageLog.getChannel() == com.clapgrow.notification.api.enums.NotificationChannel.WHATSAPP) {
-                String sessionApiKey = null;
-                String requestedSessionName = site.getWhatsappSessionName();
-                
-                // If a session is specified, try to get session-specific API key
-                if (requestedSessionName != null && !requestedSessionName.trim().isEmpty()) {
+                // Clean metadata (remove any API keys that might have been stored previously)
+                Map<String, String> metadataMap = null;
+                if (messageLog.getMetadata() != null) {
                     try {
-                        // Try to find session by name in database
-                        Optional<com.clapgrow.notification.api.entity.WhatsAppSession> sessionOpt = 
-                            whatsAppSessionRepository.findFirstBySessionNameAndIsDeletedFalse(requestedSessionName.trim());
-                        
-                        if (sessionOpt.isPresent()) {
-                            com.clapgrow.notification.api.entity.WhatsAppSession session = sessionOpt.get();
-                            sessionApiKey = session.getSessionApiKey();
-                            
-                            if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
-                                log.info("Using session API key from database for scheduled message, session: {}", requestedSessionName);
-                            } else {
-                                log.warn("Session API key not found in database for session: {}, attempting to fetch from WASender", requestedSessionName);
-                                
-                                // Try to fetch from WASender API if we have a global API key
-                                String globalApiKey = wasenderConfigService.getApiKey().orElse(null);
-                                if (globalApiKey != null && session.getSessionId() != null) {
-                                    try {
-                                        Map<String, Object> sessionDetails = wasenderQRService.getSessionDetails(
-                                            session.getSessionId(), globalApiKey);
-                                        
-                                        if (sessionDetails != null && Boolean.TRUE.equals(sessionDetails.get("success"))) {
-                                            @SuppressWarnings("unchecked")
-                                            Map<String, Object> data = (Map<String, Object>) sessionDetails.get("data");
-                                            if (data != null) {
-                                                // Look for API key in the response
-                                                if (data.get("api_key") != null) {
-                                                    sessionApiKey = data.get("api_key").toString();
-                                                } else if (data.get("apiKey") != null) {
-                                                    sessionApiKey = data.get("apiKey").toString();
-                                                } else if (data.get("token") != null) {
-                                                    sessionApiKey = data.get("token").toString();
-                                                } else if (data.get("session_api_key") != null) {
-                                                    sessionApiKey = data.get("session_api_key").toString();
-                                                }
-                                                
-                                                if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
-                                                    // Update the session in database
-                                                    session.setSessionApiKey(sessionApiKey.trim());
-                                                    whatsAppSessionRepository.save(session);
-                                                    log.info("Fetched and saved session API key for scheduled message, session: {}", requestedSessionName);
-                                                }
-                                            }
-                                        }
-                                    } catch (Exception e) {
-                                        log.warn("Failed to fetch session API key from WASender for scheduled message, session: {}. Error: {}", 
-                                                requestedSessionName, e.getMessage());
-                                    }
-                                }
-                            }
-                        } else {
-                            log.warn("Session not found in database for scheduled message, session: {}", requestedSessionName);
+                        metadataMap = objectMapper.readValue(
+                            messageLog.getMetadata(),
+                            new TypeReference<Map<String, String>>() {}
+                        );
+                        // Remove wasenderApiKey if present (legacy cleanup)
+                        if (metadataMap != null) {
+                            metadataMap.remove("wasenderApiKey");
                         }
                     } catch (Exception e) {
-                        log.error("Error retrieving session API key for scheduled message, session: {}. Error: {}", 
-                                requestedSessionName, e.getMessage(), e);
+                        // Ignore - metadata parsing failed
                     }
                 }
                 
-                // Use session-specific API key if found, otherwise fallback to global API key
-                if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
-                    payload.setWasenderApiKey(sessionApiKey.trim());
-                    log.info("Using session-specific API key for scheduled WhatsApp message, session: {}", requestedSessionName);
-                } else {
-                    // Fallback to global config
-                    wasenderConfigService.getApiKey().ifPresent(payload::setWasenderApiKey);
-                    if (requestedSessionName != null && !requestedSessionName.trim().isEmpty()) {
-                        log.warn("Session API key not found for scheduled message, session: {}. Using global API key as fallback.", requestedSessionName);
+                // Set metadata without API keys
+                if (metadataMap != null && !metadataMap.isEmpty()) {
+                    payload.setMetadata(metadataMap);
+                }
+            } else {
+                // For non-WhatsApp channels, set metadata as-is
+                if (messageLog.getMetadata() != null) {
+                    try {
+                        payload.setMetadata(objectMapper.readValue(
+                            messageLog.getMetadata(),
+                            new TypeReference<Map<String, String>>() {}
+                        ));
+                    } catch (Exception e) {
+                        log.warn("Failed to parse metadata for scheduled message", e);
                     }
-                }
-                
-                // Validate that we have an API key
-                if (payload.getWasenderApiKey() == null || payload.getWasenderApiKey().trim().isEmpty()) {
-                    throw new IllegalStateException("WASender API key is required for WhatsApp scheduled messages. Please configure it first or ensure the session API key is available.");
-                }
-            }
-            
-            if (messageLog.getMetadata() != null) {
-                try {
-                    payload.setMetadata(objectMapper.readValue(
-                        messageLog.getMetadata(),
-                        new TypeReference<Map<String, String>>() {}
-                    ));
-                } catch (Exception e) {
-                    log.warn("Failed to parse metadata for scheduled message", e);
                 }
             }
             
@@ -300,8 +365,8 @@ public class ScheduledMessageService {
 
     private String getTopicForChannel(com.clapgrow.notification.api.enums.NotificationChannel channel) {
         return switch (channel) {
-            case EMAIL -> EMAIL_TOPIC;
-            case WHATSAPP -> WHATSAPP_TOPIC;
+            case EMAIL -> emailTopic;
+            case WHATSAPP -> whatsappTopic;
             default -> throw new IllegalArgumentException("Unsupported channel: " + channel);
         };
     }

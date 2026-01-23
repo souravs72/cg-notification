@@ -22,7 +22,7 @@ import java.util.UUID;
 public class WhatsAppSessionService {
     
     private final WhatsAppSessionRepository sessionRepository;
-    private final WasenderQRService wasenderQRService;
+    private final WasenderQRServiceClient wasenderQRServiceClient;
     private final UserWasenderService userWasenderService;
 
     /**
@@ -84,7 +84,13 @@ public class WhatsAppSessionService {
     }
 
     /**
-     * Update session status and API key when session connects
+     * Update session status and API key when session connects.
+     * 
+     * ⚠️ BLOCKING OPERATION: Calls WasenderQRServiceClient which uses .block().
+     * This is ACCEPTABLE because:
+     * - Only called from AdminController endpoints (/admin/*)
+     * - Admin operations are low-frequency, not on hot request paths
+     * - Used for session management, not message sending
      */
     @Transactional
     public void updateSessionOnConnect(String sessionIdentifier, HttpSession httpSession) {
@@ -95,7 +101,7 @@ public class WhatsAppSessionService {
             .orElseThrow(() -> new IllegalStateException("WASender API key not found in session"));
         
         // Get session details from WASender API
-        Map<String, Object> sessionDetails = wasenderQRService.getSessionDetails(sessionIdentifier, userApiKey);
+        Map<String, Object> sessionDetails = wasenderQRServiceClient.getSessionDetails(sessionIdentifier, userApiKey);
         
         if (sessionDetails == null || !Boolean.TRUE.equals(sessionDetails.get("success"))) {
             log.warn("Could not fetch session details for {}", sessionIdentifier);
@@ -187,7 +193,13 @@ public class WhatsAppSessionService {
     /**
      * Update session API key by session ID or name
      */
-    @Transactional
+    /**
+     * Update session API key.
+     * Uses REQUIRES_NEW propagation to ensure persistence succeeds even if called
+     * from within another transaction that might fail (e.g., during message processing).
+     * This prevents the "fetch API key but fail to persist" bug.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void updateSessionApiKey(String sessionIdentifier, String sessionApiKey, HttpSession httpSession) {
         UUID userId = getCurrentUserId(httpSession)
             .orElseThrow(() -> new IllegalStateException("User not found in session"));
@@ -271,6 +283,17 @@ public class WhatsAppSessionService {
                     ? sessionData.get("phone_number").toString() 
                     : (sessionData.get("phoneNumber") != null ? sessionData.get("phoneNumber").toString() : null);
                 
+                // Extract session API key from WASender response
+                // API key might be in different fields: api_key, apiKey, or token
+                String sessionApiKey = null;
+                if (sessionData.get("api_key") != null) {
+                    sessionApiKey = sessionData.get("api_key").toString();
+                } else if (sessionData.get("apiKey") != null) {
+                    sessionApiKey = sessionData.get("apiKey").toString();
+                } else if (sessionData.get("token") != null) {
+                    sessionApiKey = sessionData.get("token").toString();
+                }
+                
                 if (sessionName == null && sessionId == null) {
                     continue;
                 }
@@ -303,6 +326,15 @@ public class WhatsAppSessionService {
                     if (phoneNumber != null) {
                         session.setPhoneNumber(phoneNumber);
                     }
+                    // Update API key if found in WASender response and not already set
+                    if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
+                        // Only update if current API key is empty or null
+                        if (session.getSessionApiKey() == null || session.getSessionApiKey().trim().isEmpty()) {
+                            session.setSessionApiKey(sessionApiKey.trim());
+                            log.debug("Updated session API key from WASender sync for session: {} (ID: {})", 
+                                    sessionName, sessionId);
+                        }
+                    }
                     // Ensure it's not marked as deleted
                     session.setIsDeleted(false);
                 } else {
@@ -313,11 +345,63 @@ public class WhatsAppSessionService {
                     session.setSessionName(sessionName != null ? sessionName : sessionId);
                     session.setStatus(status);
                     session.setPhoneNumber(phoneNumber);
+                    // Set API key if found in WASender response
+                    if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
+                        session.setSessionApiKey(sessionApiKey.trim());
+                        log.debug("Set session API key from WASender sync for new session: {} (ID: {})", 
+                                sessionName, sessionId);
+                    }
                 }
                 
                 sessionRepository.save(session);
             } catch (Exception e) {
                 log.warn("Error syncing session from WASender: {}", e.getMessage());
+            }
+        }
+        
+        // Fetch API keys for sessions that don't have them yet
+        // Note: /api/whatsapp-sessions (GET) doesn't return API keys in the list response
+        // We need to fetch them individually via getSessionDetails endpoint
+        String userApiKey = userWasenderService.getApiKeyFromSession(httpSession).orElse(null);
+        if (userApiKey != null) {
+            List<WhatsAppSession> sessionsNeedingApiKey = sessionRepository
+                .findByUserIdAndIsDeletedFalseOrderByCreatedAtDesc(userId)
+                .stream()
+                .filter(s -> s.getSessionApiKey() == null || s.getSessionApiKey().trim().isEmpty())
+                .filter(s -> s.getSessionId() != null || s.getSessionName() != null)
+                .toList();
+            
+            for (WhatsAppSession session : sessionsNeedingApiKey) {
+                try {
+                    String identifier = session.getSessionId() != null ? session.getSessionId() : session.getSessionName();
+                    Map<String, Object> sessionDetails = wasenderQRServiceClient.getSessionDetails(identifier, userApiKey);
+                    
+                    if (sessionDetails != null && Boolean.TRUE.equals(sessionDetails.get("success"))) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> data = (Map<String, Object>) sessionDetails.get("data");
+                        if (data != null) {
+                            // Extract API key from session details response
+                            String sessionApiKey = null;
+                            if (data.get("api_key") != null) {
+                                sessionApiKey = data.get("api_key").toString();
+                            } else if (data.get("apiKey") != null) {
+                                sessionApiKey = data.get("apiKey").toString();
+                            } else if (data.get("token") != null) {
+                                sessionApiKey = data.get("token").toString();
+                            }
+                            
+                            if (sessionApiKey != null && !sessionApiKey.trim().isEmpty()) {
+                                session.setSessionApiKey(sessionApiKey.trim());
+                                sessionRepository.save(session);
+                                log.debug("Fetched and saved API key for session: {} (ID: {})", 
+                                        session.getSessionName(), session.getSessionId());
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to fetch API key for session {} (ID: {}): {}", 
+                            session.getSessionName(), session.getSessionId(), e.getMessage());
+                }
             }
         }
         

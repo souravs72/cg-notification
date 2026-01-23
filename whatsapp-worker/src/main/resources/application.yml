@@ -1,23 +1,49 @@
 spring:
   application:
     name: whatsapp-worker
+  main:
+    web-application-type: servlet  # Enable servlet-based REST API (Spring MVC)
 
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/notification_db}
     username: ${SPRING_DATASOURCE_USERNAME:notification_user}
     password: ${SPRING_DATASOURCE_PASSWORD:notification_pass}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      pool-name: WhatsAppWorkerHikariPool
+      auto-commit: false  # Disable autocommit for proper transaction management
 
   jpa:
     hibernate:
       ddl-auto: none
     show-sql: false
+    properties:
+      hibernate:
+        connection:
+          provider_disables_autocommit: true
 
   kafka:
-    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    # IMPORTANT:
+    # Default matches Docker internal Kafka listener (kafka:29092).
+    # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    listener:
+      shutdown-timeout: ${KAFKA_LISTENER_SHUTDOWN_TIMEOUT:30s}
+
+kafka:
+  consumer:
+    group-id: ${KAFKA_CONSUMER_GROUP_ID:whatsapp-worker-group}
+    environment-prefix: ${KAFKA_CONSUMER_ENV_PREFIX:}
+    concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
 
 server:
-  port: 8082
+  port: ${SERVER_PORT:8082}  # REST API port for session management endpoints
 
 wasender:
   api:
@@ -40,8 +66,8 @@ management:
 
 logging:
   level:
-    root: INFO
-    com.clapgrow.notification: DEBUG
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.clapgrow.notification: ${LOG_LEVEL_APP:INFO}
     org.springframework.kafka: INFO
 
 springdoc:

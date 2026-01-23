@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS whatsapp_sessions (
     webhook_events TEXT[], -- Array of webhook event types
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP,
+    created_by VARCHAR(100),
+    updated_by VARCHAR(100),
     connected_at TIMESTAMP, -- When session was connected
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(user_id, session_name)

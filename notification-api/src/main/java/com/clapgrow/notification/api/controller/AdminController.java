@@ -15,7 +15,7 @@ import com.clapgrow.notification.api.service.SiteService;
 import com.clapgrow.notification.api.service.UserService;
 import com.clapgrow.notification.api.service.UserWasenderService;
 import com.clapgrow.notification.api.service.WasenderConfigService;
-import com.clapgrow.notification.api.service.WasenderQRService;
+import com.clapgrow.notification.api.service.WasenderQRServiceClient;
 import jakarta.servlet.http.HttpSession;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,7 +37,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 @Controller
@@ -49,7 +48,7 @@ public class AdminController {
     
     private final AdminService adminService;
     private final SiteService siteService;
-    private final WasenderQRService wasenderQRService;
+    private final WasenderQRServiceClient wasenderQRServiceClient;
     private final AdminAuthService adminAuthService;
     private final WasenderConfigService wasenderConfigService;
     private final SendGridConfigService sendGridConfigService;
@@ -57,6 +56,30 @@ public class AdminController {
     private final UserService userService;
     private final com.clapgrow.notification.api.service.WhatsAppSessionService whatsAppSessionService;
     private final ObjectMapper objectMapper;
+
+    /**
+     * Helper method to require admin authentication (session OR admin key).
+     * Returns error response if authentication fails, null if successful.
+     * 
+     * ⚠️ DESIGN NOTE: Admin APIs intentionally allow session OR admin key.
+     * This provides flexibility for both browser-based (session) and programmatic (API key) access.
+     * Enforcement is verified by AuthenticationEnforcementIT to prevent accidental misuse.
+     */
+    private ResponseEntity<Map<String, Object>> requireAdminAuth(HttpSession session, String adminKey) {
+        // Check if session is null or user is not authenticated
+        if (session == null || session.getAttribute("userId") == null) {
+            // If no session, require X-Admin-Key header
+            if (adminKey == null || adminKey.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", "Authentication required");
+                return ResponseEntity.status(401).body(error);
+            }
+            adminAuthService.validateAdminKey(adminKey);
+        }
+        // Session authentication successful (or API key validated above)
+        return null; // Authentication successful
+    }
 
     @GetMapping("/dashboard")
     public String dashboard(Model model, HttpSession session) {
@@ -86,9 +109,18 @@ public class AdminController {
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Metrics retrieved successfully",
-                    content = @Content(schema = @Schema(implementation = AdminDashboardResponse.class)))
+                    content = @Content(schema = @Schema(implementation = AdminDashboardResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Authentication required")
     })
-    public ResponseEntity<AdminDashboardResponse> getMetrics() {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> getMetrics(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         AdminDashboardResponse response = adminService.getDashboardMetrics();
         return ResponseEntity.ok(response);
     }
@@ -99,11 +131,20 @@ public class AdminController {
             description = "Retrieves the most recent messages across all sites."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Recent messages retrieved successfully")
+            @ApiResponse(responseCode = "200", description = "Recent messages retrieved successfully"),
+            @ApiResponse(responseCode = "401", description = "Authentication required")
     })
-    public ResponseEntity<List<MessageDetailResponse>> getRecentMessages(
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> getRecentMessages(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @Parameter(description = "Maximum number of messages to retrieve", example = "50")
-            @RequestParam(name = "limit", defaultValue = "50") int limit) {
+            @RequestParam(name = "limit", defaultValue = "50") int limit,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         List<MessageDetailResponse> messages = adminService.getRecentMessages(limit);
         return ResponseEntity.ok(messages);
     }
@@ -114,11 +155,20 @@ public class AdminController {
             description = "Retrieves messages that have failed to deliver."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Failed messages retrieved successfully")
+            @ApiResponse(responseCode = "200", description = "Failed messages retrieved successfully"),
+            @ApiResponse(responseCode = "401", description = "Authentication required")
     })
-    public ResponseEntity<List<MessageDetailResponse>> getFailedMessages(
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> getFailedMessages(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @Parameter(description = "Maximum number of messages to retrieve", example = "50")
-            @RequestParam(name = "limit", defaultValue = "50") int limit) {
+            @RequestParam(name = "limit", defaultValue = "50") int limit,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         List<MessageDetailResponse> messages = adminService.getFailedMessages(limit);
         return ResponseEntity.ok(messages);
     }
@@ -132,9 +182,17 @@ public class AdminController {
             @ApiResponse(responseCode = "200", description = "Error log file downloaded successfully"),
             @ApiResponse(responseCode = "401", description = "Authentication required")
     })
-    public ResponseEntity<org.springframework.core.io.Resource> exportFailedMessagesLog(
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> exportFailedMessagesLog(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @Parameter(description = "Maximum number of messages to include", example = "1000")
-            @RequestParam(name = "limit", defaultValue = "1000") int limit) {
+            @RequestParam(name = "limit", defaultValue = "1000") int limit,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         try {
             List<MessageDetailResponse> messages = adminService.getFailedMessages(limit);
             
@@ -204,11 +262,20 @@ public class AdminController {
             description = "Retrieves messages that are scheduled for future delivery."
     )
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Scheduled messages retrieved successfully")
+            @ApiResponse(responseCode = "200", description = "Scheduled messages retrieved successfully"),
+            @ApiResponse(responseCode = "401", description = "Authentication required")
     })
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<?> getScheduledMessages(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @Parameter(description = "Maximum number of messages to retrieve", example = "50")
-            @RequestParam(name = "limit", defaultValue = "50") int limit) {
+            @RequestParam(name = "limit", defaultValue = "50") int limit,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         try {
             List<MessageDetailResponse> messages = adminService.getScheduledMessages(limit);
             return ResponseEntity.ok(messages);
@@ -256,10 +323,17 @@ public class AdminController {
     }
 
     @GetMapping("/api/whatsapp/qrcode")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> getWhatsAppQRCode(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @RequestParam(name = "sessionName", required = false) String sessionName,
             @RequestParam(name = "sessionId", required = false) String sessionId,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -282,14 +356,21 @@ public class AdminController {
             return ResponseEntity.badRequest().body(error);
         }
         
-        Map<String, Object> result = wasenderQRService.getQRCode(identifier, apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.getQRCode(identifier, apiKey);
         return ResponseEntity.ok(result);
     }
 
     @PostMapping("/api/whatsapp/session/{sessionName}/connect")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> connectWhatsAppSession(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @PathVariable(name = "sessionName") String sessionName,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -303,17 +384,24 @@ public class AdminController {
             return ResponseEntity.status(428).body(error); // 428 Precondition Required
         }
         
-        Map<String, Object> result = wasenderQRService.connectSession(sessionName, apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.connectSession(sessionName, apiKey);
         return ResponseEntity.ok(result);
     }
 
     @GetMapping("/api/whatsapp/message-logs")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> getMessageLogs(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @RequestParam(name = "sessionId", required = false) String sessionId,
             @RequestParam(name = "sessionName", required = false) String sessionName,
             @RequestParam(name = "page", required = false, defaultValue = "1") Integer page,
             @RequestParam(name = "per_page", required = false, defaultValue = "10") Integer perPage,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -337,17 +425,24 @@ public class AdminController {
             return ResponseEntity.badRequest().body(error);
         }
         
-        Map<String, Object> result = wasenderQRService.getMessageLogs(identifier, page, perPage, apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.getMessageLogs(identifier, page, perPage, apiKey);
         return ResponseEntity.ok(result);
     }
 
     @GetMapping("/api/whatsapp/session-logs")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> getSessionLogs(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @RequestParam(name = "sessionId", required = false) String sessionId,
             @RequestParam(name = "sessionName", required = false) String sessionName,
             @RequestParam(name = "page", required = false, defaultValue = "1") Integer page,
             @RequestParam(name = "per_page", required = false, defaultValue = "10") Integer perPage,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -371,14 +466,21 @@ public class AdminController {
             return ResponseEntity.badRequest().body(error);
         }
         
-        Map<String, Object> result = wasenderQRService.getSessionLogs(identifier, page, perPage, apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.getSessionLogs(identifier, page, perPage, apiKey);
         return ResponseEntity.ok(result);
     }
 
     @PostMapping("/api/whatsapp/session")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> createWhatsAppSession(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @RequestBody Map<String, Object> request,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -449,7 +551,7 @@ public class AdminController {
             ? Boolean.valueOf(request.get("ignoreBroadcasts").toString()) 
             : null;
         
-        Map<String, Object> result = wasenderQRService.createSession(
+        Map<String, Object> result = wasenderQRServiceClient.createSession(
             sessionName, phoneNumber, accountProtection, logMessages,
             webhookUrl, webhookEnabled, webhookEvents,
             readIncomingMessages, autoRejectCalls,
@@ -546,7 +648,7 @@ public class AdminController {
                     if (sessionId != null) {
                         try {
                             log.info("Session API key not found, fetching from session details endpoint for session ID: {}", sessionId);
-                            Map<String, Object> sessionDetails = wasenderQRService.getSessionDetails(sessionId, apiKey);
+                            Map<String, Object> sessionDetails = wasenderQRServiceClient.getSessionDetails(sessionId, apiKey);
                             
                             if (sessionDetails != null && Boolean.TRUE.equals(sessionDetails.get("success"))) {
                                 @SuppressWarnings("unchecked")
@@ -613,7 +715,16 @@ public class AdminController {
     }
 
     @PostMapping("/api/wasender/api-key")
-    public ResponseEntity<?> saveWasenderApiKey(@RequestBody WasenderApiKeyRequest request, HttpSession session) {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> saveWasenderApiKey(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            @RequestBody WasenderApiKeyRequest request, 
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         try {
             String pat = request.getWasenderApiKey();
             
@@ -625,10 +736,10 @@ public class AdminController {
             
             try {
                 // Try to update with validation (to get subscription info)
-                userService.updateWasenderApiKey(user.getId(), pat);
+                userService.updateMessagingApiKey(user.getId(), pat);
             } catch (Exception e) {
                 // If validation fails, save without validation as fallback
-                userService.updateWasenderApiKeyWithoutValidation(user.getId(), pat);
+                userService.updateMessagingApiKeyWithoutValidation(user.getId(), pat);
             }
             
             // Note: We don't store API key in session - it's fetched from DB on demand
@@ -648,7 +759,16 @@ public class AdminController {
     }
     
     @PostMapping("/api/sites/{siteId}/regenerate-api-key")
-    public ResponseEntity<?> regenerateSiteApiKey(@PathVariable(name = "siteId") String siteId) {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> regenerateSiteApiKey(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            @PathVariable(name = "siteId") String siteId,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         try {
             UUID siteUuid = UUID.fromString(siteId);
             siteService.getSiteById(siteUuid); // Verify site exists
@@ -671,7 +791,15 @@ public class AdminController {
     }
 
     @GetMapping("/api/wasender/api-key/status")
-    public ResponseEntity<WasenderApiKeyResponse> getWasenderApiKeyStatus() {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> getWasenderApiKeyStatus(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         boolean configured = wasenderConfigService.isConfigured();
         String message = configured 
             ? "WASender API key is configured" 
@@ -681,7 +809,16 @@ public class AdminController {
     }
 
     @PostMapping("/api/sendgrid/api-key")
-    public ResponseEntity<?> saveSendGridApiKey(@RequestBody SendGridApiKeyRequest request) {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> saveSendGridApiKey(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            @RequestBody SendGridApiKeyRequest request,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         try {
             sendGridConfigService.saveApiKey(
                 request.getSendgridApiKey(),
@@ -702,7 +839,15 @@ public class AdminController {
     }
 
     @GetMapping("/api/sendgrid/api-key/status")
-    public ResponseEntity<SendGridApiKeyResponse> getSendGridApiKeyStatus() {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> getSendGridApiKeyStatus(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         boolean configured = sendGridConfigService.isConfigured();
         String message = configured 
             ? "SendGrid API key is configured" 
@@ -712,13 +857,30 @@ public class AdminController {
     }
 
     @GetMapping("/api/sites")
-    public ResponseEntity<List<com.clapgrow.notification.api.entity.FrappeSite>> getAllSites() {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> getAllSites(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         List<com.clapgrow.notification.api.entity.FrappeSite> sites = siteService.getAllSites();
         return ResponseEntity.ok(sites);
     }
 
     @PostMapping("/api/sites/create")
-    public ResponseEntity<?> createSite(@RequestBody SiteRegistrationRequest request, HttpSession session) {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<?> createSite(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            @RequestBody SiteRegistrationRequest request, 
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         try {
             // Check if user has API key configured
             if (!userWasenderService.isConfigured(session)) {
@@ -738,9 +900,17 @@ public class AdminController {
     }
 
     @PutMapping("/api/sites/{siteId}/whatsapp-session")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<?> updateSiteWhatsAppSession(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @PathVariable(name = "siteId") String siteId,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, String> request,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         try {
             String sessionName = request.get("whatsappSessionName");
             if (sessionName == null || sessionName.trim().isEmpty()) {
@@ -770,7 +940,15 @@ public class AdminController {
     }
 
     @GetMapping("/api/whatsapp/sessions")
-    public ResponseEntity<Map<String, Object>> getAllSessions(HttpSession session) {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<Map<String, Object>> getAllSessions(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -784,14 +962,21 @@ public class AdminController {
             return ResponseEntity.status(428).body(error); // 428 Precondition Required
         }
         
-        Map<String, Object> result = wasenderQRService.getAllSessions(apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.getAllSessions(apiKey);
         return ResponseEntity.ok(result);
     }
 
     @GetMapping("/api/whatsapp/session/{sessionIdentifier}")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> getSessionDetails(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @PathVariable(name = "sessionIdentifier") String sessionIdentifier,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -805,7 +990,7 @@ public class AdminController {
             return ResponseEntity.status(428).body(error); // 428 Precondition Required
         }
         
-        Map<String, Object> result = wasenderQRService.getSessionDetails(sessionIdentifier, apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.getSessionDetails(sessionIdentifier, apiKey);
         
         // Update session_api_key in database if found in response
         if (result != null && Boolean.TRUE.equals(result.get("success"))) {
@@ -867,9 +1052,16 @@ public class AdminController {
     }
 
     @DeleteMapping("/api/whatsapp/session/{sessionIdentifier}")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> deleteSession(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @PathVariable(name = "sessionIdentifier") String sessionIdentifier,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -883,14 +1075,21 @@ public class AdminController {
             return ResponseEntity.status(428).body(error); // 428 Precondition Required
         }
         
-        Map<String, Object> result = wasenderQRService.deleteSession(sessionIdentifier, apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.deleteSession(sessionIdentifier, apiKey);
         return ResponseEntity.ok(result);
     }
 
     @PostMapping("/api/whatsapp/session/{sessionIdentifier}/reconnect")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> reconnectSession(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @PathVariable(name = "sessionIdentifier") String sessionIdentifier,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -904,15 +1103,22 @@ public class AdminController {
             return ResponseEntity.status(428).body(error); // 428 Precondition Required
         }
         
-        Map<String, Object> result = wasenderQRService.connectSession(sessionIdentifier, apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.connectSession(sessionIdentifier, apiKey);
         return ResponseEntity.ok(result);
     }
 
     @PutMapping("/api/whatsapp/session/{sessionIdentifier}")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> updateSession(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @PathVariable(name = "sessionIdentifier") String sessionIdentifier,
             @RequestBody Map<String, Object> updateData,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -926,14 +1132,21 @@ public class AdminController {
             return ResponseEntity.status(428).body(error); // 428 Precondition Required
         }
         
-        Map<String, Object> result = wasenderQRService.updateSession(sessionIdentifier, apiKey, updateData);
+        Map<String, Object> result = wasenderQRServiceClient.updateSession(sessionIdentifier, apiKey, updateData);
         return ResponseEntity.ok(result);
     }
 
     @PostMapping("/api/whatsapp/session/{sessionIdentifier}/disconnect")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> disconnectSession(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @PathVariable(name = "sessionIdentifier") String sessionIdentifier,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -947,12 +1160,20 @@ public class AdminController {
             return ResponseEntity.status(428).body(error); // 428 Precondition Required
         }
         
-        Map<String, Object> result = wasenderQRService.disconnectSession(sessionIdentifier, apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.disconnectSession(sessionIdentifier, apiKey);
         return ResponseEntity.ok(result);
     }
 
     @GetMapping("/api/whatsapp/status")
-    public ResponseEntity<Map<String, Object>> getSessionStatus(HttpSession session) {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<Map<String, Object>> getSessionStatus(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         // Get API key from user session
         String apiKey = userWasenderService.getApiKeyFromSession(session)
             .orElse(null);
@@ -966,18 +1187,26 @@ public class AdminController {
             return ResponseEntity.status(428).body(error); // 428 Precondition Required
         }
         
-        Map<String, Object> result = wasenderQRService.getSessionStatus(apiKey);
+        Map<String, Object> result = wasenderQRServiceClient.getSessionStatus(apiKey);
         return ResponseEntity.ok(result);
     }
 
     @GetMapping("/api/whatsapp/user-sessions")
-    public ResponseEntity<List<Map<String, Object>>> getUserSessions(HttpSession session) {
+    @SecurityRequirement(name = "AdminKey")
+    public ResponseEntity<List<Map<String, Object>>> getUserSessions(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
+            HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return ResponseEntity.status(401).body(List.of());
+        }
         try {
             // First, sync sessions from WASender API to ensure we have the latest
             String apiKey = userWasenderService.getApiKeyFromSession(session).orElse(null);
             if (apiKey != null) {
                 try {
-                    Map<String, Object> wasenderSessions = wasenderQRService.getAllSessions(apiKey);
+                    Map<String, Object> wasenderSessions = wasenderQRServiceClient.getAllSessions(apiKey);
                     if (Boolean.TRUE.equals(wasenderSessions.get("success")) && wasenderSessions.get("data") != null) {
                         whatsAppSessionService.syncSessionsFromWasender(wasenderSessions, session);
                     }
@@ -1011,9 +1240,16 @@ public class AdminController {
     }
 
     @PostMapping("/api/whatsapp/session/{sessionIdentifier}/update-status")
+    @SecurityRequirement(name = "AdminKey")
     public ResponseEntity<Map<String, Object>> updateSessionStatus(
+            @Parameter(description = "Admin API key for authentication (optional if using session)")
+            @RequestHeader(name = "X-Admin-Key", required = false) String adminKey,
             @PathVariable(name = "sessionIdentifier") String sessionIdentifier,
             HttpSession session) {
+        ResponseEntity<Map<String, Object>> authError = requireAdminAuth(session, adminKey);
+        if (authError != null) {
+            return authError;
+        }
         try {
             whatsAppSessionService.updateSessionOnConnect(sessionIdentifier, session);
             Map<String, Object> result = new HashMap<>();
@@ -1029,66 +1265,9 @@ public class AdminController {
         }
     }
 
-    @GetMapping("/api/whatsapp/session/{sessionId}/api-key")
-    public ResponseEntity<Map<String, Object>> getSessionApiKey(
-            @PathVariable(name = "sessionId") String sessionId,
-            HttpSession session) {
-        try {
-            UUID sessionUuid;
-            try {
-                sessionUuid = UUID.fromString(sessionId);
-            } catch (IllegalArgumentException e) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("success", false);
-                error.put("error", "Invalid session ID format");
-                return ResponseEntity.badRequest().body(error);
-            }
-
-            // Get user ID from session to verify authentication
-            String userIdStr = (String) session.getAttribute("userId");
-            if (userIdStr == null) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("success", false);
-                error.put("error", "User not authenticated");
-                return ResponseEntity.status(401).body(error);
-            }
-            
-            // Find session by ID - getUserSessions already filters by user
-            Optional<com.clapgrow.notification.api.entity.WhatsAppSession> sessionOpt = 
-                whatsAppSessionService.getUserSessions(session).stream()
-                    .filter(s -> s.getId().equals(sessionUuid))
-                    .findFirst();
-
-            if (sessionOpt.isEmpty()) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("success", false);
-                error.put("error", "Session not found");
-                return ResponseEntity.status(404).body(error);
-            }
-
-            com.clapgrow.notification.api.entity.WhatsAppSession whatsAppSession = sessionOpt.get();
-            String apiKey = whatsAppSession.getSessionApiKey();
-
-            if (apiKey == null || apiKey.trim().isEmpty()) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("success", false);
-                error.put("error", "API key not available for this session. The session may not be connected yet.");
-                return ResponseEntity.status(404).body(error);
-            }
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("apiKey", apiKey);
-            result.put("sessionName", whatsAppSession.getSessionName());
-            result.put("sessionId", whatsAppSession.getSessionId());
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.error("Error getting session API key", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(500).body(error);
-        }
-    }
+    // SECURITY: Removed endpoint /api/whatsapp/session/{sessionId}/api-key
+    // This endpoint was leaking WhatsApp session API keys (credentials) via API.
+    // Admin UI does not need raw session API keys - they are used internally by the system.
+    // If you need to verify API key existence, use hasApiKey flag from getUserSessions endpoint.
 }
 

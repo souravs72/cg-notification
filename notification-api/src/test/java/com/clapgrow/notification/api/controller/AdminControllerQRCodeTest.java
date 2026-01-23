@@ -6,11 +6,12 @@ import com.clapgrow.notification.api.service.AdminService;
 import com.clapgrow.notification.api.service.SiteService;
 import com.clapgrow.notification.api.service.UserWasenderService;
 import com.clapgrow.notification.api.service.WasenderConfigService;
-import com.clapgrow.notification.api.service.WasenderQRService;
+import com.clapgrow.notification.api.service.WasenderQRServiceClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
@@ -33,7 +34,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 3. Error handling for WASender API responses
  * 4. Session ID is returned in responses
  */
-@WebMvcTest(AdminController.class)
+@WebMvcTest(controllers = AdminController.class, excludeAutoConfiguration = {
+    org.springframework.boot.autoconfigure.aop.AopAutoConfiguration.class
+})
+@AutoConfigureMockMvc(addFilters = false)
 class AdminControllerQRCodeTest {
 
     @Autowired
@@ -49,7 +53,7 @@ class AdminControllerQRCodeTest {
     private SiteService siteService;
 
     @MockBean
-    private WasenderQRService wasenderQRService;
+    private WasenderQRServiceClient wasenderQRServiceClient;
 
     @MockBean
     private AdminAuthService adminAuthService;
@@ -89,7 +93,7 @@ class AdminControllerQRCodeTest {
         mockResponse.put("sessionId", testSessionId);
         mockResponse.put("status", "NEED_SCAN");
 
-        when(wasenderQRService.getQRCode(eq(testSessionId), anyString())).thenReturn(mockResponse);
+        when(wasenderQRServiceClient.getQRCode(eq(testSessionId), anyString())).thenReturn(mockResponse);
 
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
@@ -102,8 +106,8 @@ class AdminControllerQRCodeTest {
                 .andExpect(jsonPath("$.sessionId").value(testSessionId));
 
         // Verify service was called with session ID, not name
-        verify(wasenderQRService).getQRCode(eq(testSessionId), anyString());
-        verify(wasenderQRService, never()).getQRCode(eq(testSessionName), anyString());
+        verify(wasenderQRServiceClient).getQRCode(eq(testSessionId), anyString());
+        verify(wasenderQRServiceClient, never()).getQRCode(eq(testSessionName), anyString());
     }
 
     @Test
@@ -114,7 +118,7 @@ class AdminControllerQRCodeTest {
         mockResponse.put("qrCode", "2@testQRCodeString");
         mockResponse.put("sessionName", testSessionName);
 
-        when(wasenderQRService.getQRCode(eq(testSessionName), anyString())).thenReturn(mockResponse);
+        when(wasenderQRServiceClient.getQRCode(eq(testSessionName), anyString())).thenReturn(mockResponse);
 
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
@@ -124,7 +128,7 @@ class AdminControllerQRCodeTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
-        verify(wasenderQRService).getQRCode(eq(testSessionName), anyString());
+        verify(wasenderQRServiceClient).getQRCode(eq(testSessionName), anyString());
     }
 
     @Test
@@ -135,7 +139,7 @@ class AdminControllerQRCodeTest {
         mockResponse.put("qrCode", "2@testQRCodeString");
         mockResponse.put("sessionId", testSessionId);
 
-        when(wasenderQRService.getQRCode(eq(testSessionId), anyString())).thenReturn(mockResponse);
+        when(wasenderQRServiceClient.getQRCode(eq(testSessionId), anyString())).thenReturn(mockResponse);
 
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
@@ -147,8 +151,8 @@ class AdminControllerQRCodeTest {
                 .andExpect(jsonPath("$.sessionId").value(testSessionId));
 
         // Verify service was called with session ID (preferred)
-        verify(wasenderQRService).getQRCode(eq(testSessionId), anyString());
-        verify(wasenderQRService, never()).getQRCode(eq(testSessionName), anyString());
+        verify(wasenderQRServiceClient).getQRCode(eq(testSessionId), anyString());
+        verify(wasenderQRServiceClient, never()).getQRCode(eq(testSessionName), anyString());
     }
 
     @Test
@@ -159,7 +163,7 @@ class AdminControllerQRCodeTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Either sessionName or sessionId must be provided"));
 
-        verify(wasenderQRService, never()).getQRCode(anyString(), anyString());
+        verify(wasenderQRServiceClient, never()).getQRCode(anyString(), anyString());
     }
 
     @Test
@@ -169,7 +173,7 @@ class AdminControllerQRCodeTest {
         mockResponse.put("success", true);
         mockResponse.put("qrCode", "2@testQRCodeString");
 
-        when(wasenderQRService.getQRCode(eq(testSessionName), anyString())).thenReturn(mockResponse);
+        when(wasenderQRServiceClient.getQRCode(eq(testSessionName), anyString())).thenReturn(mockResponse);
 
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
@@ -179,7 +183,7 @@ class AdminControllerQRCodeTest {
                 .sessionAttr("userId", "test-user-id"))
                 .andExpect(status().isOk());
 
-        verify(wasenderQRService).getQRCode(eq(testSessionName), anyString());
+        verify(wasenderQRServiceClient).getQRCode(eq(testSessionName), anyString());
     }
 
     @Test
@@ -195,7 +199,7 @@ class AdminControllerQRCodeTest {
                 .andExpect(jsonPath("$.requiresApiKey").value(true))
                 .andExpect(jsonPath("$.error").value("WASender API key is not configured"));
 
-        verify(wasenderQRService, never()).getQRCode(anyString(), anyString());
+        verify(wasenderQRServiceClient, never()).getQRCode(anyString(), anyString());
     }
 
     @Test
@@ -220,7 +224,7 @@ class AdminControllerQRCodeTest {
         mockSession.setPhoneNumber(testPhoneNumber);
         mockSession.setSessionApiKey(null); // Initially null, will be fetched later
 
-        when(wasenderQRService.createSession(
+        when(wasenderQRServiceClient.createSession(
                 eq(testSessionName),
                 eq(testPhoneNumber),
                 eq(true),  // accountProtection
@@ -250,7 +254,7 @@ class AdminControllerQRCodeTest {
         // Mock getSessionDetails to return empty (so it doesn't try to fetch API key)
         Map<String, Object> emptySessionDetails = new HashMap<>();
         emptySessionDetails.put("success", false);
-        when(wasenderQRService.getSessionDetails(anyString(), anyString())).thenReturn(emptySessionDetails);
+        when(wasenderQRServiceClient.getSessionDetails(anyString(), anyString())).thenReturn(emptySessionDetails);
 
         // Act & Assert
         mockMvc.perform(post("/admin/api/whatsapp/session")
@@ -261,7 +265,7 @@ class AdminControllerQRCodeTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.sessionId").value(testSessionId));
 
-        verify(wasenderQRService).createSession(
+        verify(wasenderQRServiceClient).createSession(
                 eq(testSessionName),
                 eq(testPhoneNumber),
                 eq(true),
@@ -293,7 +297,7 @@ class AdminControllerQRCodeTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("Phone number")));
 
-        verify(wasenderQRService, never()).createSession(
+        verify(wasenderQRServiceClient, never()).createSession(
                 anyString(), anyString(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString());
     }
 
@@ -317,7 +321,7 @@ class AdminControllerQRCodeTest {
         mockSession.setPhoneNumber(testPhoneNumber);
         mockSession.setSessionApiKey(null); // Initially null, will be fetched later
 
-        when(wasenderQRService.createSession(
+        when(wasenderQRServiceClient.createSession(
                 anyString(),  // sessionName
                 anyString(),  // phoneNumber
                 any(Boolean.class),  // accountProtection
@@ -347,7 +351,7 @@ class AdminControllerQRCodeTest {
         // Mock getSessionDetails to return empty (so it doesn't try to fetch API key)
         Map<String, Object> emptySessionDetails = new HashMap<>();
         emptySessionDetails.put("success", false);
-        when(wasenderQRService.getSessionDetails(anyString(), anyString())).thenReturn(emptySessionDetails);
+        when(wasenderQRServiceClient.getSessionDetails(anyString(), anyString())).thenReturn(emptySessionDetails);
 
         // Act & Assert
         mockMvc.perform(post("/admin/api/whatsapp/session")
@@ -357,7 +361,7 @@ class AdminControllerQRCodeTest {
                 .andExpect(status().isOk());
 
         // Verify accountProtection was passed as Boolean
-        verify(wasenderQRService).createSession(
+        verify(wasenderQRServiceClient).createSession(
                 anyString(),  // sessionName
                 anyString(),  // phoneNumber
                 eq(true),     // accountProtection - Boolean value
@@ -382,7 +386,7 @@ class AdminControllerQRCodeTest {
         mockResponse.put("qrCode", "2@testQRCode");
         mockResponse.put("status", "NEED_SCAN");
 
-        when(wasenderQRService.connectSession(eq(testSessionName), anyString())).thenReturn(mockResponse);
+        when(wasenderQRServiceClient.connectSession(eq(testSessionName), anyString())).thenReturn(mockResponse);
 
         // Act & Assert - This tests that @PathVariable with explicit name works
         mockMvc.perform(post("/admin/api/whatsapp/session/{sessionName}/connect", testSessionName)
@@ -392,7 +396,7 @@ class AdminControllerQRCodeTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.qrCode").exists());
 
-        verify(wasenderQRService).connectSession(eq(testSessionName), anyString());
+        verify(wasenderQRServiceClient).connectSession(eq(testSessionName), anyString());
     }
 
     @Test
@@ -404,7 +408,7 @@ class AdminControllerQRCodeTest {
         errorResponse.put("statusCode", 404);
         errorResponse.put("statusText", "NOT_FOUND");
 
-        when(wasenderQRService.getQRCode(eq(testSessionId), anyString())).thenReturn(errorResponse);
+        when(wasenderQRServiceClient.getQRCode(eq(testSessionId), anyString())).thenReturn(errorResponse);
 
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
@@ -415,7 +419,7 @@ class AdminControllerQRCodeTest {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.statusCode").value(404));
 
-        verify(wasenderQRService).getQRCode(eq(testSessionId), anyString());
+        verify(wasenderQRServiceClient).getQRCode(eq(testSessionId), anyString());
     }
 
     @Test
@@ -426,7 +430,7 @@ class AdminControllerQRCodeTest {
         mockResponse.put("qrCode", "2@testQRCodeString");
         mockResponse.put("sessionId", testSessionId); // Important: session ID is returned
 
-        when(wasenderQRService.getQRCode(eq(testSessionId), anyString())).thenReturn(mockResponse);
+        when(wasenderQRServiceClient.getQRCode(eq(testSessionId), anyString())).thenReturn(mockResponse);
 
         // Act & Assert
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
@@ -448,7 +452,7 @@ class AdminControllerQRCodeTest {
         // Test sessionId parameter binding
         Map<String, Object> mockResponse = new HashMap<>();
         mockResponse.put("success", true);
-        when(wasenderQRService.getQRCode(eq(testSessionId), anyString())).thenReturn(mockResponse);
+        when(wasenderQRServiceClient.getQRCode(eq(testSessionId), anyString())).thenReturn(mockResponse);
 
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionId", testSessionId)
@@ -457,7 +461,7 @@ class AdminControllerQRCodeTest {
                 .andExpect(status().isOk());
 
         // Test sessionName parameter binding
-        when(wasenderQRService.getQRCode(eq(testSessionName), anyString())).thenReturn(mockResponse);
+        when(wasenderQRServiceClient.getQRCode(eq(testSessionName), anyString())).thenReturn(mockResponse);
         mockMvc.perform(get("/admin/api/whatsapp/qrcode")
                 .param("sessionName", testSessionName)
                 .sessionAttr("wasenderApiKey", "test-api-key")

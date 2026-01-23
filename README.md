@@ -213,52 +213,27 @@ cd notification-api && mvn test
 
 #### Integration Tests
 
-Integration tests require PostgreSQL and Kafka to be running. You can use Docker to run them locally:
+Integration tests require Docker and Testcontainers (PostgreSQL and Kafka containers).
 
-**Prerequisites:**
-- Docker and Docker Compose must be installed and running
-- Port 5432 must be available (stop local PostgreSQL if needed: `sudo systemctl stop postgresql`)
+**Default Behavior:**
+- Integration tests are **skipped by default** (`skipITs=true`) for local development
+- This allows `mvn clean verify` to run without Docker
 
-**Option 1: Using the test script (Recommended)**
-
-```bash
-# Start Docker services and run all tests
-./run-tests-local.sh
-
-# Clean up and start fresh
-./run-tests-local.sh clean
-```
-
-The script will:
-- Start PostgreSQL, Zookeeper, and Kafka in Docker
-- Wait for services to be ready
-- Set environment variables
-- Run all tests (unit + integration)
-- Optionally stop services when done
-
-**Option 2: Manual setup**
+**Running integration tests (Docker required):**
 
 ```bash
-# Start test services (uses port 5432 to match CI)
 docker compose -f docker-compose.test.yml up -d
-
-# Wait for services to be ready (~30 seconds)
-docker compose -f docker-compose.test.yml ps
-
-# Set environment variables
 export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/notification_db"
 export SPRING_DATASOURCE_USERNAME="notification_user"
 export SPRING_DATASOURCE_PASSWORD="notification_pass"
 export SPRING_KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
-
-# Run integration tests
-mvn clean verify -DskipTests=false
-
-# Stop test services when done
+mvn clean verify -DskipITs=false
 docker compose -f docker-compose.test.yml down
 ```
 
-**Note:** The test Docker Compose file (`docker-compose.test.yml`) uses port 5432 to match the CI environment. The regular `docker-compose.yml` uses port 5433 to avoid conflicts.
+- `docker-compose.test.yml` provides Postgres, Zookeeper, Kafka for tests.
+- Regular `docker-compose.yml` uses port 5433 to avoid conflicts.
+- If Docker is unavailable, integration tests are skipped (default).
 
 ### Code Style
 
@@ -555,7 +530,7 @@ Access at `http://localhost:8080/admin/dashboard` for:
 ## 📚 Documentation
 
 - **OpenAPI/Swagger UI**: http://localhost:8080/swagger-ui.html
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture, design patterns, and technical details
+- **[docs/](docs/)** - Architecture, invariants, operations, extensibility, security and logging
 - **[API.md](API.md)** - Complete API reference with examples
 
 ## 📚 Additional Resources

@@ -21,17 +21,3 @@ public interface WasenderConfigRepository extends JpaRepository<WasenderConfig, 
      */
     boolean existsByIsDeletedFalse();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

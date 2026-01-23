@@ -36,8 +36,18 @@ public class WhatsAppSession extends BaseAuditableEntity {
     @Column(name = "session_name", nullable = false, length = 255)
     private String sessionName;
 
+    /**
+     * API key generated for this session when connected.
+     * 
+     * Encryption: Automatically encrypted at rest if encryption.enabled=true
+     * See EncryptedStringAttributeConverter for configuration details.
+     * 
+     * To enable: Set encryption.enabled=true and encryption.key=<base64-key>
+     * To generate key: EncryptedStringAttributeConverter.generateEncryptionKey()
+     */
     @Column(name = "session_api_key", length = 500)
-    private String sessionApiKey; // API key generated for this session when connected
+    @Convert(converter = com.clapgrow.notification.api.config.EncryptedStringAttributeConverter.class)
+    private String sessionApiKey;
 
     @Column(name = "phone_number", length = 50)
     private String phoneNumber;

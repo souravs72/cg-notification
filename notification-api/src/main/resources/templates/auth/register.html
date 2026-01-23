@@ -103,7 +103,8 @@
             <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}"></span>
         </div>
 
-        <form method="post" action="/auth/register" id="registerForm">
+        <form method="post" th:action="@{/auth/register}" id="registerForm">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
             <div class="mb-3">
                 <label for="email" class="form-label">Email Address <span class="text-danger">*</span></label>
                 <input type="email" class="form-control" id="email" name="email" required 

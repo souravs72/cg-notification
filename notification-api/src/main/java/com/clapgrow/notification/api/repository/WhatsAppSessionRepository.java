@@ -19,13 +19,3 @@ public interface WhatsAppSessionRepository extends JpaRepository<WhatsAppSession
     // Find session by name without user filter (for scheduled messages)
     Optional<WhatsAppSession> findFirstBySessionNameAndIsDeletedFalse(String sessionName);
 }
-
-
-
-
-
-
-
-
-
-

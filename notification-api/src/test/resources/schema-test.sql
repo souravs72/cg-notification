@@ -7,7 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- Create enum types (must be created before Hibernate creates tables)
 DO $$ BEGIN
-    CREATE TYPE delivery_status AS ENUM ('PENDING', 'SCHEDULED', 'SENT', 'DELIVERED', 'FAILED', 'BOUNCED', 'REJECTED');
+    CREATE TYPE delivery_status AS ENUM ('PENDING', 'RETRYING', 'SCHEDULED', 'SENT', 'DELIVERED', 'FAILED', 'BOUNCED', 'REJECTED');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;

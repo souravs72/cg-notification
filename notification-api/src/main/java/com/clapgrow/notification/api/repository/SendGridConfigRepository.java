@@ -21,11 +21,3 @@ public interface SendGridConfigRepository extends JpaRepository<SendGridConfig, 
      */
     boolean existsByIsDeletedFalse();
 }
-
-
-
-
-
-
-
-
