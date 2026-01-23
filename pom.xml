@@ -29,7 +29,7 @@
         <grpc.version>1.67.1</grpc.version>
         <protobuf.version>3.25.5</protobuf.version>
         <postgresql.version>42.7.1</postgresql.version>
-        <lombok.version>1.18.34</lombok.version>
+        <lombok.version>1.18.42</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <springdoc.version>2.3.0</springdoc.version>
         <testcontainers.version>1.19.3</testcontainers.version>
