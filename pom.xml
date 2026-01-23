@@ -47,7 +47,7 @@
         <skipITs>true</skipITs>
         <!-- Dependency version alignment -->
         <guava.version>33.2.1-jre</guava.version>
-        <errorprone.version>2.28.0</errorprone.version>
+        <errorprone.version>2.46.0</errorprone.version>
         <checkerqual.version>3.42.0</checkerqual.version>
         <j2objc.version>3.0.0</j2objc.version>
     </properties>
