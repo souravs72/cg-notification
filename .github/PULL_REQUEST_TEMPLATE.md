@@ -1,5 +1,11 @@
-## Description
-<!-- Provide a brief description of the changes in this PR -->
+## Summary
+<!-- Brief description of changes (2-3 sentences) -->
+
+## Changes
+<!-- List key changes made in this PR -->
+- 
+- 
+- 
 
 ## Type of Change
 - [ ] Feature (new functionality)
@@ -16,7 +22,6 @@
 - [ ] Other (please specify)
 
 ## Related Issues
-<!-- Link to related issues -->
 Closes #
 
 ## Testing
@@ -33,5 +38,5 @@ Closes #
 - [ ] Tests pass locally
 
 ## Deployment Notes
-<!-- Any special deployment considerations -->
+<!-- Any special deployment considerations or breaking changes -->
 

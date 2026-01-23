@@ -9,6 +9,14 @@ import com.clapgrow.notification.api.entity.FrappeSite;
 import com.clapgrow.notification.api.service.NotificationService;
 import com.clapgrow.notification.api.service.ScheduledMessageService;
 import com.clapgrow.notification.api.service.SiteService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,6 +30,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
+@Tag(name = "Notifications", description = "API endpoints for sending and scheduling notifications")
 public class NotificationController {
     
     private final NotificationService notificationService;
@@ -29,8 +38,20 @@ public class NotificationController {
     private final SiteService siteService;
 
     @PostMapping("/send")
+    @Operation(
+            summary = "Send a notification",
+            description = "Sends a single notification via email or WhatsApp channel. The notification is queued for processing."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "202", description = "Notification accepted for processing",
+                    content = @Content(schema = @Schema(implementation = NotificationResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request data"),
+            @ApiResponse(responseCode = "401", description = "Invalid or missing API key")
+    })
+    @SecurityRequirement(name = "SiteKey")
     public ResponseEntity<NotificationResponse> sendNotification(
-            @RequestHeader("X-Site-Key") String apiKey,
+            @Parameter(description = "Site API key for authentication", required = true)
+            @RequestHeader(name = "X-Site-Key") String apiKey,
             @Valid @RequestBody NotificationRequest request) {
         
         FrappeSite site = siteService.validateApiKey(apiKey);
@@ -39,8 +60,19 @@ public class NotificationController {
     }
 
     @PostMapping("/send/bulk")
+    @Operation(
+            summary = "Send bulk notifications",
+            description = "Sends multiple notifications in a single request. All notifications are queued for processing."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "202", description = "Notifications accepted for processing"),
+            @ApiResponse(responseCode = "400", description = "Invalid request data"),
+            @ApiResponse(responseCode = "401", description = "Invalid or missing API key")
+    })
+    @SecurityRequirement(name = "SiteKey")
     public ResponseEntity<Map<String, Object>> sendBulkNotifications(
-            @RequestHeader("X-Site-Key") String apiKey,
+            @Parameter(description = "Site API key for authentication", required = true)
+            @RequestHeader(name = "X-Site-Key") String apiKey,
             @Valid @RequestBody BulkNotificationRequest request) {
         
         FrappeSite site = siteService.validateApiKey(apiKey);
@@ -55,8 +87,20 @@ public class NotificationController {
     }
 
     @PostMapping("/schedule")
+    @Operation(
+            summary = "Schedule a notification",
+            description = "Schedules a notification to be sent at a specific date and time."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "202", description = "Notification scheduled successfully",
+                    content = @Content(schema = @Schema(implementation = NotificationResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request data"),
+            @ApiResponse(responseCode = "401", description = "Invalid or missing API key")
+    })
+    @SecurityRequirement(name = "SiteKey")
     public ResponseEntity<NotificationResponse> scheduleNotification(
-            @RequestHeader("X-Site-Key") String apiKey,
+            @Parameter(description = "Site API key for authentication", required = true)
+            @RequestHeader(name = "X-Site-Key") String apiKey,
             @Valid @RequestBody ScheduledNotificationRequest request) {
         
         FrappeSite site = siteService.validateApiKey(apiKey);
@@ -65,8 +109,19 @@ public class NotificationController {
     }
 
     @PostMapping("/schedule/bulk")
+    @Operation(
+            summary = "Schedule bulk notifications",
+            description = "Schedules multiple notifications to be sent at specific dates and times."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "202", description = "Notifications scheduled successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid request data"),
+            @ApiResponse(responseCode = "401", description = "Invalid or missing API key")
+    })
+    @SecurityRequirement(name = "SiteKey")
     public ResponseEntity<Map<String, Object>> scheduleBulkNotifications(
-            @RequestHeader("X-Site-Key") String apiKey,
+            @Parameter(description = "Site API key for authentication", required = true)
+            @RequestHeader(name = "X-Site-Key") String apiKey,
             @Valid @RequestBody BulkScheduledNotificationRequest request) {
         
         FrappeSite site = siteService.validateApiKey(apiKey);

@@ -1,36 +1,67 @@
 spring:
   application:
     name: email-worker
-  
+  main:
+    web-application-type: none
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/notification_db
-    username: notification_user
-    password: notification_pass
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/notification_db}
+    username: ${SPRING_DATASOURCE_USERNAME:notification_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:notification_pass}
     driver-class-name: org.postgresql.Driver
-  
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      pool-name: EmailWorkerHikariPool
+      auto-commit: false  # Disable autocommit for proper transaction management
+
   jpa:
     hibernate:
       ddl-auto: none
     show-sql: false
-  
+    properties:
+      hibernate:
+        connection:
+          provider_disables_autocommit: true
+
   kafka:
-    bootstrap-servers: localhost:9092
+    # IMPORTANT:
+    # Default matches Docker internal Kafka listener (kafka:29092).
+    # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    listener:
+      shutdown-timeout: ${KAFKA_LISTENER_SHUTDOWN_TIMEOUT:30s}
+
+kafka:
+  consumer:
+    group-id: ${KAFKA_CONSUMER_GROUP_ID:email-worker-group}
+    environment-prefix: ${KAFKA_CONSUMER_ENV_PREFIX:}
+    concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
+
+# Server port not needed (web-application-type: none)
+# server:
+#   port: 8081
 
 sendgrid:
   api:
-    key: ${SENDGRID_API_KEY:your-sendgrid-api-key}
+    key: ${SENDGRID_API_KEY}
   from:
-    email: ${SENDGRID_FROM_EMAIL:noreply@example.com}
-    name: ${SENDGRID_FROM_NAME:Notification Service}
-
-server:
-  port: 8081
+    email: ${SENDGRID_FROM_EMAIL}
+    name: ${SENDGRID_FROM_NAME}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
   metrics:
     export:
       prometheus:
@@ -38,7 +69,10 @@ management:
 
 logging:
   level:
-    root: INFO
-    com.clapgrow.notification: DEBUG
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.clapgrow.notification: ${LOG_LEVEL_APP:INFO}
     org.springframework.kafka: INFO
 
+springdoc:
+  swagger-ui:
+    enabled: false

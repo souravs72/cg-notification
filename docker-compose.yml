@@ -10,7 +10,23 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./deployment/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./deployment/init-db.sql:/docker-entrypoint-initdb.d/00-init.sql
+      - ./deployment/migration-add-users.sql:/docker-entrypoint-initdb.d/01-users.sql
+      - ./deployment/migration-add-wasender-config.sql:/docker-entrypoint-initdb.d/02-wasender-config.sql
+      - ./deployment/migration-add-message-fields.sql:/docker-entrypoint-initdb.d/03-message-fields.sql
+      - ./deployment/migration-add-retrying-status.sql:/docker-entrypoint-initdb.d/04-retrying-status.sql
+      - ./deployment/migration-add-failure-type.sql:/docker-entrypoint-initdb.d/05-failure-type.sql
+      - ./deployment/migration-add-failure-type-constraint.sql:/docker-entrypoint-initdb.d/06-failure-type-constraint.sql
+      - ./deployment/migration-add-message-status-history.sql:/docker-entrypoint-initdb.d/07-message-status-history.sql
+      - ./deployment/migration-add-history-source-column.sql:/docker-entrypoint-initdb.d/08-history-source-column.sql
+      - ./deployment/migration-add-status-history-trigger.sql:/docker-entrypoint-initdb.d/09-status-history-trigger.sql
+      - ./deployment/migration-add-email-config.sql:/docker-entrypoint-initdb.d/10-email-config.sql
+      - ./deployment/migration-add-whatsapp-session.sql:/docker-entrypoint-initdb.d/11-whatsapp-session.sql
+      - ./deployment/migration-make-site-id-nullable.sql:/docker-entrypoint-initdb.d/12-site-nullable.sql
+      - ./deployment/migration-add-whatsapp-sessions-table.sql:/docker-entrypoint-initdb.d/13-whatsapp-sessions-table.sql
+      - ./deployment/migration-add-sendgrid-config.sql:/docker-entrypoint-initdb.d/14-sendgrid-config.sql
+      - ./deployment/migration-add-sendgrid-email-config.sql:/docker-entrypoint-initdb.d/15-sendgrid-email-config.sql
+      - ./deployment/migration-add-partial-unique-indexes.sql:/docker-entrypoint-initdb.d/16-partial-unique-indexes.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U notification_user -d notification_db"]
       interval: 10s
@@ -35,18 +51,22 @@ services:
     image: confluentinc/cp-kafka:7.5.0
     container_name: notification-kafka
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9092:9092"
-      - "9093:9093"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 10s
@@ -57,7 +77,8 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: notification-kafka-ui
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     ports:
       - "8089:8080"
     environment:
@@ -82,13 +103,10 @@ services:
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      WASENDER_API_KEY: ${WASENDER_API_KEY}
     volumes:
-      - ./notification-api/src/main/resources:/app/config
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - notification_uploads:/app/uploads
 
   email-worker:
     build:
@@ -100,21 +118,14 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8081:8081"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-your-sendgrid-api-key}
-      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-noreply@example.com}
-      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-Notification Service}
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
+      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME}
 
   whatsapp-worker:
     build:
@@ -126,20 +137,13 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8083:8082"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      WASENDER_API_KEY: ${WASENDER_API_KEY:-your-wasender-api-key}
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      WASENDER_API_KEY: ${WASENDER_API_KEY}
 
 volumes:
   postgres_data:
-
+  notification_uploads:

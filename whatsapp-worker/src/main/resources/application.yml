@@ -1,34 +1,64 @@
 spring:
   application:
     name: whatsapp-worker
-  
+  main:
+    web-application-type: servlet  # Enable servlet-based REST API (Spring MVC)
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/notification_db
-    username: notification_user
-    password: notification_pass
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/notification_db}
+    username: ${SPRING_DATASOURCE_USERNAME:notification_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:notification_pass}
     driver-class-name: org.postgresql.Driver
-  
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      pool-name: WhatsAppWorkerHikariPool
+      auto-commit: false  # Disable autocommit for proper transaction management
+
   jpa:
     hibernate:
       ddl-auto: none
     show-sql: false
-  
+    properties:
+      hibernate:
+        connection:
+          provider_disables_autocommit: true
+
   kafka:
-    bootstrap-servers: localhost:9092
+    # IMPORTANT:
+    # Default matches Docker internal Kafka listener (kafka:29092).
+    # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    listener:
+      shutdown-timeout: ${KAFKA_LISTENER_SHUTDOWN_TIMEOUT:30s}
+
+kafka:
+  consumer:
+    group-id: ${KAFKA_CONSUMER_GROUP_ID:whatsapp-worker-group}
+    environment-prefix: ${KAFKA_CONSUMER_ENV_PREFIX:}
+    concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
+
+server:
+  port: ${SERVER_PORT:8082}  # REST API port for session management endpoints
 
 wasender:
   api:
-    base-url: https://wasenderapi.com/api
-    key: ${WASENDER_API_KEY:your-wasender-api-key}
-
-server:
-  port: 8082
+    base-url: ${WASENDER_API_BASE_URL:https://wasenderapi.com/api}
+    key: ${WASENDER_API_KEY}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true   # 🔥 IMPORTANT
   metrics:
     export:
       prometheus:
@@ -36,7 +66,12 @@ management:
 
 logging:
   level:
-    root: INFO
-    com.clapgrow.notification: DEBUG
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.clapgrow.notification: ${LOG_LEVEL_APP:INFO}
     org.springframework.kafka: INFO
 
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    enabled: false   # ❌ disable for worker

@@ -6,15 +6,104 @@
     <title>Admin Dashboard - Notification System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- QRCodeJS library - loaded synchronously, no defer -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
+        :root {
+            --sidebar-width: 250px;
+            --primary-color: #25D366;
+            --sidebar-bg: #2c3e50;
+            --sidebar-hover: #34495e;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f7fa;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            color: white;
+            padding: 20px 0;
+            z-index: 1000;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar-brand {
+            padding: 0 20px 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 20px;
+        }
+
+        .sidebar-brand h4 {
+            margin: 0;
+            color: white;
+            font-weight: 600;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar-menu li {
+            margin: 0;
+        }
+
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar-menu a:hover {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+
+        .sidebar-menu a.active {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+
+        .sidebar-menu a i {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 30px;
+            min-height: 100vh;
+        }
+
         .stat-card {
             border-left: 4px solid;
             transition: transform 0.2s;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }
         .stat-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.12);
         }
         .stat-card.total { border-left-color: #0d6efd; }
         .stat-card.success { border-left-color: #198754; }
@@ -49,34 +138,254 @@
             text-align: center;
             padding: 2rem;
         }
-        .qr-code-container img {
+        .qr-code-container canvas,
+        .qr-code-container table {
             max-width: 300px;
             border: 2px solid #dee2e6;
             border-radius: 0.5rem;
+            padding: 10px;
+            background-color: white;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .qr-code-container > div {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-header {
+            background-color: white;
+            border-bottom: 1px solid #e9ecef;
+            padding: 15px 20px;
+            font-weight: 600;
+        }
+
+        /* Ensure equal height cards in rows */
+        .row > [class*='col-'] {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .row > [class*='col-'] > .card {
+            flex: 1;
+        }
+
+        /* Maximize Modal Styles */
+        .maximize-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .maximize-modal.show {
+            display: flex;
+        }
+
+        .maximize-modal .modal-header {
+            padding: 20px 30px;
+            border-bottom: 1px solid #e9ecef;
+            background: white;
+            flex-shrink: 0;
+        }
+
+        .maximize-modal .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 30px;
+        }
+
+        .maximize-modal .modal-footer {
+            padding: 15px 30px;
+            border-top: 1px solid #e9ecef;
+            background: white;
+            flex-shrink: 0;
+        }
+
+        .pagination-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding: 10px 0;
+        }
+
+        .pagination-info {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .page-size-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .page-size-selector label {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .default-view-table {
+            height: 400px;
+            overflow-y: auto;
+            min-height: 400px;
+        }
+        
+        /* Fixed height card body for tables with pagination */
+        .table-card-body {
+            display: flex;
+            flex-direction: column;
+            min-height: 500px;
+        }
+        
+        .table-card-body .table-responsive {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .table-card-body .pagination-controls {
+            flex-shrink: 0;
+            margin-top: auto;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s;
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
         }
     </style>
 </head>
 <body class="bg-light">
-    <nav class="navbar navbar-dark bg-dark">
-        <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">
-                <i class="bi bi-graph-up"></i> Admin Dashboard
-            </span>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="sidebar-brand">
+            <h4><i class="fi fi-ts-social-media-notification"></i>CG Notification</h4>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="/admin/dashboard" class="active"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+            <li><a href="/admin/sites"><i class="bi bi-building"></i> Sites</a></li>
+            <li><a href="/admin/campaigns"><i class="bi bi-megaphone"></i> Campaigns</a></li>
+            <li><a href="/admin/sessions"><i class="bi bi-whatsapp"></i> WhatsApp Sessions</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Page Header -->
+        <div class="d-flex justify-content-end align-items-center mb-4">
             <div class="d-flex align-items-center gap-3">
-                <button class="btn btn-sm btn-outline-light" onclick="showCreateSiteModal()">
-                    <i class="bi bi-plus-circle"></i> Create Site
-                </button>
-                <button class="btn btn-sm btn-outline-light" onclick="showWhatsAppQRModal()">
-                    <i class="bi bi-qr-code"></i> Connect WhatsApp
-                </button>
-                <span class="text-light">
+                <span class="text-muted">
+                    <i class="bi bi-person-circle"></i> <span th:text="${user?.email}">User</span>
+                </span>
+                <a href="/auth/logout" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </a>
+                <span class="text-muted">
                     <i class="bi bi-clock"></i> <span id="currentTime"></span>
                 </span>
             </div>
         </div>
-    </nav>
-
-    <div class="container-fluid mt-4">
+        
+        <!-- Subscription Summary & Session Stats Row -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-credit-card"></i> Subscription Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="subscriptionSummary">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-muted">Plan:</span>
+                                <span class="fw-bold" id="subscriptionPlan" th:text="${user?.subscriptionType ?: 'FREE_TRIAL'}">Free Trial</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-muted">Status:</span>
+                                <span class="badge" id="subscriptionStatus" 
+                                      th:classappend="${user?.subscriptionStatus == 'ACTIVE'} ? 'bg-success' : 'bg-warning'"
+                                      th:text="${user?.subscriptionStatus ?: 'ACTIVE'}">Active</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-muted">Sessions Used:</span>
+                                <span class="fw-bold" id="sessionsUsed" th:text="${user?.sessionsUsed ?: 0}">0</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Sessions Allowed:</span>
+                                <span class="fw-bold" id="sessionsAllowed" th:text="${user?.sessionsAllowed ?: 10}">10</span>
+                            </div>
+                            <div class="progress mt-3" style="height: 8px;">
+                                <div class="progress-bar" id="sessionsProgress" role="progressbar" 
+                                     th:style="'width: ' + ${user?.sessionsAllowed != null && user?.sessionsAllowed > 0 ? (user.sessionsUsed * 100 / user.sessionsAllowed) : 0} + '%'"
+                                     style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-whatsapp"></i> Session Stats</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="sessionStats">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-muted">Total Sessions:</span>
+                                <span class="fw-bold" id="totalSessions">-</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Connected:</span>
+                                <span class="badge bg-success" id="connectedSessions">0</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Disconnected:</span>
+                                <span class="badge bg-danger" id="disconnectedSessions">0</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Needs QR Scan:</span>
+                                <span class="badge bg-warning" id="needsScanSessions">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Summary Cards -->
         <div class="row mb-4">
             <div class="col-md-3 mb-3">
@@ -151,9 +460,24 @@
             </div>
         </div>
 
-        <!-- Charts Row -->
+        <!-- Recent Activity & Message Charts Row -->
         <div class="row mb-4">
-            <div class="col-md-6 mb-3">
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Activity</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="recentActivity" style="height: 300px; overflow-y: auto;">
+                            <div class="text-center text-muted py-3">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                <p class="mt-2 mb-0">Loading activity...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Messages by Status</h5>
@@ -165,7 +489,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-4 mb-3">
                 <div class="card">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Messages by Channel</h5>
@@ -179,6 +503,30 @@
             </div>
         </div>
 
+        <!-- Message Activity Chart -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Message Activity Chart</h5>
+                        <div class="d-flex align-items-center gap-2">
+                            <small class="text-muted" id="timezoneDisplay" style="font-size: 0.75rem;"></small>
+                            <select id="activityChartFilter" class="form-select form-select-sm" style="width: auto; display: inline-block;" onchange="updateActivityChart()">
+                                <option value="today" selected>Today</option>
+                                <option value="lastWeek">Last Week</option>
+                                <option value="overall">Overall</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 400px;">
+                            <canvas id="messageActivityChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Message Details Table -->
         <div class="row mb-4">
             <div class="col-12">
@@ -186,6 +534,12 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><i class="bi bi-envelope"></i> Recent Messages</h5>
                         <div>
+                            <button class="btn btn-sm btn-outline-success me-2" onclick="maximizeMessagesView()" title="Maximize View">
+                                <i class="bi bi-arrows-fullscreen"></i> Maximize
+                            </button>
+                            <button class="btn btn-sm btn-outline-info me-2" onclick="loadScheduledMessages()">
+                                <i class="bi bi-clock"></i> Show Scheduled
+                            </button>
                             <button class="btn btn-sm btn-outline-danger me-2" onclick="loadFailedMessages()">
                                 <i class="bi bi-exclamation-triangle"></i> Show Failed
                             </button>
@@ -194,8 +548,8 @@
                             </button>
                         </div>
                     </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
+                    <div class="card-body table-card-body">
+                        <div class="table-responsive default-view-table">
                             <table class="table table-hover message-table" id="messagesTable">
                                 <thead class="table-dark">
                                     <tr>
@@ -204,10 +558,10 @@
                                         <th>Channel</th>
                                         <th>Recipient</th>
                                         <th>Status</th>
-                                        <th>Subject/Body</th>
-                                        <th>Error</th>
+                                        <th>Scheduled At</th>
                                         <th>Sent At</th>
                                         <th>Delivered At</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="messagesTableBody">
@@ -216,6 +570,14 @@
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                        <div class="pagination-controls" id="messagesPaginationControls">
+                            <div class="pagination-info" id="messagesPaginationInfo">Showing 0-0 of 0</div>
+                            <nav>
+                                <ul class="pagination pagination-sm mb-0" id="messagesPagination">
+                                    <!-- Pagination buttons will be inserted here -->
+                                </ul>
+                            </nav>
                         </div>
                     </div>
                 </div>
@@ -228,13 +590,18 @@
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0"><i class="bi bi-table"></i> Site-wise Metrics</h5>
-                        <button class="btn btn-sm btn-outline-primary" onclick="refreshDashboard()">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh
-                        </button>
+                        <div>
+                            <button class="btn btn-sm btn-outline-success me-2" onclick="maximizeSitesView()" title="Maximize View">
+                                <i class="bi bi-arrows-fullscreen"></i> Maximize
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="refreshDashboard()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
+                    <div class="card-body table-card-body">
+                        <div class="table-responsive default-view-table">
+                            <table class="table table-hover" id="sitesMetricsTable">
                                 <thead class="table-dark">
                                     <tr>
                                         <th>Site Name</th>
@@ -244,11 +611,15 @@
                                         <th>Success Rate</th>
                                         <th>Email</th>
                                         <th>WhatsApp</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody id="sitesMetricsTableBody">
                                     <tr th:each="site : ${metrics.siteMetrics}">
-                                        <td><strong th:text="${site.siteName}">Site Name</strong></td>
+                                        <td>
+                                            <strong th:text="${site.siteName}">Site Name</strong>
+                                            <span th:if="${site.siteId == null}" class="badge bg-secondary ms-2">No Site</span>
+                                        </td>
                                         <td th:text="${site.totalSent}">0</td>
                                         <td class="text-success" th:text="${site.totalSuccess}">0</td>
                                         <td class="text-danger" th:text="${site.totalFailed}">0</td>
@@ -258,23 +629,41 @@
                                                   th:text="${site.successRate} + '%'">0%</span>
                                         </td>
                                         <td>
-                                            <span th:if="${site.channelMetrics.EMAIL != null}">
+                                            <span th:if="${site.channelMetrics.EMAIL != null && site.channelMetrics.EMAIL.totalSent > 0}">
                                                 <span class="badge bg-info" th:text="${site.channelMetrics.EMAIL.totalSent}">0</span>
                                             </span>
-                                            <span th:if="${site.channelMetrics.EMAIL == null}">-</span>
+                                            <span th:if="${site.channelMetrics.EMAIL == null || site.channelMetrics.EMAIL.totalSent == 0}">-</span>
                                         </td>
                                         <td>
-                                            <span th:if="${site.channelMetrics.WHATSAPP != null}">
+                                            <span th:if="${site.channelMetrics.WHATSAPP != null && site.channelMetrics.WHATSAPP.totalSent > 0}">
                                                 <span class="badge bg-success" th:text="${site.channelMetrics.WHATSAPP.totalSent}">0</span>
                                             </span>
-                                            <span th:if="${site.channelMetrics.WHATSAPP == null}">-</span>
+                                            <span th:if="${site.channelMetrics.WHATSAPP == null || site.channelMetrics.WHATSAPP.totalSent == 0}">-</span>
+                                        </td>
+                                        <td>
+                                            <button th:if="${site.siteId != null}" 
+                                                    class="btn btn-sm btn-danger delete-site-btn" 
+                                                    th:data-site-id="${site.siteId}"
+                                                    th:data-site-name="${site.siteName}"
+                                                    title="Delete Site">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                            <span th:if="${site.siteId == null}" class="text-muted">-</span>
                                         </td>
                                     </tr>
                                     <tr th:if="${#lists.isEmpty(metrics.siteMetrics)}">
-                                        <td colspan="7" class="text-center text-muted">No sites registered yet</td>
+                                        <td colspan="8" class="text-center text-muted">No messages found</td>
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                        <div class="pagination-controls" id="sitesPaginationControls">
+                            <div class="pagination-info" id="sitesPaginationInfo">Showing 0-0 of 0</div>
+                            <nav>
+                                <ul class="pagination pagination-sm mb-0" id="sitesPagination">
+                                    <!-- Pagination buttons will be inserted here -->
+                                </ul>
+                            </nav>
                         </div>
                     </div>
                 </div>
@@ -293,12 +682,36 @@
                 <div class="modal-body">
                     <form id="createSiteForm">
                         <div class="mb-3">
-                            <label for="siteName" class="form-label">Site Name</label>
+                            <label for="siteName" class="form-label">Site Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="siteName" required>
                         </div>
                         <div class="mb-3">
                             <label for="siteDescription" class="form-label">Description (Optional)</label>
-                            <textarea class="form-control" id="siteDescription" rows="3"></textarea>
+                            <textarea class="form-control" id="siteDescription" rows="2"></textarea>
+                        </div>
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-whatsapp"></i> WhatsApp Configuration (Optional)</h6>
+                        <div class="mb-3">
+                            <label for="whatsappSessionName" class="form-label">WhatsApp Session Name</label>
+                            <input type="text" class="form-control" id="whatsappSessionName" placeholder="e.g., shared-session or site-specific-session">
+                            <small class="form-text text-muted">Leave empty if not using WhatsApp. Multiple sites can share the same session name.</small>
+                        </div>
+                        <hr>
+                        <h6 class="mb-3"><i class="bi bi-envelope"></i> Email Configuration (Optional)</h6>
+                        <div class="mb-3">
+                            <label for="emailFromAddress" class="form-label">From Email Address</label>
+                            <input type="email" class="form-control" id="emailFromAddress" placeholder="noreply@example.com">
+                            <small class="form-text text-muted">Default sender email for this site.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="emailFromName" class="form-label">From Name</label>
+                            <input type="text" class="form-control" id="emailFromName" placeholder="Company Name">
+                            <small class="form-text text-muted">Display name for email sender.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sendgridApiKey" class="form-label">SendGrid API Key</label>
+                            <input type="password" class="form-control" id="sendgridApiKey" placeholder="SG.xxx">
+                            <small class="form-text text-muted">Optional. Uses default SendGrid key if not provided.</small>
                         </div>
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle"></i> An API key will be generated automatically after creation.
@@ -340,8 +753,164 @@
         </div>
     </div>
 
+    <!-- Maximized Messages View Modal -->
+    <div class="maximize-modal" id="maximizedMessagesModal">
+        <div class="modal-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-envelope"></i> Recent Messages - Full View</h5>
+            <div class="d-flex align-items-center gap-3">
+                <div class="page-size-selector">
+                    <label for="messagesPageSize">Rows per page:</label>
+                    <select class="form-select form-select-sm" id="messagesPageSize" style="width: auto;" onchange="changeMessagesPageSize()">
+                        <option value="10">10</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="500">500</option>
+                        <option value="1000">1000</option>
+                        <option value="2500">2500</option>
+                    </select>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-outline-info me-2" onclick="loadScheduledMessagesMaximized()">
+                        <i class="bi bi-clock"></i> Scheduled
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger me-2" onclick="loadFailedMessagesMaximized()">
+                        <i class="bi bi-exclamation-triangle"></i> Failed
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary me-2" onclick="loadRecentMessagesMaximized()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="minimizeMessagesView()">
+                        <i class="bi bi-x-lg"></i> Close
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="table-responsive">
+                <table class="table table-hover message-table" id="maximizedMessagesTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Message ID</th>
+                            <th>Site</th>
+                            <th>Channel</th>
+                            <th>Recipient</th>
+                            <th>Status</th>
+                            <th>Scheduled At</th>
+                            <th>Sent At</th>
+                            <th>Delivered At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="maximizedMessagesTableBody">
+                        <tr>
+                            <td colspan="9" class="text-center text-muted">Loading messages...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination-controls">
+                <div class="pagination-info" id="maximizedMessagesPaginationInfo">Showing 0-0 of 0</div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0" id="maximizedMessagesPagination">
+                        <!-- Pagination buttons will be inserted here -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Maximized Sites View Modal -->
+    <div class="maximize-modal" id="maximizedSitesModal">
+        <div class="modal-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-table"></i> Site-wise Metrics - Full View</h5>
+            <div class="d-flex align-items-center gap-3">
+                <div class="page-size-selector">
+                    <label for="sitesPageSize">Rows per page:</label>
+                    <select class="form-select form-select-sm" id="sitesPageSize" style="width: auto;" onchange="changeSitesPageSize()">
+                        <option value="10">10</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="500">500</option>
+                        <option value="1000">1000</option>
+                        <option value="2500">2500</option>
+                    </select>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" onclick="refreshSitesMaximized()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="minimizeSitesView()">
+                        <i class="bi bi-x-lg"></i> Close
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="maximizedSitesTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Site Name</th>
+                            <th>Total Sent</th>
+                            <th>Successful</th>
+                            <th>Failed</th>
+                            <th>Success Rate</th>
+                            <th>Email</th>
+                            <th>WhatsApp</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="maximizedSitesTableBody">
+                        <!-- Content will be loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination-controls">
+                <div class="pagination-info" id="maximizedSitesPaginationInfo">Showing 0-0 of 0</div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0" id="maximizedSitesPagination">
+                        <!-- Pagination buttons will be inserted here -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Message Details Modal -->
+    <div class="modal fade" id="messageDetailsModal" tabindex="-1" aria-labelledby="messageDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="messageDetailsModalLabel">Message Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="messageDetailsBody">
+                    <!-- Details will be inserted here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script th:inline="javascript">
+        // Secure admin key storage - uses sessionStorage instead of HTML meta tag
+        function getAdminKey() {
+            let adminKey = sessionStorage.getItem('adminApiKey');
+            if (!adminKey) {
+                adminKey = prompt('Please enter your Admin API Key:');
+                if (adminKey && adminKey.trim()) {
+                    sessionStorage.setItem('adminApiKey', adminKey.trim());
+                    return adminKey.trim();
+                } else {
+                    throw new Error('Admin API key is required');
+                }
+            }
+            return adminKey;
+        }
+
         // Update current time
         function updateTime() {
             document.getElementById('currentTime').textContent = new Date().toLocaleString();
@@ -351,15 +920,14 @@
 
         // Status Chart
         const statusCtx = document.getElementById('statusChart').getContext('2d');
+        const statusSuccess = /*[[${metrics.totalMessagesSuccess}]]*/ 0;
+        const statusFailed = /*[[${metrics.totalMessagesFailed}]]*/ 0;
         const statusChart = new Chart(statusCtx, {
             type: 'doughnut',
             data: {
                 labels: ['Successful', 'Failed'],
                 datasets: [{
-                    data: [
-                        /*[[${metrics.totalMessagesSuccess}]]*/ 0,
-                        /*[[${metrics.totalMessagesFailed}]]*/ 0
-                    ],
+                    data: [statusSuccess, statusFailed],
                     backgroundColor: ['#198754', '#dc3545']
                 }]
             },
@@ -375,22 +943,41 @@
                                 size: 12
                             }
                         }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = statusSuccess + statusFailed;
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return label + ': ' + value + ' (' + percentage + '%)';
+                            }
+                        }
                     }
                 }
             }
         });
+        
+        // Show message if no data
+        if (statusSuccess === 0 && statusFailed === 0) {
+            statusChart.data.labels = ['No messages'];
+            statusChart.data.datasets[0].data = [1];
+            statusChart.data.datasets[0].backgroundColor = ['#e9ecef'];
+            statusChart.update();
+        }
 
-        // Channel Chart Data
+        // Channel Chart Data - Aggregate from all sites (including "No Site")
         const channelData = {
             EMAIL: 0,
             WHATSAPP: 0
         };
         
         /*[# th:each="site : ${metrics.siteMetrics}"]*/
-            /*[# th:if="${site.channelMetrics.EMAIL != null}"]*/
+            /*[# th:if="${site.channelMetrics.EMAIL != null && site.channelMetrics.EMAIL.totalSent != null}"]*/
                 channelData.EMAIL += /*[[${site.channelMetrics.EMAIL.totalSent}]]*/ 0;
             /*[/]*/
-            /*[# th:if="${site.channelMetrics.WHATSAPP != null}"]*/
+            /*[# th:if="${site.channelMetrics.WHATSAPP != null && site.channelMetrics.WHATSAPP.totalSent != null}"]*/
                 channelData.WHATSAPP += /*[[${site.channelMetrics.WHATSAPP.totalSent}]]*/ 0;
             /*[/]*/
         /*[/]*/
@@ -413,78 +1000,83 @@
                 aspectRatio: 1.5,
                 scales: {
                     y: {
-                        beginAtZero: true
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y || 0;
+                                return label + ': ' + value;
+                            }
+                        }
                     }
                 }
             }
         });
+        
+        // Show message if no data
+        if (channelData.EMAIL === 0 && channelData.WHATSAPP === 0) {
+            channelChart.data.labels = ['No messages'];
+            channelChart.data.datasets[0].data = [0];
+            channelChart.update();
+        }
 
         function refreshDashboard() {
             location.reload();
         }
 
         function loadRecentMessages() {
-            fetch('/admin/api/messages/recent?limit=50')
+            return fetch('/admin/api/messages/recent?limit=2500')
                 .then(response => response.json())
                 .then(data => {
-                    const tbody = document.getElementById('messagesTableBody');
-                    if (data.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
-                        return;
-                    }
-                    tbody.innerHTML = data.map(msg => `
-                        <tr>
-                            <td><code>${msg.messageId}</code></td>
-                            <td>${msg.siteName}</td>
-                            <td><span class="badge ${msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info'}">${msg.channel}</span></td>
-                            <td>${msg.recipient}</td>
-                            <td>
-                                <span class="badge status-badge ${
-                                    msg.status === 'DELIVERED' ? 'bg-success' :
-                                    msg.status === 'SENT' ? 'bg-primary' :
-                                    msg.status === 'FAILED' ? 'bg-danger' :
-                                    msg.status === 'PENDING' ? 'bg-warning' : 'bg-secondary'
-                                }">${msg.status}</span>
-                            </td>
-                            <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
-                            <td><small class="text-danger">${msg.errorMessage || '-'}</small></td>
-                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
-                        </tr>
-                    `).join('');
+                    messagesData = data;
+                    messagesCurrentPage = 1;
+                    messagesCurrentFilter = 'recent';
+                    renderMessagesTable();
                 })
                 .catch(error => {
                     console.error('Error loading messages:', error);
+                    messagesData = [];
                     document.getElementById('messagesTableBody').innerHTML = 
                         '<tr><td colspan="9" class="text-center text-danger">Error loading messages</td></tr>';
                 });
         }
 
-        function loadFailedMessages() {
-            fetch('/admin/api/messages/failed?limit=50')
+        function loadScheduledMessages() {
+            return fetch('/admin/api/messages/scheduled?limit=2500')
                 .then(response => response.json())
                 .then(data => {
-                    const tbody = document.getElementById('messagesTableBody');
-                    if (data.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No failed messages found</td></tr>';
-                        return;
-                    }
-                    tbody.innerHTML = data.map(msg => `
-                        <tr class="table-danger">
-                            <td><code>${msg.messageId}</code></td>
-                            <td>${msg.siteName}</td>
-                            <td><span class="badge ${msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info'}">${msg.channel}</span></td>
-                            <td>${msg.recipient}</td>
-                            <td><span class="badge bg-danger">${msg.status}</span></td>
-                            <td><small>${(msg.subject || msg.body || '').substring(0, 50)}${(msg.subject || msg.body || '').length > 50 ? '...' : ''}</small></td>
-                            <td><small class="text-danger fw-bold">${msg.errorMessage || 'Unknown error'}</small></td>
-                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
-                            <td><small>-</small></td>
-                        </tr>
-                    `).join('');
+                    messagesData = data;
+                    messagesCurrentPage = 1;
+                    messagesCurrentFilter = 'scheduled';
+                    renderMessagesTable();
+                })
+                .catch(error => {
+                    console.error('Error loading scheduled messages:', error);
+                    messagesData = [];
+                    document.getElementById('messagesTableBody').innerHTML = 
+                        '<tr><td colspan="9" class="text-center text-danger">Error loading scheduled messages</td></tr>';
+                });
+        }
+
+        function loadFailedMessages() {
+            return fetch('/admin/api/messages/failed?limit=2500')
+                .then(response => response.json())
+                .then(data => {
+                    messagesData = data;
+                    messagesCurrentPage = 1;
+                    messagesCurrentFilter = 'failed';
+                    renderMessagesTable();
                 })
                 .catch(error => {
                     console.error('Error loading failed messages:', error);
+                    messagesData = [];
                     document.getElementById('messagesTableBody').innerHTML = 
                         '<tr><td colspan="9" class="text-center text-danger">Error loading failed messages</td></tr>';
                 });
@@ -495,22 +1087,80 @@
             modal.show();
         }
 
+        // Add event listeners for delete buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.delete-site-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const siteId = this.getAttribute('data-site-id');
+                    const siteName = this.getAttribute('data-site-name');
+                    deleteSite(siteId, siteName);
+                });
+            });
+        });
+
+        function deleteSite(siteId, siteName) {
+            if (!confirm(`Are you sure you want to delete site "${siteName}"?\n\nThis will deactivate the site and prevent it from sending notifications.`)) {
+                return;
+            }
+
+            const adminKey = getAdminKey();
+            
+            fetch(`/admin/api/sites/${siteId}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-Admin-Key': adminKey
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Site "${siteName}" deleted successfully.`);
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to delete site'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error deleting site: ' + error.message);
+            });
+        }
+
         function createSite() {
             const siteName = document.getElementById('siteName').value;
             const description = document.getElementById('siteDescription').value;
+            const whatsappSessionName = document.getElementById('whatsappSessionName').value;
+            const emailFromAddress = document.getElementById('emailFromAddress').value;
+            const emailFromName = document.getElementById('emailFromName').value;
+            const sendgridApiKey = document.getElementById('sendgridApiKey').value;
             
             if (!siteName.trim()) {
                 alert('Site name is required');
                 return;
             }
 
+            const requestBody = {
+                siteName: siteName,
+                description: description || null
+            };
+            
+            if (whatsappSessionName.trim()) {
+                requestBody.whatsappSessionName = whatsappSessionName.trim();
+            }
+            if (emailFromAddress.trim()) {
+                requestBody.emailFromAddress = emailFromAddress.trim();
+            }
+            if (emailFromName.trim()) {
+                requestBody.emailFromName = emailFromName.trim();
+            }
+            if (sendgridApiKey.trim()) {
+                requestBody.sendgridApiKey = sendgridApiKey.trim();
+            }
+
             fetch('/admin/api/sites/create', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    siteName: siteName,
-                    description: description || null
-                })
+                body: JSON.stringify(requestBody)
             })
             .then(response => response.json())
             .then(data => {
@@ -565,12 +1215,26 @@
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success && data.qrCode) {
+                // Backend returns raw QR string in qrCode field (not base64 PNG)
+                const qrString = data.qrCode || data.qr;
+                if (data.success && qrString) {
                     container.innerHTML = `
                         <p class="fw-bold">Scan this QR code with WhatsApp:</p>
-                        <img src="data:image/png;base64,${data.qrCode}" alt="QR Code" class="img-fluid">
+                        <div id="qrCanvas"></div>
                         <p class="mt-3"><small class="text-muted">Session: ${sessionName}</small></p>
                     `;
+                    
+                    // Generate QR code using qrcodejs
+                    const qrCanvas = document.getElementById('qrCanvas');
+                    new QRCode(qrCanvas, {
+                        text: qrString,
+                        width: 300,
+                        height: 300,
+                        colorDark: "#000000",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.M
+                    });
+                    
                     statusDiv.className = 'alert alert-success';
                     statusDiv.innerHTML = '<i class="bi bi-check-circle"></i> QR code generated successfully. Scan with WhatsApp to connect.';
                     statusDiv.style.display = 'block';
@@ -593,9 +1257,1113 @@
 
         // Load messages on page load
         loadRecentMessages();
+        loadSessionStats();
+        loadRecentActivity();
 
         // Auto-refresh every 30 seconds
         setInterval(refreshDashboard, 30000);
+        setInterval(loadSessionStats, 30000);
+        setInterval(loadRecentActivity, 30000);
+
+        // Load session stats
+        function loadSessionStats() {
+            fetch('/admin/api/whatsapp/sessions', {
+                credentials: 'same-origin'
+            })
+                .then(response => {
+                    if (response.status === 401 || response.redirected) {
+                        window.location.href = '/auth/login';
+                        return null;
+                    }
+                    if (response.status === 428) {
+                        document.getElementById('totalSessions').textContent = '0';
+                        document.getElementById('connectedSessions').textContent = '0';
+                        document.getElementById('disconnectedSessions').textContent = '0';
+                        document.getElementById('needsScanSessions').textContent = '0';
+                        return null;
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data) return;
+                    
+                    if (data.success && data.data) {
+                        const sessions = Array.isArray(data.data) ? data.data : (data.data.sessions || []);
+                        const total = sessions.length;
+                        let connected = 0, disconnected = 0, needsScan = 0;
+                        
+                        sessions.forEach(session => {
+                            const status = (session.status || session.state || '').toLowerCase();
+                            if (status === 'connected') connected++;
+                            else if (status === 'disconnected' || status === 'logged_out' || status === 'expired') disconnected++;
+                            else if (status === 'needs_scan' || status === 'connecting') needsScan++;
+                        });
+                        
+                        document.getElementById('totalSessions').textContent = total;
+                        document.getElementById('connectedSessions').textContent = connected;
+                        document.getElementById('disconnectedSessions').textContent = disconnected;
+                        document.getElementById('needsScanSessions').textContent = needsScan;
+                        
+                        // Update subscription summary
+                        document.getElementById('sessionsUsed').textContent = total;
+                        document.getElementById('sessionsAllowed').textContent = '10'; // Default, can be made dynamic
+                        const progress = Math.min((total / 10) * 100, 100);
+                        document.getElementById('sessionsProgress').style.width = progress + '%';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading session stats:', error);
+                });
+        }
+
+        // Load recent activity
+        function loadRecentActivity() {
+            fetch('/admin/api/messages/recent?limit=5')
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('recentActivity');
+                    if (!data || data.length === 0) {
+                        container.innerHTML = '<p class="text-center text-muted py-3">No recent activity</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.map(msg => {
+                        const time = msg.sentAt ? formatDateTimeLocal(msg.sentAt) : 
+                                    (msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : 'N/A');
+                        const statusClass = msg.status === 'DELIVERED' ? 'success' : 
+                                          msg.status === 'FAILED' ? 'danger' : 
+                                          msg.status === 'PENDING' ? 'warning' : 'info';
+                        return `
+                            <div class="d-flex justify-content-between align-items-start mb-3 pb-3 border-bottom">
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold">${escapeHtml(msg.siteName || 'Unknown')}</div>
+                                    <small class="text-muted">${escapeHtml(msg.channel || 'N/A')} • ${escapeHtml(msg.recipient || 'N/A')}</small>
+                                    <div class="mt-1">
+                                        <span class="badge bg-${statusClass}">${escapeHtml(msg.status || 'N/A')}</span>
+                                    </div>
+                                </div>
+                                <small class="text-muted">${time}</small>
+                            </div>
+                        `;
+                    }).join('');
+                })
+                .catch(error => {
+                    console.error('Error loading recent activity:', error);
+                    document.getElementById('recentActivity').innerHTML = 
+                        '<p class="text-center text-danger py-3">Error loading activity</p>';
+                });
+        }
+
+        // Timezone utilities for Message Activity Chart
+        function getUserTimezone() {
+            // Check localStorage first
+            let timezone = localStorage.getItem('userTimezone');
+            if (!timezone) {
+                // Auto-detect timezone
+                try {
+                    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    console.log('Detected timezone:', timezone);
+                } catch (e) {
+                    // Fallback to UTC if detection fails
+                    timezone = 'UTC';
+                    console.warn('Timezone detection failed, using UTC');
+                }
+                // Store in localStorage for persistence
+                localStorage.setItem('userTimezone', timezone);
+            }
+            return timezone;
+        }
+        
+        // Initialize timezone on page load and display it
+        // Force re-detection if UTC is stored (likely wrong)
+        let storedTz = localStorage.getItem('userTimezone');
+        if (storedTz === 'UTC') {
+            console.log('Clearing UTC timezone from storage, re-detecting...');
+            localStorage.removeItem('userTimezone');
+        }
+        
+        const userTimezone = getUserTimezone();
+        const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        console.log('Browser timezone:', browserTimezone);
+        console.log('Using timezone:', userTimezone);
+        
+        // Verify timezone is correct
+        if (userTimezone === 'UTC' && browserTimezone !== 'UTC') {
+            console.warn('Timezone detection may have failed. Browser reports:', browserTimezone, 'but using UTC');
+            // Force update
+            localStorage.setItem('userTimezone', browserTimezone);
+        }
+        
+        // Display timezone in the chart header
+        const timezoneDisplay = document.getElementById('timezoneDisplay');
+        if (timezoneDisplay) {
+            timezoneDisplay.textContent = `TZ: ${userTimezone}`;
+            timezoneDisplay.title = `Chart times are displayed in ${userTimezone} timezone. Click to reset.`;
+            timezoneDisplay.style.cursor = 'pointer';
+            timezoneDisplay.onclick = function() {
+                localStorage.removeItem('userTimezone');
+                location.reload();
+            };
+        }
+
+        // Get date parts (year, month, day, hour) in user's timezone
+        function getDatePartsInTimezone(date, includeHour = false) {
+            const timezone = getUserTimezone();
+            const options = {
+                timeZone: timezone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            };
+            if (includeHour) {
+                options.hour = '2-digit';
+                options.hour12 = false;
+            }
+            const formatter = new Intl.DateTimeFormat('en-US', options);
+            const parts = formatter.formatToParts(date);
+            const result = {
+                year: parseInt(parts.find(p => p.type === 'year').value),
+                month: parseInt(parts.find(p => p.type === 'month').value) - 1, // 0-indexed
+                day: parseInt(parts.find(p => p.type === 'day').value)
+            };
+            if (includeHour) {
+                result.hour = parseInt(parts.find(p => p.type === 'hour').value);
+            }
+            return result;
+        }
+
+        // Get date string (YYYY-MM-DD) in user's timezone
+        function getDateStringInTimezone(date) {
+            const parts = getDatePartsInTimezone(date);
+            return `${parts.year}-${String(parts.month + 1).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+        }
+
+        // Get hour (0-23) in user's timezone
+        function getHourInTimezone(date) {
+            const parts = getDatePartsInTimezone(date, true);
+            return parts.hour;
+        }
+
+        // Format time in user's timezone
+        function formatTimeInTimezone(date) {
+            const timezone = getUserTimezone();
+            return new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                hour: 'numeric',
+                hour12: true
+            }).format(date);
+        }
+
+        // Format date in user's timezone
+        function formatDateInTimezone(date) {
+            const timezone = getUserTimezone();
+            return new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                month: 'short',
+                day: 'numeric'
+            }).format(date);
+        }
+
+        // Create a date representing a specific hour of today in user's timezone
+        // Returns a Date object that, when formatted in user's timezone, shows the specified hour
+        function createHourDateInTimezone(year, month, day, hour) {
+            const timezone = getUserTimezone();
+            
+            // Start with a reference UTC date (noon to avoid DST issues)
+            let testDate = new Date(Date.UTC(year, month, day, 12, 0, 0));
+            
+            // Find what hour noon represents in user's timezone
+            let currentHour = getHourInTimezone(testDate);
+            
+            // Calculate offset to get to the desired hour
+            const hourOffset = hour - currentHour;
+            testDate = new Date(testDate.getTime() + hourOffset * 3600000);
+            
+            // Verify and correct (handles DST transitions)
+            currentHour = getHourInTimezone(testDate);
+            if (currentHour !== hour) {
+                const correction = (hour - currentHour) * 3600000;
+                testDate = new Date(testDate.getTime() + correction);
+            }
+            
+            return testDate;
+        }
+
+        // Utility function to format UTC date strings to user's local timezone
+        // This intelligently handles UTC dates and converts them to local timezone
+        function formatDateTimeLocal(utcDateString) {
+            if (!utcDateString) return '-';
+            
+            try {
+                // Parse the UTC date string (handles ISO 8601 format with Z or +00:00)
+                let date;
+                if (typeof utcDateString === 'string') {
+                    // Ensure UTC dates are properly parsed
+                    if (utcDateString.endsWith('Z') || utcDateString.includes('+00:00')) {
+                        date = new Date(utcDateString);
+                    } else {
+                        // If no timezone indicator, assume UTC
+                        date = new Date(utcDateString + (utcDateString.includes('T') ? 'Z' : ''));
+                    }
+                } else {
+                    date = new Date(utcDateString);
+                }
+                
+                // Check if date is valid
+                if (isNaN(date.getTime())) {
+                    return utcDateString; // Return original if invalid
+                }
+                
+                // Format in user's local timezone with full date and time
+                const timezone = getUserTimezone();
+                return new Intl.DateTimeFormat('en-US', {
+                    timeZone: timezone,
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                }).format(date);
+            } catch (e) {
+                console.error('Error formatting date:', e, utcDateString);
+                return utcDateString; // Return original on error
+            }
+        }
+
+        // Format date only (without time) in user's local timezone
+        function formatDateOnlyLocal(utcDateString) {
+            if (!utcDateString) return '-';
+            
+            try {
+                let date;
+                if (typeof utcDateString === 'string') {
+                    if (utcDateString.endsWith('Z') || utcDateString.includes('+00:00')) {
+                        date = new Date(utcDateString);
+                    } else {
+                        date = new Date(utcDateString + (utcDateString.includes('T') ? 'Z' : ''));
+                    }
+                } else {
+                    date = new Date(utcDateString);
+                }
+                
+                if (isNaN(date.getTime())) {
+                    return utcDateString;
+                }
+                
+                const timezone = getUserTimezone();
+                return new Intl.DateTimeFormat('en-US', {
+                    timeZone: timezone,
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                }).format(date);
+            } catch (e) {
+                console.error('Error formatting date:', e, utcDateString);
+                return utcDateString;
+            }
+        }
+
+        // Message Activity Chart
+        let messageActivityChart = null;
+        const messageActivityCtx = document.getElementById('messageActivityChart');
+        if (messageActivityCtx) {
+            messageActivityChart = new Chart(messageActivityCtx.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Successful Messages',
+                        data: [],
+                        borderColor: '#198754',
+                        backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Failed Messages',
+                        data: [],
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+
+            // Initial load with "today" filter
+            updateActivityChart();
+        }
+
+        // Function to update activity chart based on selected filter
+        function updateActivityChart() {
+            if (!messageActivityChart) return;
+            
+            const filter = document.getElementById('activityChartFilter')?.value || 'today';
+            const limit = filter === 'overall' ? 5000 : (filter === 'today' ? 1000 : 100);
+            
+            fetch(`/admin/api/messages/recent?limit=${limit}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data || data.length === 0) {
+                        messageActivityChart.data.labels = [];
+                        messageActivityChart.data.datasets[0].data = [];
+                        messageActivityChart.data.datasets[1].data = [];
+                        messageActivityChart.update();
+                        return;
+                    }
+
+                    const now = new Date();
+                    const todayDateStr = getDateStringInTimezone(now);
+                    
+                    let dateRange = [];
+                    let startDateStr = null;
+                    
+                    // Determine date range based on filter (all dates in user's timezone)
+                    if (filter === 'today') {
+                        // Today only - group by hours (0-23 in user's timezone)
+                        const todayParts = getDatePartsInTimezone(now);
+                        
+                        // Create hour labels for today in user's timezone
+                        for (let h = 0; h < 24; h++) {
+                            // Create a date representing this hour in user's timezone
+                            const hourDate = createHourDateInTimezone(todayParts.year, todayParts.month, todayParts.day, h);
+                            
+                            // Format the label in user's timezone
+                            const label = formatTimeInTimezone(hourDate);
+                            
+                            dateRange.push({
+                                hour: h,
+                                dateStr: todayDateStr,
+                                label: label
+                            });
+                        }
+                        startDateStr = todayDateStr;
+                    } else if (filter === 'lastWeek') {
+                        // Last 7 days - group by day in user's timezone
+                        const timezone = getUserTimezone();
+                        const todayParts = getDatePartsInTimezone(now);
+                        
+                        // Create dates for each of the last 7 days in user's timezone
+                        for (let i = 6; i >= 0; i--) {
+                            // Create a date i days ago by subtracting days from today
+                            // We need to work in UTC and then convert to user's timezone for display
+                            const utcDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day, 12, 0, 0));
+                            utcDate.setUTCDate(utcDate.getUTCDate() - i);
+                            
+                            // Get the date string in user's timezone
+                            const dateStr = getDateStringInTimezone(utcDate);
+                            
+                            dateRange.push({
+                                dateStr: dateStr,
+                                date: utcDate,
+                                label: formatDateInTimezone(utcDate)
+                            });
+                        }
+                        // Get date string for 6 days ago as start
+                        const startUtcDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day, 12, 0, 0));
+                        startUtcDate.setUTCDate(startUtcDate.getUTCDate() - 6);
+                        startDateStr = getDateStringInTimezone(startUtcDate);
+                    } else {
+                        // Overall - group by week (last 12 weeks) in user's timezone
+                        const timezone = getUserTimezone();
+                        const todayParts = getDatePartsInTimezone(now);
+                        
+                        for (let i = 11; i >= 0; i--) {
+                            // Create date i*7 days ago
+                            const utcDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day, 12, 0, 0));
+                            utcDate.setUTCDate(utcDate.getUTCDate() - (i * 7));
+                            
+                            // Get day of week in user's timezone
+                            const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
+                                timeZone: timezone,
+                                weekday: 'short'
+                            });
+                            const weekdayStr = weekdayFormatter.format(utcDate);
+                            const dayOfWeek = weekdayStr === 'Sun' ? 0 : weekdayStr === 'Mon' ? 1 : 
+                                             weekdayStr === 'Tue' ? 2 : weekdayStr === 'Wed' ? 3 :
+                                             weekdayStr === 'Thu' ? 4 : weekdayStr === 'Fri' ? 5 : 6;
+                            const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                            
+                            // Get Monday of that week
+                            const mondayUtcDate = new Date(utcDate);
+                            mondayUtcDate.setUTCDate(utcDate.getUTCDate() - daysToMonday);
+                            const mondayDateStr = getDateStringInTimezone(mondayUtcDate);
+                            
+                            dateRange.push({
+                                dateStr: mondayDateStr,
+                                date: mondayUtcDate,
+                                label: formatDateInTimezone(mondayUtcDate)
+                            });
+                        }
+                    }
+                    
+                    // Initialize maps for success and failed counts
+                    const successMap = new Map();
+                    const failedMap = new Map();
+                    
+                    dateRange.forEach(range => {
+                        const key = filter === 'today' 
+                            ? range.hour.toString()
+                            : range.dateStr;
+                        successMap.set(key, 0);
+                        failedMap.set(key, 0);
+                    });
+                    
+                    // Process messages and categorize by status
+                    const successStatuses = ['DELIVERED'];
+                    const failedStatuses = ['FAILED', 'BOUNCED', 'REJECTED'];
+                    
+                    data.forEach(msg => {
+                        if (!msg.sentAt) return;
+                        
+                        const msgDate = new Date(msg.sentAt);
+                        let key;
+                        
+                        if (filter === 'today') {
+                            // Check if message is from today in user's timezone
+                            const msgDateStr = getDateStringInTimezone(msgDate);
+                            if (msgDateStr !== todayDateStr) {
+                                return; // Not today, skip
+                            }
+                            const hour = getHourInTimezone(msgDate);
+                            key = hour.toString();
+                            if (!successMap.has(key) && !failedMap.has(key)) {
+                                return; // Hour not in range
+                            }
+                        } else if (filter === 'lastWeek') {
+                            // Check if message is within the last 7 days in user's timezone
+                            const msgDateStr = getDateStringInTimezone(msgDate);
+                            if (msgDateStr < startDateStr) {
+                                return; // Too old, skip
+                            }
+                            if (!successMap.has(msgDateStr) && !failedMap.has(msgDateStr)) {
+                                return; // Date not in range
+                            }
+                            key = msgDateStr;
+                        } else {
+                            // Overall - group by week in user's timezone
+                            const msgDateStr = getDateStringInTimezone(msgDate);
+                            // Get Monday of the week for this date in user's timezone
+                            const timezone = getUserTimezone();
+                            const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
+                                timeZone: timezone,
+                                weekday: 'short'
+                            });
+                            const weekdayStr = weekdayFormatter.format(msgDate);
+                            const dayOfWeek = weekdayStr === 'Sun' ? 0 : weekdayStr === 'Mon' ? 1 : 
+                                             weekdayStr === 'Tue' ? 2 : weekdayStr === 'Wed' ? 3 :
+                                             weekdayStr === 'Thu' ? 4 : weekdayStr === 'Fri' ? 5 : 6;
+                            const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                            
+                            // Calculate Monday date correctly in user's timezone
+                            // Get date parts of the message date in user's timezone
+                            const msgParts = getDatePartsInTimezone(msgDate);
+                            // Create a date representing the message date at noon UTC
+                            let mondayDate = new Date(Date.UTC(msgParts.year, msgParts.month, msgParts.day, 12, 0, 0));
+                            // Subtract days to get to Monday (working in UTC but representing user's timezone date)
+                            mondayDate.setUTCDate(mondayDate.getUTCDate() - daysToMonday);
+                            const mondayDateStr = getDateStringInTimezone(mondayDate);
+                            key = mondayDateStr;
+                            
+                            // Check if this week is in our dateRange
+                            if (!successMap.has(key) && !failedMap.has(key)) {
+                                return; // Week not in range
+                            }
+                        }
+                        
+                        // Categorize message
+                        const status = msg.status || '';
+                        if (successStatuses.includes(status)) {
+                            const current = successMap.get(key) || 0;
+                            successMap.set(key, current + 1);
+                        } else if (failedStatuses.includes(status)) {
+                            const current = failedMap.get(key) || 0;
+                            failedMap.set(key, current + 1);
+                        }
+                    });
+                    
+                    // Build labels and data arrays
+                    const labels = dateRange.map(r => r.label);
+                    const successData = dateRange.map(r => {
+                        const key = filter === 'today' 
+                            ? r.hour.toString()
+                            : r.dateStr;
+                        return successMap.get(key) || 0;
+                    });
+                    const failedData = dateRange.map(r => {
+                        const key = filter === 'today' 
+                            ? r.hour.toString()
+                            : r.dateStr;
+                        return failedMap.get(key) || 0;
+                    });
+                    
+                    messageActivityChart.data.labels = labels;
+                    messageActivityChart.data.datasets[0].data = successData;
+                    messageActivityChart.data.datasets[1].data = failedData;
+                    messageActivityChart.update();
+                })
+                .catch(error => {
+                    console.error('Error loading message activity:', error);
+                });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Pagination state for messages
+        let messagesData = [];
+        let messagesCurrentPage = 1;
+        let messagesPageSize = 5; // Default view shows 5 rows
+        let messagesCurrentFilter = 'recent'; // 'recent', 'scheduled', 'failed'
+
+        // Pagination state for sites
+        let sitesData = [];
+        let sitesCurrentPage = 1;
+        let sitesPageSize = 5; // Default view shows 5 rows
+
+        // Initialize pagination on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Extract sites data from Thymeleaf template
+            const sitesTableBody = document.getElementById('sitesMetricsTableBody');
+            if (sitesTableBody) {
+                const rows = Array.from(sitesTableBody.querySelectorAll('tr'));
+                sitesData = rows.map(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length === 0) return null;
+                    return {
+                        html: row.outerHTML,
+                        siteId: row.querySelector('.delete-site-btn')?.getAttribute('data-site-id') || null
+                    };
+                }).filter(item => item !== null);
+                
+                // Initially show only 5 rows
+                renderSitesTable();
+            }
+        });
+
+        // Messages Pagination Functions
+        function renderMessagesTable() {
+            const start = (messagesCurrentPage - 1) * messagesPageSize;
+            const end = start + messagesPageSize;
+            const pageData = messagesData.slice(start, end);
+            
+            const tbody = document.getElementById('messagesTableBody');
+            if (tbody) {
+                if (pageData.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
+                    // Fill remaining rows to maintain fixed height
+                    for (let i = 1; i < messagesPageSize; i++) {
+                        tbody.innerHTML += '<tr><td colspan="9" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
+                    }
+                } else {
+                    let html = pageData.map((msg, index) => {
+                        const rowClass = messagesCurrentFilter === 'scheduled' ? 'table-info' : 
+                                       messagesCurrentFilter === 'failed' ? 'table-danger' : '';
+                        const msgIndex = start + index;
+                        return `
+                        <tr class="${rowClass}">
+                            <td><code>${msg.messageId}</code></td>
+                            <td>${msg.siteName}</td>
+                            <td><span class="badge ${msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info'}">${msg.channel}</span></td>
+                            <td>${msg.recipient}</td>
+                            <td>
+                                <span class="badge status-badge ${
+                                    msg.status === 'DELIVERED' ? 'bg-success' :
+                                    msg.status === 'SENT' ? 'bg-primary' :
+                                    msg.status === 'FAILED' ? 'bg-danger' :
+                                    msg.status === 'PENDING' ? 'bg-warning' :
+                                    msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
+                                }">${msg.status}</span>
+                            </td>
+                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}</small></td>
+                            <td><small>${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}</small></td>
+                            <td><small>${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}</small></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="showMessageDetails(${msgIndex})" title="View Details">
+                                    <i class="bi bi-eye"></i> Details
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    }).join('');
+                    
+                    // Fill remaining rows to maintain fixed height
+                    const remainingRows = messagesPageSize - pageData.length;
+                    for (let i = 0; i < remainingRows; i++) {
+                        html += '<tr><td colspan="9" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
+                    }
+                    
+                    tbody.innerHTML = html;
+                }
+            }
+            
+            renderMessagesPagination();
+        }
+
+        function renderMessagesPagination() {
+            const totalPages = Math.ceil(messagesData.length / messagesPageSize);
+            const start = (messagesCurrentPage - 1) * messagesPageSize + 1;
+            const end = Math.min(messagesCurrentPage * messagesPageSize, messagesData.length);
+            
+            const paginationInfo = document.getElementById('messagesPaginationInfo');
+            if (paginationInfo) {
+                paginationInfo.textContent = `Showing ${start}-${end} of ${messagesData.length}`;
+            }
+            
+            const pagination = document.getElementById('messagesPagination');
+            if (pagination && totalPages > 1) {
+                let html = '';
+                if (messagesCurrentPage > 1) {
+                    html += `<li class="page-item"><a class="page-link" href="#" onclick="goToMessagesPage(${messagesCurrentPage - 1}); return false;">Previous</a></li>`;
+                }
+                
+                for (let i = 1; i <= totalPages; i++) {
+                    if (i === 1 || i === totalPages || (i >= messagesCurrentPage - 2 && i <= messagesCurrentPage + 2)) {
+                        html += `<li class="page-item ${i === messagesCurrentPage ? 'active' : ''}">
+                            <a class="page-link" href="#" onclick="goToMessagesPage(${i}); return false;">${i}</a>
+                        </li>`;
+                    } else if (i === messagesCurrentPage - 3 || i === messagesCurrentPage + 3) {
+                        html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                    }
+                }
+                
+                if (messagesCurrentPage < totalPages) {
+                    html += `<li class="page-item"><a class="page-link" href="#" onclick="goToMessagesPage(${messagesCurrentPage + 1}); return false;">Next</a></li>`;
+                }
+                
+                pagination.innerHTML = html;
+            } else if (pagination) {
+                pagination.innerHTML = '';
+            }
+        }
+
+        function showMessageDetails(index) {
+            if (index < 0 || index >= messagesData.length) {
+                console.error('Invalid message index:', index);
+                return;
+            }
+            
+            const msg = messagesData[index];
+            const modalBody = document.getElementById('messageDetailsBody');
+            const modal = new bootstrap.Modal(document.getElementById('messageDetailsModal'));
+            
+            if (modalBody) {
+                const statusBadgeClass = 
+                    msg.status === 'DELIVERED' ? 'bg-success' :
+                    msg.status === 'SENT' ? 'bg-primary' :
+                    msg.status === 'FAILED' ? 'bg-danger' :
+                    msg.status === 'PENDING' ? 'bg-warning' :
+                    msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary';
+                
+                const channelBadgeClass = msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info';
+                
+                modalBody.innerHTML = `
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Message ID:</strong><br>
+                            <code>${escapeHtml(msg.messageId)}</code>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Status:</strong><br>
+                            <span class="badge ${statusBadgeClass}">${escapeHtml(msg.status)}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Site:</strong><br>
+                            ${escapeHtml(msg.siteName || 'N/A')}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Channel:</strong><br>
+                            <span class="badge ${channelBadgeClass}">${escapeHtml(msg.channel)}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Recipient:</strong><br>
+                            ${escapeHtml(msg.recipient)}
+                        </div>
+                    </div>
+                    ${msg.subject ? `
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Subject:</strong><br>
+                            <div class="p-2 bg-light rounded">${escapeHtml(msg.subject)}</div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${msg.body ? `
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Body:</strong><br>
+                            <div class="p-2 bg-light rounded" style="white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(msg.body)}</div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${msg.errorMessage ? `
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Error Message:</strong><br>
+                            <div class="p-2 bg-danger bg-opacity-10 text-danger rounded" style="white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(msg.errorMessage)}</div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <strong>Scheduled At:</strong><br>
+                            ${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Sent At:</strong><br>
+                            ${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Delivered At:</strong><br>
+                            ${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            modal.show();
+        }
+
+        function goToMessagesPage(page) {
+            messagesCurrentPage = page;
+            renderMessagesTable();
+        }
+
+        // Sites Pagination Functions
+        function renderSitesTable() {
+            const start = (sitesCurrentPage - 1) * sitesPageSize;
+            const end = start + sitesPageSize;
+            const pageData = sitesData.slice(start, end);
+            
+            const tbody = document.getElementById('sitesMetricsTableBody');
+            if (tbody) {
+                if (pageData.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No sites found</td></tr>';
+                    // Fill remaining rows to maintain fixed height
+                    for (let i = 1; i < sitesPageSize; i++) {
+                        tbody.innerHTML += '<tr><td colspan="8" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
+                    }
+                } else {
+                    let html = pageData.map(item => item.html).join('');
+                    
+                    // Fill remaining rows to maintain fixed height
+                    const remainingRows = sitesPageSize - pageData.length;
+                    for (let i = 0; i < remainingRows; i++) {
+                        html += '<tr><td colspan="8" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
+                    }
+                    
+                    tbody.innerHTML = html;
+                    
+                    // Re-attach event listeners for delete buttons
+                    document.querySelectorAll('#sitesMetricsTableBody .delete-site-btn').forEach(button => {
+                        button.addEventListener('click', function() {
+                            const siteId = this.getAttribute('data-site-id');
+                            const siteName = this.getAttribute('data-site-name');
+                            deleteSite(siteId, siteName);
+                        });
+                    });
+                }
+            }
+            
+            renderSitesPagination();
+        }
+
+        function renderSitesPagination() {
+            const totalPages = Math.ceil(sitesData.length / sitesPageSize);
+            const start = (sitesCurrentPage - 1) * sitesPageSize + 1;
+            const end = Math.min(sitesCurrentPage * sitesPageSize, sitesData.length);
+            
+            const paginationInfo = document.getElementById('sitesPaginationInfo');
+            if (paginationInfo) {
+                paginationInfo.textContent = `Showing ${start}-${end} of ${sitesData.length}`;
+            }
+            
+            const pagination = document.getElementById('sitesPagination');
+            if (pagination && totalPages > 1) {
+                let html = '';
+                if (sitesCurrentPage > 1) {
+                    html += `<li class="page-item"><a class="page-link" href="#" onclick="goToSitesPage(${sitesCurrentPage - 1}); return false;">Previous</a></li>`;
+                }
+                
+                for (let i = 1; i <= totalPages; i++) {
+                    if (i === 1 || i === totalPages || (i >= sitesCurrentPage - 2 && i <= sitesCurrentPage + 2)) {
+                        html += `<li class="page-item ${i === sitesCurrentPage ? 'active' : ''}">
+                            <a class="page-link" href="#" onclick="goToSitesPage(${i}); return false;">${i}</a>
+                        </li>`;
+                    } else if (i === sitesCurrentPage - 3 || i === sitesCurrentPage + 3) {
+                        html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                    }
+                }
+                
+                if (sitesCurrentPage < totalPages) {
+                    html += `<li class="page-item"><a class="page-link" href="#" onclick="goToSitesPage(${sitesCurrentPage + 1}); return false;">Next</a></li>`;
+                }
+                
+                pagination.innerHTML = html;
+            } else if (pagination) {
+                pagination.innerHTML = '';
+            }
+        }
+
+        function goToSitesPage(page) {
+            sitesCurrentPage = page;
+            renderSitesTable();
+        }
+
+        // Maximize/Minimize Functions for Messages
+        function maximizeMessagesView() {
+            document.getElementById('maximizedMessagesModal').classList.add('show');
+            document.body.style.overflow = 'hidden';
+            // Load all messages for maximized view
+            loadRecentMessagesMaximized();
+        }
+
+        function minimizeMessagesView() {
+            document.getElementById('maximizedMessagesModal').classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        function changeMessagesPageSize() {
+            const newSize = parseInt(document.getElementById('messagesPageSize').value);
+            messagesPageSize = newSize;
+            messagesCurrentPage = 1;
+            renderMaximizedMessagesTable();
+        }
+
+        function renderMaximizedMessagesTable() {
+            const start = (messagesCurrentPage - 1) * messagesPageSize;
+            const end = start + messagesPageSize;
+            const pageData = messagesData.slice(start, end);
+            
+            const tbody = document.getElementById('maximizedMessagesTableBody');
+            if (tbody) {
+                if (pageData.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
+                } else {
+                    tbody.innerHTML = pageData.map((msg, index) => {
+                        const rowClass = messagesCurrentFilter === 'scheduled' ? 'table-info' : 
+                                       messagesCurrentFilter === 'failed' ? 'table-danger' : '';
+                        const msgIndex = start + index;
+                        return `
+                        <tr class="${rowClass}">
+                            <td><code>${msg.messageId}</code></td>
+                            <td>${msg.siteName}</td>
+                            <td><span class="badge ${msg.channel === 'WHATSAPP' ? 'bg-success' : 'bg-info'}">${msg.channel}</span></td>
+                            <td>${msg.recipient}</td>
+                            <td>
+                                <span class="badge status-badge ${
+                                    msg.status === 'DELIVERED' ? 'bg-success' :
+                                    msg.status === 'SENT' ? 'bg-primary' :
+                                    msg.status === 'FAILED' ? 'bg-danger' :
+                                    msg.status === 'PENDING' ? 'bg-warning' :
+                                    msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
+                                }">${msg.status}</span>
+                            </td>
+                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}</small></td>
+                            <td><small>${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}</small></td>
+                            <td><small>${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}</small></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="showMessageDetails(${msgIndex})" title="View Details">
+                                    <i class="bi bi-eye"></i> Details
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    }).join('');
+                }
+            }
+            
+            renderMaximizedMessagesPagination();
+        }
+
+        function renderMaximizedMessagesPagination() {
+            const totalPages = Math.ceil(messagesData.length / messagesPageSize);
+            const start = (messagesCurrentPage - 1) * messagesPageSize + 1;
+            const end = Math.min(messagesCurrentPage * messagesPageSize, messagesData.length);
+            
+            const paginationInfo = document.getElementById('maximizedMessagesPaginationInfo');
+            if (paginationInfo) {
+                paginationInfo.textContent = `Showing ${start}-${end} of ${messagesData.length}`;
+            }
+            
+            const pagination = document.getElementById('maximizedMessagesPagination');
+            if (pagination && totalPages > 1) {
+                let html = '';
+                if (messagesCurrentPage > 1) {
+                    html += `<li class="page-item"><a class="page-link" href="#" onclick="goToMaximizedMessagesPage(${messagesCurrentPage - 1}); return false;">Previous</a></li>`;
+                }
+                
+                for (let i = 1; i <= totalPages; i++) {
+                    if (i === 1 || i === totalPages || (i >= messagesCurrentPage - 2 && i <= messagesCurrentPage + 2)) {
+                        html += `<li class="page-item ${i === messagesCurrentPage ? 'active' : ''}">
+                            <a class="page-link" href="#" onclick="goToMaximizedMessagesPage(${i}); return false;">${i}</a>
+                        </li>`;
+                    } else if (i === messagesCurrentPage - 3 || i === messagesCurrentPage + 3) {
+                        html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                    }
+                }
+                
+                if (messagesCurrentPage < totalPages) {
+                    html += `<li class="page-item"><a class="page-link" href="#" onclick="goToMaximizedMessagesPage(${messagesCurrentPage + 1}); return false;">Next</a></li>`;
+                }
+                
+                pagination.innerHTML = html;
+            } else if (pagination) {
+                pagination.innerHTML = '';
+            }
+        }
+
+        function goToMaximizedMessagesPage(page) {
+            messagesCurrentPage = page;
+            renderMaximizedMessagesTable();
+        }
+
+        async function loadRecentMessagesMaximized() {
+            messagesCurrentFilter = 'recent';
+            await loadRecentMessages();
+            messagesPageSize = parseInt(document.getElementById('messagesPageSize').value);
+            messagesCurrentPage = 1;
+            renderMaximizedMessagesTable();
+        }
+
+        async function loadScheduledMessagesMaximized() {
+            messagesCurrentFilter = 'scheduled';
+            await loadScheduledMessages();
+            messagesPageSize = parseInt(document.getElementById('messagesPageSize').value);
+            messagesCurrentPage = 1;
+            renderMaximizedMessagesTable();
+        }
+
+        async function loadFailedMessagesMaximized() {
+            messagesCurrentFilter = 'failed';
+            await loadFailedMessages();
+            messagesPageSize = parseInt(document.getElementById('messagesPageSize').value);
+            messagesCurrentPage = 1;
+            renderMaximizedMessagesTable();
+        }
+
+        // Maximize/Minimize Functions for Sites
+        function maximizeSitesView() {
+            document.getElementById('maximizedSitesModal').classList.add('show');
+            document.body.style.overflow = 'hidden';
+            loadSitesMaximized();
+        }
+
+        function minimizeSitesView() {
+            document.getElementById('maximizedSitesModal').classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        function changeSitesPageSize() {
+            const newSize = parseInt(document.getElementById('sitesPageSize').value);
+            sitesPageSize = newSize;
+            sitesCurrentPage = 1;
+            renderMaximizedSitesTable();
+        }
+
+        function loadSitesMaximized() {
+            // Use the same sitesData but render in maximized view
+            sitesPageSize = parseInt(document.getElementById('sitesPageSize').value);
+            sitesCurrentPage = 1;
+            renderMaximizedSitesTable();
+        }
+
+        function renderMaximizedSitesTable() {
+            const start = (sitesCurrentPage - 1) * sitesPageSize;
+            const end = start + sitesPageSize;
+            const pageData = sitesData.slice(start, end);
+            
+            const tbody = document.getElementById('maximizedSitesTableBody');
+            if (tbody) {
+                if (pageData.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No sites found</td></tr>';
+                } else {
+                    tbody.innerHTML = pageData.map(item => item.html).join('');
+                    
+                    // Re-attach event listeners for delete buttons
+                    document.querySelectorAll('#maximizedSitesTableBody .delete-site-btn').forEach(button => {
+                        button.addEventListener('click', function() {
+                            const siteId = this.getAttribute('data-site-id');
+                            const siteName = this.getAttribute('data-site-name');
+                            deleteSite(siteId, siteName);
+                        });
+                    });
+                }
+            }
+            
+            renderMaximizedSitesPagination();
+        }
+
+        function renderMaximizedSitesPagination() {
+            const totalPages = Math.ceil(sitesData.length / sitesPageSize);
+            const start = (sitesCurrentPage - 1) * sitesPageSize + 1;
+            const end = Math.min(sitesCurrentPage * sitesPageSize, sitesData.length);
+            
+            const paginationInfo = document.getElementById('maximizedSitesPaginationInfo');
+            if (paginationInfo) {
+                paginationInfo.textContent = `Showing ${start}-${end} of ${sitesData.length}`;
+            }
+            
+            const pagination = document.getElementById('maximizedSitesPagination');
+            if (pagination && totalPages > 1) {
+                let html = '';
+                if (sitesCurrentPage > 1) {
+                    html += `<li class="page-item"><a class="page-link" href="#" onclick="goToMaximizedSitesPage(${sitesCurrentPage - 1}); return false;">Previous</a></li>`;
+                }
+                
+                for (let i = 1; i <= totalPages; i++) {
+                    if (i === 1 || i === totalPages || (i >= sitesCurrentPage - 2 && i <= sitesCurrentPage + 2)) {
+                        html += `<li class="page-item ${i === sitesCurrentPage ? 'active' : ''}">
+                            <a class="page-link" href="#" onclick="goToMaximizedSitesPage(${i}); return false;">${i}</a>
+                        </li>`;
+                    } else if (i === sitesCurrentPage - 3 || i === sitesCurrentPage + 3) {
+                        html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                    }
+                }
+                
+                if (sitesCurrentPage < totalPages) {
+                    html += `<li class="page-item"><a class="page-link" href="#" onclick="goToMaximizedSitesPage(${sitesCurrentPage + 1}); return false;">Next</a></li>`;
+                }
+                
+                pagination.innerHTML = html;
+            } else if (pagination) {
+                pagination.innerHTML = '';
+            }
+        }
+
+        function goToMaximizedSitesPage(page) {
+            sitesCurrentPage = page;
+            renderMaximizedSitesTable();
+        }
+
+        function refreshSitesMaximized() {
+            refreshDashboard();
+        }
+
     </script>
 </body>
 </html>

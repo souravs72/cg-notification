@@ -13,6 +13,7 @@ public class NotificationResponse {
     private String messageId;
     private String status;
     private String message;
+    private String channel;
 }
 
 @Data

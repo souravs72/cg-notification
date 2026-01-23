@@ -12,5 +12,12 @@ public interface FrappeSiteRepository extends JpaRepository<FrappeSite, UUID> {
     Optional<FrappeSite> findBySiteName(String siteName);
     Optional<FrappeSite> findByApiKeyHash(String apiKeyHash);
     boolean existsBySiteName(String siteName);
+    boolean existsBySiteNameAndIsDeletedFalse(String siteName);
+    
+    /**
+     * Find all active, non-deleted sites for API key validation.
+     * This is more efficient than findAll() as it filters at database level.
+     */
+    java.util.List<FrappeSite> findByIsActiveTrueAndIsDeletedFalse();
 }
 

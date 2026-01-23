@@ -27,29 +27,31 @@ public class MetricsService {
 
     public MetricsSummaryResponse getSiteSummary(UUID siteId) {
         // Count all messages that have been sent (excluding PENDING and SCHEDULED)
-        Long totalSent = messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.SENT.name()) +
-                        messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.DELIVERED.name()) +
-                        messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.FAILED.name()) +
-                        messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.BOUNCED.name()) +
-                        messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.REJECTED.name());
-        Long totalSuccess = messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.DELIVERED.name());
-        Long totalFailed = messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.FAILED.name()) +
-                          messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.BOUNCED.name()) +
-                          messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.REJECTED.name());
+        // Use enum-based methods for consistency (preferred API)
+        Long totalSent = messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.SENT) +
+                        messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.DELIVERED) +
+                        messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.FAILED) +
+                        messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.BOUNCED) +
+                        messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.REJECTED);
+        Long totalSuccess = messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.DELIVERED);
+        Long totalFailed = messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.FAILED) +
+                          messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.BOUNCED) +
+                          messageLogRepository.countBySiteIdAndStatus(siteId, DeliveryStatus.REJECTED);
 
         Map<String, ChannelMetrics> channelMetricsMap = new HashMap<>();
         
         for (NotificationChannel channel : NotificationChannel.values()) {
-            Long channelSent = messageLogRepository.countBySiteIdAndChannel(siteId, channel.name());
+            // Use enum-based methods for consistency (preferred API)
+            Long channelSent = messageLogRepository.countBySiteIdAndChannel(siteId, channel);
             Long channelSuccess = messageLogRepository.countBySiteIdAndChannelAndStatus(
-                siteId, channel.name(), DeliveryStatus.DELIVERED.name()
+                siteId, channel, DeliveryStatus.DELIVERED
             );
             Long channelFailed = messageLogRepository.countBySiteIdAndChannelAndStatus(
-                siteId, channel.name(), DeliveryStatus.FAILED.name()
+                siteId, channel, DeliveryStatus.FAILED
             ) + messageLogRepository.countBySiteIdAndChannelAndStatus(
-                siteId, channel.name(), DeliveryStatus.BOUNCED.name()
+                siteId, channel, DeliveryStatus.BOUNCED
             ) + messageLogRepository.countBySiteIdAndChannelAndStatus(
-                siteId, channel.name(), DeliveryStatus.REJECTED.name()
+                siteId, channel, DeliveryStatus.REJECTED
             );
 
             ChannelMetrics metrics = new ChannelMetrics();
