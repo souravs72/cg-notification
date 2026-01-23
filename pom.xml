@@ -39,7 +39,7 @@
         <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
         <os-maven-plugin.version>1.7.1</os-maven-plugin.version>
         <surefire.version>3.5.4</surefire.version>
-        <failsafe.version>3.2.5</failsafe.version>
+        <failsafe.version>3.5.4</failsafe.version>
         <micrometer-tracing.version>1.2.0</micrometer-tracing.version>
         <maven-enforcer.version>3.6.2</maven-enforcer.version>
         <!-- Skip integration tests by default (local dev) -->
