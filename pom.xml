@@ -35,7 +35,7 @@
         <testcontainers.version>1.19.3</testcontainers.version>
         <mockito.version>5.11.0</mockito.version>
         <awaitility.version>4.2.0</awaitility.version>
-        <sendgrid.version>4.10.1</sendgrid.version>
+        <sendgrid.version>4.10.3</sendgrid.version>
         <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
         <os-maven-plugin.version>1.7.1</os-maven-plugin.version>
         <surefire.version>3.2.5</surefire.version>
