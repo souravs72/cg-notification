@@ -33,7 +33,7 @@
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <springdoc.version>2.3.0</springdoc.version>
         <testcontainers.version>1.19.3</testcontainers.version>
-        <mockito.version>5.11.0</mockito.version>
+        <mockito.version>5.21.0</mockito.version>
         <awaitility.version>4.2.0</awaitility.version>
         <sendgrid.version>4.10.3</sendgrid.version>
         <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
