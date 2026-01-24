@@ -28,3 +28,5 @@ public interface FrappeSiteRepository extends JpaRepository<FrappeSite, UUID> {
 }
 
 
+
+

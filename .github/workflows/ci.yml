@@ -328,7 +328,7 @@ jobs:
           exit 1
 
       - name: Run integration tests
-        run: mvn verify -DskipTests=false
+        run: mvn verify -DskipITs=false
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
           SPRING_DATASOURCE_USERNAME: notification_user

@@ -2,6 +2,76 @@
 
 A production-grade, multi-tenant notification platform built with Spring Boot, Kafka, and gRPC, supporting WhatsApp (via WASender) and Email (via SendGrid) delivery.
 
+## 📋 TL;DR for Developers
+
+**What is this?** A microservices-based notification system that sends emails and WhatsApp messages via Kafka message queues.
+
+**Quick start:**
+1. Install Docker & Docker Compose
+2. Create `.env` with `WASENDER_API_KEY` and `SENDGRID_API_KEY`
+3. Run `docker compose up -d`
+4. Access API at http://localhost:8080
+
+**Key concepts:**
+- **Multi-tenant**: Each site has isolated data via `site_id`
+- **Kafka**: Async message processing between API and workers
+- **Workers**: Separate services for email (SendGrid) and WhatsApp (WASender)
+- **gRPC**: Inter-service communication for metrics and status updates
+
+**Architecture**: `notification-api` (REST gateway) → Kafka → `email-worker` / `whatsapp-worker` → External APIs
+
+---
+
+## 📑 Table of Contents
+
+- [Notification System](#notification-system)
+  - [📋 TL;DR for Developers](#-tldr-for-developers)
+  - [📑 Table of Contents](#-table-of-contents)
+  - [🚀 Quick Start](#-quick-start)
+    - [Prerequisites](#prerequisites)
+    - [Environment Setup](#environment-setup)
+    - [Running with Docker Compose (Recommended)](#running-with-docker-compose-recommended)
+    - [Running Locally (Development)](#running-locally-development)
+  - [📡 API Documentation](#-api-documentation)
+    - [Register Site](#register-site)
+    - [Send Email Notification](#send-email-notification)
+    - [Send WhatsApp Notification](#send-whatsapp-notification)
+  - [🛠️ Development](#️-development)
+    - [Building](#building)
+    - [Testing](#testing)
+      - [Unit Tests](#unit-tests)
+      - [Integration Tests](#integration-tests)
+    - [Code Style](#code-style)
+    - [Project Structure](#project-structure)
+  - [🚢 Deployment](#-deployment)
+    - [Production Checklist](#production-checklist)
+    - [Production Environment Variables](#production-environment-variables)
+    - [Docker Compose Override](#docker-compose-override)
+    - [Rebuilding After Code Changes](#rebuilding-after-code-changes)
+  - [⚙️ Configuration](#️-configuration)
+    - [Environment Variables Reference](#environment-variables-reference)
+    - [WhatsApp Session Configuration](#whatsapp-session-configuration)
+  - [🔧 Troubleshooting](#-troubleshooting)
+    - [Services Won't Start](#services-wont-start)
+    - [Database Connection Issues](#database-connection-issues)
+    - [Kafka Issues](#kafka-issues)
+    - [Worker Not Processing Messages](#worker-not-processing-messages)
+    - [WASender API Key Issues](#wasender-api-key-issues)
+    - [Local Development Issues](#local-development-issues)
+    - [Build Failures](#build-failures)
+    - [Health Check Failures](#health-check-failures)
+  - [📊 Monitoring](#-monitoring)
+    - [Health Endpoints](#health-endpoints)
+    - [Prometheus Metrics](#prometheus-metrics)
+    - [Kafka UI](#kafka-ui)
+    - [Admin Dashboard](#admin-dashboard)
+  - [📚 Documentation](#-documentation)
+  - [📚 Additional Resources](#-additional-resources)
+  - [📄 License](#-license)
+  - [👥 Support](#-support)
+
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites

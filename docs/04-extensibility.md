@@ -29,3 +29,5 @@ Example: SendGrid → SES, or WASender → Meta/Twilio.
 - **Retry/DLQ**: Single authority (KafkaRetryService); workers only set FAILED and ack.
 - **Credentials**: Resolved only in workers from DB (and, where designed, env fallback). Never read from the Kafka message body.
 
+
+
