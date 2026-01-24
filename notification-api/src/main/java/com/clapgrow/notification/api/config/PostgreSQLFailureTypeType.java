@@ -94,3 +94,5 @@ public class PostgreSQLFailureTypeType implements UserType<FailureType> {
 
 
 
+
+

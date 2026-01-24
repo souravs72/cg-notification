@@ -22,3 +22,5 @@ Safe to log: `siteId`, `messageId`, provider name, HTTP status codes, error cate
 - API/Admin: when surfacing provider errors to clients, use only parsed `message`/`error` or a generic “details redacted” string, never the raw response body.
 - Exceptions that may wrap provider responses (e.g. WebClientResponseException): do not pass the exception message or body into log format strings. Log type + status (and “response redacted”) instead.
 
+
+

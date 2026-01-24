@@ -20,3 +20,5 @@ COMMENT ON CONSTRAINT chk_failure_type_consistency ON message_logs IS
 
 
 
+
+

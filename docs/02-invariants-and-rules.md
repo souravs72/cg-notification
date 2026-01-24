@@ -37,3 +37,5 @@
 - `notification.messages.sent` = “accepted by API” (persisted + queued to send), not “published to Kafka”. Kafka publish latency is tracked separately.
 - StatusTransitionValidator must stay deterministic: no env flags, no DB calls, no time-based branch — pure enum-map validation.
 
+
+

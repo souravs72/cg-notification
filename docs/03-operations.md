@@ -46,3 +46,5 @@ Interpret “sent” as “accepted by API”. Delivery and failure come from wo
 | “Tenant isolation violation” in log | Payload `siteId` ≠ `message_logs.site_id` (or null mismatch). Indicates bug or tampered payload. |
 | “API key not configured” / 401 from provider | Credential missing or invalid for that site/session. Check DB config and provider dashboard. |
 
+
+
