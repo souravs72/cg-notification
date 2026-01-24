@@ -31,7 +31,7 @@
         <postgresql.version>42.7.1</postgresql.version>
         <lombok.version>1.18.42</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <springdoc.version>2.3.0</springdoc.version>
+        <springdoc.version>3.0.1</springdoc.version>
         <testcontainers.version>1.19.3</testcontainers.version>
         <mockito.version>5.21.0</mockito.version>
         <awaitility.version>4.2.0</awaitility.version>
