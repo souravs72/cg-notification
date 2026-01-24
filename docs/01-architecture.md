@@ -44,3 +44,5 @@ Key = `messageId`. Value = JSON: `messageId`, `siteId`, `channel`, `recipient`, 
 - **notification-api**: Inserts and owns `retry_count`, `failure_type`, status transitions for retry/DLQ logic.
 - **Workers**: Only UPDATE status, `error_message`, `sent_at`, `delivered_at`, `failure_type` for consumed messages. Do not mutate `retry_count`.
 
+
+
