@@ -1,0 +1,98 @@
+---
+name: Infrastructure Services Template
+
+# ⚠️ IMPORTANT LIMITATION
+# GitHub Actions does NOT support sharing services via reusable workflows.
+# This file is a *reference template only*, not a reusable service provider.
+#
+# Copy-paste the services block into jobs that need it.
+#
+# Since services cannot be shared, merge jobs that need the same
+# infrastructure to avoid duplicate service spin-up and improve CI speed.
+
+on:
+  workflow_call:
+
+jobs:
+  reference-only:
+    name: Infrastructure Services Template (Reference Only)
+    runs-on: ubuntu-latest
+    # This job is for documentation only - do not attempt to run it
+    # Copy the services section below into jobs that need infrastructure
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: notification_db
+          POSTGRES_USER: notification_user
+          POSTGRES_PASSWORD: notification_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U notification_user -d notification_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      zookeeper:
+        image: confluentinc/cp-zookeeper:7.5.0
+        env:
+          ZOOKEEPER_CLIENT_PORT: 2181
+          ZOOKEEPER_TICK_TIME: 2000
+        ports:
+          - 2181:2181
+
+      kafka:
+        image: confluentinc/cp-kafka:7.5.0
+        env:
+          KAFKA_BROKER_ID: 1
+          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "sh -c 'nc -z localhost 9092 || exit 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+# Standard environment variables for services:
+# SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
+# SPRING_DATASOURCE_USERNAME: notification_user
+# SPRING_DATASOURCE_PASSWORD: notification_pass
+# SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+# Standard wait steps (add to your job steps):
+#   - name: Wait for PostgreSQL to be ready
+#     run: |
+#       sudo apt-get update && sudo apt-get install -y postgresql-client || true
+#       echo "Waiting for PostgreSQL to be ready..."
+#       for i in {1..30}; do
+#         if pg_isready -h localhost -p 5432 -U notification_user -d notification_db; then
+#           echo "PostgreSQL is ready!"
+#           exit 0
+#         fi
+#         echo "Attempt $i/30: PostgreSQL not ready yet, waiting..."
+#         sleep 2
+#       done
+#       echo "PostgreSQL failed to become ready"
+#       exit 1
+#
+#   - name: Wait for Kafka to be ready
+#     run: |
+#       echo "Waiting for Kafka to be ready..."
+#       sudo apt-get update && sudo apt-get install -y netcat-openbsd || true
+#       for i in {1..30}; do
+#         if nc -z kafka 9092 2>/dev/null; then
+#           echo "Kafka is ready!"
+#           exit 0
+#         fi
+#         echo "Attempt $i/30: Kafka not ready yet, waiting..."
+#         sleep 2
+#       done
+#       echo "Kafka failed to become ready"
+#       exit 1
+

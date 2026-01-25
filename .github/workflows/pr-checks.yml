@@ -3,6 +3,9 @@ name: PR Checks
 
 on:
   pull_request:
+    branches:
+      - main
+      - develop
     types: [opened, synchronize, reopened]
 
 jobs:
@@ -18,7 +21,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check PR title format
-        uses: amannn/action-semantic-pull-request@v5
+        uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -56,13 +59,15 @@ jobs:
           fi
 
       - name: Check for secrets
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.92.4
         with:
           path: ./
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
-        continue-on-error: true
+        # Fail PRs targeting main branch if secrets are found
+        # Allow continue-on-error for other branches
+        continue-on-error: ${{ github.event.pull_request.base.ref != 'main' }}
 
       - name: Validate commit messages
-        uses: wagoid/commitlint-github-action@v5
+        uses: wagoid/commitlint-github-action@v6
         continue-on-error: true

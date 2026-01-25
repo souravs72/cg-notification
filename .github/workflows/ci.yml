@@ -1,6 +1,8 @@
 ---
 name: CI
 
+# Infrastructure services follow .github/workflows/infrastructure.yml
+
 on:
   push:
     branches: [main, develop, "feature/**", "release/**", "hotfix/**"]
@@ -13,9 +15,9 @@ env:
 
 jobs:
   build:
-    name: Build and Test
+    name: Build, Test, and Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -45,13 +47,14 @@ jobs:
         env:
           KAFKA_BROKER_ID: 1
           KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
           KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
           KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
         ports:
           - 9092:9092
         options: >-
-          --health-cmd "kafka-broker-api-versions --bootstrap-server localhost:9092"
+          --health-cmd "sh -c 'nc -z localhost 9092 || exit 1'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -66,13 +69,6 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: "temurin"
           cache: "maven"
-
-      - name: Cache Maven dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
 
       - name: Build common-proto
         run: |
@@ -99,7 +95,7 @@ jobs:
           echo "Waiting for Kafka to be ready..."
           sudo apt-get update && sudo apt-get install -y netcat-openbsd || true
           for i in {1..30}; do
-            if nc -z localhost 9092 2>/dev/null; then
+            if nc -z kafka 9092 2>/dev/null; then
               echo "Kafka is ready!"
               exit 0
             fi
@@ -110,12 +106,12 @@ jobs:
           exit 1
 
       - name: Build and test all modules
-        run: mvn clean verify
+        run: mvn clean verify -DskipITs=false
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
           SPRING_DATASOURCE_USERNAME: notification_user
           SPRING_DATASOURCE_PASSWORD: notification_pass
-          SPRING_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
       - name: Upload test results
         if: always()
@@ -148,17 +144,11 @@ jobs:
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: "temurin"
-
-      - name: Cache Maven dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
+          cache: "maven"
 
       - name: Run Maven checkstyle
         run: mvn checkstyle:check
-        continue-on-error: true
+        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Analyze with SonarCloud
         if: github.event_name == 'pull_request'
@@ -182,13 +172,7 @@ jobs:
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: "temurin"
-
-      - name: Cache Maven dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
+          cache: "maven"
 
       - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
@@ -199,7 +183,7 @@ jobs:
           args: >
             --failOnCVSS 7
             --enableRetired
-        continue-on-error: true
+        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Upload security report
         if: always()
@@ -239,101 +223,7 @@ jobs:
 
       - name: Test Docker image
         run: |
-          docker run --rm cg-notification-${{ matrix.service }}:test --version || true
-
-  integration-test:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [build, docker-build]
-
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: notification_db
-          POSTGRES_USER: notification_user
-          POSTGRES_PASSWORD: notification_pass
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U notification_user -d notification_db"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      zookeeper:
-        image: confluentinc/cp-zookeeper:7.5.0
-        env:
-          ZOOKEEPER_CLIENT_PORT: 2181
-          ZOOKEEPER_TICK_TIME: 2000
-        ports:
-          - 2181:2181
-
-      kafka:
-        image: confluentinc/cp-kafka:7.5.0
-        env:
-          KAFKA_BROKER_ID: 1
-          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-        ports:
-          - 9092:9092
-        options: >-
-          --health-cmd "kafka-broker-api-versions --bootstrap-server localhost:9092"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: "temurin"
-          cache: "maven"
-
-      - name: Wait for PostgreSQL to be ready
-        run: |
-          sudo apt-get update && sudo apt-get install -y postgresql-client || true
-          echo "Waiting for PostgreSQL to be ready..."
-          for i in {1..30}; do
-            if pg_isready -h localhost -p 5432 -U notification_user -d notification_db; then
-              echo "PostgreSQL is ready!"
-              exit 0
-            fi
-            echo "Attempt $i/30: PostgreSQL not ready yet, waiting..."
-            sleep 2
-          done
-          echo "PostgreSQL failed to become ready"
-          exit 1
-
-      - name: Wait for Kafka to be ready
-        run: |
-          echo "Waiting for Kafka to be ready..."
-          sudo apt-get update && sudo apt-get install -y netcat-openbsd || true
-          for i in {1..30}; do
-            if nc -z localhost 9092 2>/dev/null; then
-              echo "Kafka is ready!"
-              exit 0
-            fi
-            echo "Attempt $i/30: Kafka not ready yet, waiting..."
-            sleep 2
-          done
-          echo "Kafka failed to become ready"
-          exit 1
-
-      - name: Run integration tests
-        run: mvn verify -DskipITs=false
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
-          SPRING_DATASOURCE_USERNAME: notification_user
-          SPRING_DATASOURCE_PASSWORD: notification_pass
-          SPRING_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          docker run --rm cg-notification-${{ matrix.service }}:test java -version
 
   lint:
     name: Lint
@@ -359,7 +249,7 @@ jobs:
     name: CI Summary
     runs-on: ubuntu-latest
     needs:
-      [build, code-quality, security-scan, docker-build, integration-test, lint]
+      [build, code-quality, security-scan, docker-build, lint]
     if: always()
 
     steps:
