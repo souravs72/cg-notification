@@ -1,114 +1,139 @@
 ---
-name: CD
-
-on:
-  push:
-    branches: [main]
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
+  name: CD
+  
+  on:
+    push:
+      branches: [main]
+      tags:
+        - 'v*'
+    workflow_dispatch:
+      inputs:
+        environment:
+          description: 'Deployment environment'
+          required: true
+          default: 'staging'
+          type: choice
+          options:
+            - staging
+            - production
+  
+  env:
+    REGISTRY: ghcr.io
+    JAVA_VERSION: '17'
+  
+  jobs:
+    build-and-push:
+      name: Build and Push Docker Images
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+        packages: write
+  
+      strategy:
+        matrix:
+          service: [notification-api, email-worker, whatsapp-worker]
+  
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+  
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
+  
+        - name: Log in to Container Registry
+          uses: docker/login-action@v3
+          with:
+            registry: ${{ env.REGISTRY }}
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+  
+        - name: Extract metadata
+          id: meta
+          uses: docker/metadata-action@v5
+          with:
+            images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}
+            tags: |
+              type=ref,event=branch
+              type=ref,event=pr
+              type=semver,pattern={{version}}
+              type=semver,pattern={{major}}.{{minor}}
+              type=sha,prefix={{branch}}-
+              # NOTE: latest tag tracks main branch only, not production tags
+              # Production tags (v*) are separate and may not be latest
+              type=raw,value=latest,enable={{is_default_branch}}
+  
+        - name: Build and push Docker image
+          uses: docker/build-push-action@v5
+          with:
+            context: .
+            file: ${{ matrix.service }}/Dockerfile
+            # CD always pushes images (this workflow never runs on PRs)
+            # CI is responsible for PR validation
+            push: true
+            tags: ${{ steps.meta.outputs.tags }}
+            labels: ${{ steps.meta.outputs.labels }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+            build-args: |
+              BUILDKIT_INLINE_CACHE=1
+  
+    deploy-staging:
+      name: Deploy to Staging
+      runs-on: ubuntu-latest
+      needs: [build-and-push]
+      # This job reuses images built in build-and-push job.
+      # Do NOT rebuild images here - only deploy existing images from the registry.
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
       environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
-
-env:
-  REGISTRY: ghcr.io
-  JAVA_VERSION: '17'
-
-jobs:
-  build-and-push:
-    name: Build and Push Docker Images
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    strategy:
-      matrix:
-        service: [notification-api, email-worker, whatsapp-worker]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ${{ matrix.service }}/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: [build-and-push]
-    if: |
-      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
-    environment:
-      name: staging
-      url: https://staging.example.com
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to staging
-        run: |
-          echo "Deploying to staging environment"
-          # Add deployment commands here
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [build-and-push]
-    if: |
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
-    environment:
-      name: production
-      url: https://production.example.com
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to production
-        run: |
-          echo "Deploying to production environment"
-          # Add deployment commands here
+        name: staging
+        url: https://staging.example.com
+  
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+  
+        - name: Deploy to staging
+          run: |
+            echo "Deploying to staging environment"
+            echo "Image tag: $IMAGE_TAG"
+            # Add deployment commands here
+            # IMPORTANT: Use images from build-and-push job, do NOT rebuild
+            # Use $IMAGE_TAG to reference the exact image version
+          env:
+            # Use main-prefixed SHA to match the tag format generated in build-and-push
+            # Staging always deploys from main branch, so use main-${{ github.sha }}
+            # This works for both branch pushes and workflow_dispatch
+            IMAGE_TAG: main-${{ github.sha }}
+  
+    deploy-production:
+      name: Deploy to Production
+      runs-on: ubuntu-latest
+      # Gate production on successful staging deployment to enforce promotion chain
+      # This ensures: if it wasn't deployed to staging, it can't go to prod
+      needs: [build-and-push, deploy-staging]
+      # CRITICAL: Production deploys must ONLY promote existing tags from the registry.
+      # Do NOT rebuild images during production deployment - this ensures deployment
+      # uses the exact same images that were tested and approved in staging.
+      if: |
+        startsWith(github.ref, 'refs/tags/v') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+      environment:
+        name: production
+        url: https://production.example.com
+  
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+  
+        - name: Deploy to production
+          run: |
+            echo "Deploying to production environment"
+            echo "Image tag: $IMAGE_TAG"
+            # Add deployment commands here
+            # IMPORTANT: Only promote existing image tags, do NOT rebuild images
+            # Use $IMAGE_TAG to reference the exact image version (tag name for production)
+          env:
+            IMAGE_TAG: ${{ github.ref_name }}
+  

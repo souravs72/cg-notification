@@ -1,6 +1,8 @@
 ---
 name: Nightly Build
 
+# Infrastructure services follow .github/workflows/infrastructure.yml
+
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -27,14 +29,30 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      zookeeper:
+        image: confluentinc/cp-zookeeper:7.5.0
+        env:
+          ZOOKEEPER_CLIENT_PORT: 2181
+          ZOOKEEPER_TICK_TIME: 2000
+        ports:
+          - 2181:2181
+
       kafka:
         image: confluentinc/cp-kafka:7.5.0
         env:
           KAFKA_BROKER_ID: 1
           KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
         ports:
           - 9092:9092
+        options: >-
+          --health-cmd "sh -c 'nc -z localhost 9092 || exit 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout code
@@ -49,14 +67,45 @@ jobs:
 
       - name: Update dependencies
         run: mvn versions:display-dependency-updates versions:display-plugin-updates
+        continue-on-error: true
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client || true
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U notification_user -d notification_db; then
+              echo "PostgreSQL is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: PostgreSQL not ready yet, waiting..."
+            sleep 2
+          done
+          echo "PostgreSQL failed to become ready"
+          exit 1
+
+      - name: Wait for Kafka to be ready
+        run: |
+          echo "Waiting for Kafka to be ready..."
+          sudo apt-get update && sudo apt-get install -y netcat-openbsd || true
+          for i in {1..30}; do
+            if nc -z kafka 9092 2>/dev/null; then
+              echo "Kafka is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: Kafka not ready yet, waiting..."
+            sleep 2
+          done
+          echo "Kafka failed to become ready"
+          exit 1
 
       - name: Build with all tests
-        run: mvn clean verify
+        run: mvn clean verify -DskipITs=false
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
           SPRING_DATASOURCE_USERNAME: notification_user
           SPRING_DATASOURCE_PASSWORD: notification_pass
-          SPRING_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
       - name: Generate dependency report
         run: mvn dependency:tree -DoutputFile=dependencies.txt
@@ -68,4 +117,6 @@ jobs:
           path: |
             dependencies.txt
             **/target/surefire-reports/**
+            **/target/site/jacoco/**
           retention-days: 30
+          if-no-files-found: ignore
