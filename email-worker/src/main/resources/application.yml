@@ -2,7 +2,7 @@ spring:
   application:
     name: email-worker
   main:
-    web-application-type: none
+    web-application-type: servlet  # Use servlet for management server (needed for actuator endpoints)
 
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/notification_db}
@@ -33,6 +33,7 @@ spring:
     # Default matches Docker internal Kafka listener (kafka:29092).
     # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    msk-iam-enabled: ${SPRING_KAFKA_MSK_IAM_ENABLED:false}
     listener:
       shutdown-timeout: ${KAFKA_LISTENER_SHUTDOWN_TIMEOUT:30s}
 
@@ -42,9 +43,10 @@ kafka:
     environment-prefix: ${KAFKA_CONSUMER_ENV_PREFIX:}
     concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
 
-# Server port not needed (web-application-type: none)
-# server:
-#   port: 8081
+# Use management server port instead of main server port
+# This allows actuator endpoints without full servlet stack overhead
+server:
+  port: -1  # Disable main server port (we only need management server)
 
 sendgrid:
   api:
@@ -54,6 +56,8 @@ sendgrid:
     name: ${SENDGRID_FROM_NAME}
 
 management:
+  server:
+    port: ${SERVER_PORT:8081}  # Management server port for health checks
   endpoints:
     web:
       exposure:

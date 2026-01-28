@@ -1,0 +1,11 @@
+# Kafka admin image for MSK topic creation (kafka-topics.sh + aws-msk-iam-auth)
+FROM confluentinc/cp-kafka:7.5.0
+
+# Add aws-msk-iam-auth into Kafka libs so kafka-run-class includes it on classpath
+USER root
+RUN curl -sSL -o /tmp/aws-msk-iam-auth.jar \
+    "https://github.com/aws/aws-msk-iam-auth/releases/download/v2.3.2/aws-msk-iam-auth-2.3.2-all.jar" \
+    && mv /tmp/aws-msk-iam-auth.jar /usr/share/java/kafka/
+USER appuser
+
+CMD ["tail", "-f", "/dev/null"]

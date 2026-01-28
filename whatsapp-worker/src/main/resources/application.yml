@@ -33,6 +33,7 @@ spring:
     # Default matches Docker internal Kafka listener (kafka:29092).
     # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    msk-iam-enabled: ${SPRING_KAFKA_MSK_IAM_ENABLED:false}
     listener:
       shutdown-timeout: ${KAFKA_LISTENER_SHUTDOWN_TIMEOUT:30s}
 

@@ -44,7 +44,4 @@ Interpret “sent” as “accepted by API”. Delivery and failure come from wo
 | Message goes FAILED (CONSUMER) | Worker attempted send; provider or config failed. See `message_logs.error_message`. KafkaRetryService will retry up to max, then DLQ. |
 | Message goes FAILED (KAFKA) | Publish to Kafka failed. KafkaRetryService will retry republish. |
 | “Tenant isolation violation” in log | Payload `siteId` ≠ `message_logs.site_id` (or null mismatch). Indicates bug or tampered payload. |
-| “API key not configured” / 401 from provider | Credential missing or invalid for that site/session. Check DB config and provider dashboard. |
-
-
-
+| “API key not configured” / 401 from provider | Credential missing or invalid for that site/session. Check DB config and provider dashboard.

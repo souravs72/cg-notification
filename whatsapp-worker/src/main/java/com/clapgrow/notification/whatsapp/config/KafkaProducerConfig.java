@@ -1,6 +1,7 @@
 package com.clapgrow.notification.whatsapp.config;
 
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -14,9 +15,14 @@ import java.util.Map;
 
 @Configuration
 public class KafkaProducerConfig {
-    
+
+    private static final String SECURITY_PROTOCOL = "security.protocol";
+
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
+
+    @Value("${spring.kafka.msk-iam-enabled:false}")
+    private boolean mskIamEnabled;
 
     @Bean
     public ProducerFactory<String, String> producerFactory() {
@@ -24,6 +30,14 @@ public class KafkaProducerConfig {
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        if (mskIamEnabled) {
+            configProps.put(SECURITY_PROTOCOL, "SASL_SSL");
+            configProps.put(SaslConfigs.SASL_MECHANISM, "AWS_MSK_IAM");
+            configProps.put(SaslConfigs.SASL_JAAS_CONFIG,
+                "software.amazon.msk.auth.iam.IAMLoginModule required;");
+            configProps.put(SaslConfigs.SASL_CLIENT_CALLBACK_HANDLER_CLASS,
+                "software.amazon.msk.auth.iam.IAMClientCallbackHandler");
+        }
         return new DefaultKafkaProducerFactory<>(configProps);
     }
 

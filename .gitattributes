@@ -1,24 +1,11 @@
 # =====================================================
-# File integrity rules — DO NOT NORMALIZE ANYTHING
+# Strict file integrity — NO normalization
 # =====================================================
 
-# Disable Git text normalization globally
+# Everything is binary by default (no newline normalization)
 * -text
 
-# Explicitly mark known text files but still disable normalization
-*.java       -text
-*.xml        -text
-*.yml        -text
-*.yaml       -text
-*.properties -text
-*.sql        -text
-*.md         -text
-*.json       -text
-*.proto      -text
-*.sh         -text
-*.py         -text
-
-# Binary files — never touched
+# Explicit binary formats (documentation + safety)
 *.jar   binary
 *.class binary
 *.png   binary
@@ -31,5 +18,5 @@
 *.tar   binary
 *.gz    binary
 
-# Build artifacts — never tracked as text
+# Build outputs should not be normalized if ever tracked
 target/** -text

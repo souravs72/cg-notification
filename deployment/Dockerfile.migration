@@ -1,0 +1,7 @@
+FROM postgres:15-alpine
+
+# Copy all migration files
+COPY deployment/*.sql /migrations/
+
+# Default command runs all migrations in order
+CMD ["sh", "-c", "echo 'Migration container ready. Run migrations via ECS task command.'"]

@@ -83,13 +83,19 @@ public class AdminController {
 
     @GetMapping("/dashboard")
     public String dashboard(Model model, HttpSession session) {
-        // Get fresh user info from database
-        User user = userService.getCurrentUser(session);
-        
-        model.addAttribute("user", user);
-        AdminDashboardResponse metrics = adminService.getDashboardMetrics();
-        model.addAttribute("metrics", metrics);
-        return "admin/dashboard";
+        try {
+            // Get fresh user info from database
+            User user = userService.getCurrentUser(session);
+            
+            model.addAttribute("user", user);
+            AdminDashboardResponse metrics = adminService.getDashboardMetrics();
+            model.addAttribute("metrics", metrics);
+            return "admin/dashboard";
+        } catch (IllegalStateException e) {
+            // Session invalid or user not found - redirect to login
+            log.warn("Dashboard access failed: {} - redirecting to login", e.getMessage());
+            return "redirect:/auth/login";
+        }
     }
 
     @GetMapping("/sites")

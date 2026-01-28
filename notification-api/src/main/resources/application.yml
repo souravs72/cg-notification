@@ -2,6 +2,11 @@ spring:
   application:
     name: notification-api
 
+  # CRITICAL: Multi-task safe HTTP sessions (ECS/ALB)
+  # In production we back sessions by Redis (Spring Session) so any task can read them.
+  session:
+    store-type: ${SPRING_SESSION_STORE_TYPE:none}
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/notification_db}
     username: ${SPRING_DATASOURCE_USERNAME:notification_user}
@@ -16,6 +21,8 @@ spring:
       leak-detection-threshold: 60000
       pool-name: NotificationApiHikariPool
       auto-commit: false  # Disable autocommit for proper transaction management
+      # Allow connection retries without failing startup
+      initialization-fail-timeout: -1
 
   jpa:
     hibernate:
@@ -25,6 +32,8 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
+        temp:
+          use_jdbc_metadata_defaults: false
         jdbc:
           lob:
             non_contextual_creation: true
@@ -36,6 +45,8 @@ spring:
     # Default matches Docker internal Kafka listener (kafka:29092).
     # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    # Enable when using MSK Serverless (SASL/IAM on 9098). Set SPRING_KAFKA_MSK_IAM_ENABLED=true in ECS.
+    msk-iam-enabled: ${SPRING_KAFKA_MSK_IAM_ENABLED:false}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -48,9 +59,59 @@ spring:
     multipart:
       max-file-size: 100MB
       max-request-size: 100MB
+    # CRITICAL: Session cookie configuration for ALB
+    # Behind ALB, session cookies must work correctly with forwarded headers
+    # ALB terminates HTTPS and forwards HTTP to backend
+    # Browser sees HTTPS, backend sees HTTP, but Spring trusts X-Forwarded-Proto
+    session:
+      cookie:
+        # CRITICAL: Use 'lax' for SameSite (default) - works reliably with ALB
+        # 'none' requires Secure flag and can cause issues if X-Forwarded-Proto isn't properly set
+        # 'lax' allows cookies on same-site navigations (like redirects) while maintaining security
+        same-site: lax
+        # CRITICAL FIX: Explicitly disable Secure flag when behind ALB with HTTP backend
+        # Problem: Browser → HTTPS → ALB → HTTP → Backend
+        # If Spring sets Secure flag based on X-Forwarded-Proto, but the cookie is actually
+        # being sent over HTTP from ALB to backend, Firefox will reject it with:
+        # "This cookie was set over HTTP but marked Secure"
+        # Solution: Disable Secure flag explicitly - ALB handles HTTPS termination,
+        # browser-to-ALB is HTTPS, but backend doesn't need Secure flag since it's internal
+        secure: false
+        # Cookie name (default JSESSIONID is fine)
+        name: JSESSIONID
+        # HttpOnly prevents JavaScript access (security)
+        http-only: true
+        # Max age in seconds (30 days)
+        max-age: 2592000
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      # TLS (SPRING_DATA_REDIS_SSL_ENABLED=true) + password (SPRING_DATA_REDIS_PASSWORD from Secrets Manager) for ElastiCache.
+      # Spring Boot 3.x uses ssl.enabled instead of ssl boolean
+      ssl:
+        enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:false}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+
+  security:
+    # CRITICAL: Spring Security has its own proxy handling separate from server-level forwarded headers
+    # Without this, Spring Security won't trust X-Forwarded-* headers, causing:
+    # - Session cookies to be rejected
+    # - CSRF token validation to fail
+    # - Redirect loops because session isn't recognized
+    headers:
+      forward-headers-strategy: framework
 
 server:
   port: 8080
+  # CRITICAL: Enable forwarded headers support for ALB
+  # ALB terminates HTTPS and forwards HTTP to backend
+  # Spring needs to trust X-Forwarded-* headers to properly handle:
+  # - Session cookies (SameSite, Secure flags)
+  # - CSRF token validation
+  # - Redirect URLs
+  forward-headers-strategy: framework
 
 management:
   endpoints:
@@ -63,6 +124,16 @@ management:
       probes:
         enabled: true
       show-details: ${ACTUATOR_HEALTH_DETAILS:never}
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+    db:
+      enabled: true
+    # Don't fail health check if DB is temporarily unavailable
+    defaults:
+      enabled: true
   metrics:
     export:
       prometheus:
@@ -70,9 +141,6 @@ management:
   info:
     env:
       enabled: true
-
-actuator:
-  enabled: ${ACTUATOR_ENABLED:false}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:*}

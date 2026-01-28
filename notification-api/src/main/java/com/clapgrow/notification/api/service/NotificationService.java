@@ -13,7 +13,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +33,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 public class NotificationService {
-    
+
+    /** Self-injection so bulk loop calls go through the proxy and @Transactional applies. */
+    @Lazy
+    @Autowired
+    private NotificationService self;
+
     @Value("${spring.kafka.topics.email:notifications-email}")
     private String emailTopic;
     
@@ -138,7 +145,7 @@ public class NotificationService {
         
         for (NotificationRequest notificationRequest : request.getNotifications()) {
             try {
-                NotificationResponse response = sendNotification(notificationRequest, site, session);
+                NotificationResponse response = self.sendNotification(notificationRequest, site, session);
                 responses.add(response);
             } catch (Exception e) {
                 log.error("Error processing bulk notification", e);

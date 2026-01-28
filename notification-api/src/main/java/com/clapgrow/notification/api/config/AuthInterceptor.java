@@ -73,10 +73,21 @@ public class AuthInterceptor implements HandlerInterceptor {
             // For non-API admin routes (dashboard pages), require session authentication
             HttpSession session = request.getSession(false);
             if (session == null || session.getAttribute("userId") == null) {
-                log.debug("Unauthorized dashboard access to {} - redirecting to login", path);
+                // CRITICAL: Enhanced logging for redirect loop debugging
+                String cookies = request.getHeader("Cookie");
+                log.warn("Unauthorized dashboard access to {} - no session or userId missing. " +
+                    "Session={}, userId={}, cookies={}", 
+                    path, 
+                    session != null ? session.getId() : "null", 
+                    session != null ? session.getAttribute("userId") : "null",
+                    cookies != null ? "present" : "missing");
                 response.sendRedirect("/auth/login");
                 return false;
             }
+            
+            // CRITICAL: Log successful session check for debugging redirect loops
+            log.debug("Authorized dashboard access to {} - userId={}, sessionId={}", 
+                path, session.getAttribute("userId"), session.getId());
         }
 
         return true;

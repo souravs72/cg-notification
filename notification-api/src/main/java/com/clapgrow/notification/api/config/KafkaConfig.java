@@ -1,6 +1,7 @@
 package com.clapgrow.notification.api.config;
 
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -14,9 +15,14 @@ import java.util.Map;
 
 @Configuration
 public class KafkaConfig {
-    
+
+    private static final String SECURITY_PROTOCOL = "security.protocol";
+
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
+
+    @Value("${spring.kafka.msk-iam-enabled:false}")
+    private boolean mskIamEnabled;
 
     @Bean
     public ProducerFactory<String, String> producerFactory() {
@@ -24,17 +30,24 @@ public class KafkaConfig {
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        
+
         // Producer reliability settings
-        configProps.put(ProducerConfig.ACKS_CONFIG, "all"); // Wait for all replicas
-        configProps.put(ProducerConfig.RETRIES_CONFIG, 3); // Retry failed sends
-        configProps.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 1); // Prevent reordering
-        configProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true); // Prevent duplicates
-        
-        // Timeout settings to avoid stuck sends
-        configProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 120000); // 2 minutes max delivery time
-        configProps.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 30000); // 30 seconds request timeout
-        
+        configProps.put(ProducerConfig.ACKS_CONFIG, "all");
+        configProps.put(ProducerConfig.RETRIES_CONFIG, 3);
+        configProps.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 1);
+        configProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        configProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 120000);
+        configProps.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 30000);
+
+        if (mskIamEnabled) {
+            configProps.put(SECURITY_PROTOCOL, "SASL_SSL");
+            configProps.put(SaslConfigs.SASL_MECHANISM, "AWS_MSK_IAM");
+            configProps.put(SaslConfigs.SASL_JAAS_CONFIG,
+                "software.amazon.msk.auth.iam.IAMLoginModule required;");
+            configProps.put(SaslConfigs.SASL_CLIENT_CALLBACK_HANDLER_CLASS,
+                "software.amazon.msk.auth.iam.IAMClientCallbackHandler");
+        }
+
         return new DefaultKafkaProducerFactory<>(configProps);
     }
 
