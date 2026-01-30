@@ -34,7 +34,7 @@
         <springdoc.version>3.0.1</springdoc.version>
         <testcontainers.version>1.19.3</testcontainers.version>
         <mockito.version>5.21.0</mockito.version>
-        <awaitility.version>4.2.0</awaitility.version>
+        <awaitility.version>4.3.0</awaitility.version>
         <sendgrid.version>4.10.3</sendgrid.version>
         <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
         <os-maven-plugin.version>1.7.1</os-maven-plugin.version>
