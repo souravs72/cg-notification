@@ -1,4 +1,5 @@
 ---
+# CD: Build and push images; deploy uses Terraform (SNS/SQS, no MSK). See scripts/deploy-trigger.sh for full deploy.
   name: CD
   
   on:
