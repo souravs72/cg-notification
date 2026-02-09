@@ -1,3 +1,4 @@
+---
 name: GitFlow Branch Protection
 
 on:
@@ -22,4 +23,3 @@ jobs:
           echo "- feature/*: Feature development branches"
           echo "- release/*: Release preparation branches"
           echo "- hotfix/*: Critical bug fixes"
-

@@ -80,17 +80,3 @@ public class WasenderConfigService {
         log.info("Updated WASender API key configuration with ID: {}", config.getId());
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

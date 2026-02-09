@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- QRCodeJS library - loaded synchronously, no defer -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         :root {
             --sidebar-width: 250px;
@@ -136,10 +138,21 @@
             text-align: center;
             padding: 2rem;
         }
-        .qr-code-container img {
+        .qr-code-container canvas,
+        .qr-code-container table {
             max-width: 300px;
             border: 2px solid #dee2e6;
             border-radius: 0.5rem;
+            padding: 10px;
+            background-color: white;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .qr-code-container > div {
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
         .card {
@@ -1202,12 +1215,26 @@
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success && data.qrCode) {
+                // Backend returns raw QR string in qrCode field (not base64 PNG)
+                const qrString = data.qrCode || data.qr;
+                if (data.success && qrString) {
                     container.innerHTML = `
                         <p class="fw-bold">Scan this QR code with WhatsApp:</p>
-                        <img src="data:image/png;base64,${data.qrCode}" alt="QR Code" class="img-fluid">
+                        <div id="qrCanvas"></div>
                         <p class="mt-3"><small class="text-muted">Session: ${sessionName}</small></p>
                     `;
+                    
+                    // Generate QR code using qrcodejs
+                    const qrCanvas = document.getElementById('qrCanvas');
+                    new QRCode(qrCanvas, {
+                        text: qrString,
+                        width: 300,
+                        height: 300,
+                        colorDark: "#000000",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.M
+                    });
+                    
                     statusDiv.className = 'alert alert-success';
                     statusDiv.innerHTML = '<i class="bi bi-check-circle"></i> QR code generated successfully. Scan with WhatsApp to connect.';
                     statusDiv.style.display = 'block';
@@ -1301,8 +1328,8 @@
                     }
                     
                     container.innerHTML = data.map(msg => {
-                        const time = msg.sentAt ? new Date(msg.sentAt).toLocaleString() : 
-                                    (msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : 'N/A');
+                        const time = msg.sentAt ? formatDateTimeLocal(msg.sentAt) : 
+                                    (msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : 'N/A');
                         const statusClass = msg.status === 'DELIVERED' ? 'success' : 
                                           msg.status === 'FAILED' ? 'danger' : 
                                           msg.status === 'PENDING' ? 'warning' : 'info';
@@ -1437,6 +1464,107 @@
             }).format(date);
         }
 
+        // Create a date representing a specific hour of today in user's timezone
+        // Returns a Date object that, when formatted in user's timezone, shows the specified hour
+        function createHourDateInTimezone(year, month, day, hour) {
+            const timezone = getUserTimezone();
+            
+            // Start with a reference UTC date (noon to avoid DST issues)
+            let testDate = new Date(Date.UTC(year, month, day, 12, 0, 0));
+            
+            // Find what hour noon represents in user's timezone
+            let currentHour = getHourInTimezone(testDate);
+            
+            // Calculate offset to get to the desired hour
+            const hourOffset = hour - currentHour;
+            testDate = new Date(testDate.getTime() + hourOffset * 3600000);
+            
+            // Verify and correct (handles DST transitions)
+            currentHour = getHourInTimezone(testDate);
+            if (currentHour !== hour) {
+                const correction = (hour - currentHour) * 3600000;
+                testDate = new Date(testDate.getTime() + correction);
+            }
+            
+            return testDate;
+        }
+
+        // Utility function to format UTC date strings to user's local timezone
+        // This intelligently handles UTC dates and converts them to local timezone
+        function formatDateTimeLocal(utcDateString) {
+            if (!utcDateString) return '-';
+            
+            try {
+                // Parse the UTC date string (handles ISO 8601 format with Z or +00:00)
+                let date;
+                if (typeof utcDateString === 'string') {
+                    // Ensure UTC dates are properly parsed
+                    if (utcDateString.endsWith('Z') || utcDateString.includes('+00:00')) {
+                        date = new Date(utcDateString);
+                    } else {
+                        // If no timezone indicator, assume UTC
+                        date = new Date(utcDateString + (utcDateString.includes('T') ? 'Z' : ''));
+                    }
+                } else {
+                    date = new Date(utcDateString);
+                }
+                
+                // Check if date is valid
+                if (isNaN(date.getTime())) {
+                    return utcDateString; // Return original if invalid
+                }
+                
+                // Format in user's local timezone with full date and time
+                const timezone = getUserTimezone();
+                return new Intl.DateTimeFormat('en-US', {
+                    timeZone: timezone,
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                }).format(date);
+            } catch (e) {
+                console.error('Error formatting date:', e, utcDateString);
+                return utcDateString; // Return original on error
+            }
+        }
+
+        // Format date only (without time) in user's local timezone
+        function formatDateOnlyLocal(utcDateString) {
+            if (!utcDateString) return '-';
+            
+            try {
+                let date;
+                if (typeof utcDateString === 'string') {
+                    if (utcDateString.endsWith('Z') || utcDateString.includes('+00:00')) {
+                        date = new Date(utcDateString);
+                    } else {
+                        date = new Date(utcDateString + (utcDateString.includes('T') ? 'Z' : ''));
+                    }
+                } else {
+                    date = new Date(utcDateString);
+                }
+                
+                if (isNaN(date.getTime())) {
+                    return utcDateString;
+                }
+                
+                const timezone = getUserTimezone();
+                return new Intl.DateTimeFormat('en-US', {
+                    timeZone: timezone,
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                }).format(date);
+            } catch (e) {
+                console.error('Error formatting date:', e, utcDateString);
+                return utcDateString;
+            }
+        }
+
         // Message Activity Chart
         let messageActivityChart = null;
         const messageActivityCtx = document.getElementById('messageActivityChart');
@@ -1509,38 +1637,20 @@
                     // Determine date range based on filter (all dates in user's timezone)
                     if (filter === 'today') {
                         // Today only - group by hours (0-23 in user's timezone)
-                        const timezone = getUserTimezone();
                         const todayParts = getDatePartsInTimezone(now);
                         
-                        // Create hour labels by finding UTC times that represent each hour in user's timezone
-                        // Strategy: Start with a known UTC time (noon today) and calculate offsets
-                        const baseUtcDate = new Date(Date.UTC(todayParts.year, todayParts.month, todayParts.day, 12, 0, 0));
-                        const baseHour = getHourInTimezone(baseUtcDate);
-                        
+                        // Create hour labels for today in user's timezone
                         for (let h = 0; h < 24; h++) {
-                            // Calculate how many hours offset from base hour
-                            const hourDiff = h - baseHour;
-                            // Create UTC date for this hour
-                            const hourUtcDate = new Date(baseUtcDate.getTime() + hourDiff * 3600000);
+                            // Create a date representing this hour in user's timezone
+                            const hourDate = createHourDateInTimezone(todayParts.year, todayParts.month, todayParts.day, h);
                             
-                            // Verify the hour is correct (accounting for DST changes)
-                            let actualHour = getHourInTimezone(hourUtcDate);
-                            if (actualHour !== h) {
-                                // Fine-tune: adjust by the difference
-                                const adjustMs = (h - actualHour) * 3600000;
-                                hourUtcDate.setTime(hourUtcDate.getTime() + adjustMs);
-                                // Re-verify
-                                actualHour = getHourInTimezone(hourUtcDate);
-                                // If still wrong, try one more adjustment (for edge cases)
-                                if (actualHour !== h && Math.abs(adjustMs) < 3600000) {
-                                    hourUtcDate.setTime(hourUtcDate.getTime() + (h - actualHour) * 3600000);
-                                }
-                            }
+                            // Format the label in user's timezone
+                            const label = formatTimeInTimezone(hourDate);
                             
                             dateRange.push({
                                 hour: h,
                                 dateStr: todayDateStr,
-                                label: formatTimeInTimezone(hourUtcDate)
+                                label: label
                             });
                         }
                         startDateStr = todayDateStr;
@@ -1660,8 +1770,14 @@
                                              weekdayStr === 'Tue' ? 2 : weekdayStr === 'Wed' ? 3 :
                                              weekdayStr === 'Thu' ? 4 : weekdayStr === 'Fri' ? 5 : 6;
                             const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-                            const mondayDate = new Date(msgDate);
-                            mondayDate.setDate(msgDate.getDate() - daysToMonday);
+                            
+                            // Calculate Monday date correctly in user's timezone
+                            // Get date parts of the message date in user's timezone
+                            const msgParts = getDatePartsInTimezone(msgDate);
+                            // Create a date representing the message date at noon UTC
+                            let mondayDate = new Date(Date.UTC(msgParts.year, msgParts.month, msgParts.day, 12, 0, 0));
+                            // Subtract days to get to Monday (working in UTC but representing user's timezone date)
+                            mondayDate.setUTCDate(mondayDate.getUTCDate() - daysToMonday);
                             const mondayDateStr = getDateStringInTimezone(mondayDate);
                             key = mondayDateStr;
                             
@@ -1779,9 +1895,9 @@
                                     msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
                                 }">${msg.status}</span>
                             </td>
-                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
+                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}</small></td>
+                            <td><small>${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}</small></td>
+                            <td><small>${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}</small></td>
                             <td>
                                 <button class="btn btn-sm btn-outline-primary" onclick="showMessageDetails(${msgIndex})" title="View Details">
                                     <i class="bi bi-eye"></i> Details
@@ -1915,15 +2031,15 @@
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <strong>Scheduled At:</strong><br>
-                            ${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}
+                            ${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}
                         </div>
                         <div class="col-md-4">
                             <strong>Sent At:</strong><br>
-                            ${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}
+                            ${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}
                         </div>
                         <div class="col-md-4">
                             <strong>Delivered At:</strong><br>
-                            ${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}
+                            ${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}
                         </div>
                     </div>
                 `;
@@ -2067,9 +2183,9 @@
                                     msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
                                 }">${msg.status}</span>
                             </td>
-                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? new Date(msg.scheduledAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.sentAt ? new Date(msg.sentAt).toLocaleString() : '-'}</small></td>
-                            <td><small>${msg.deliveredAt ? new Date(msg.deliveredAt).toLocaleString() : '-'}</small></td>
+                            <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}</small></td>
+                            <td><small>${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}</small></td>
+                            <td><small>${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}</small></td>
                             <td>
                                 <button class="btn btn-sm btn-outline-primary" onclick="showMessageDetails(${msgIndex})" title="View Details">
                                     <i class="bi bi-eye"></i> Details

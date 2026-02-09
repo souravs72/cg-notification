@@ -25,31 +25,40 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-boot.version>3.2.0</spring-boot.version>
-        <spring-cloud.version>2023.0.0</spring-cloud.version>
-        <grpc.version>1.60.0</grpc.version>
-        <protobuf.version>3.25.1</protobuf.version>
-        <kafka.version>3.6.0</kafka.version>
-        <postgresql.version>42.7.1</postgresql.version>
-        <lombok.version>1.18.30</lombok.version>
+        <spring-boot.version>3.3.4</spring-boot.version>
+        <grpc.version>1.67.1</grpc.version>
+        <protobuf.version>3.25.5</protobuf.version>
+        <postgresql.version>42.7.9</postgresql.version>
+        <lombok.version>1.18.42</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <junit.version>5.10.1</junit.version>
-        <springdoc.version>2.3.0</springdoc.version>
+        <springdoc.version>3.0.1</springdoc.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
+        <mockito.version>5.21.0</mockito.version>
+        <awaitility.version>4.3.0</awaitility.version>
+        <sendgrid.version>4.10.3</sendgrid.version>
+        <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
+        <os-maven-plugin.version>1.7.1</os-maven-plugin.version>
+        <surefire.version>3.5.4</surefire.version>
+        <failsafe.version>3.5.4</failsafe.version>
+        <micrometer-tracing.version>1.2.0</micrometer-tracing.version>
+        <maven-enforcer.version>3.6.2</maven-enforcer.version>
+        <!-- Skip integration tests by default (local dev) -->
+        <!-- CI can override with: mvn verify -DskipITs=false (requires Docker) -->
+        <skipITs>true</skipITs>
+        <!-- Dependency version alignment -->
+        <guava.version>33.5.0-jre</guava.version>
+        <errorprone.version>2.46.0</errorprone.version>
+        <checkerqual.version>3.53.0</checkerqual.version>
+        <j2objc.version>3.1</j2objc.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- BOM Imports -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.springframework.cloud</groupId>
-                <artifactId>spring-cloud-dependencies</artifactId>
-                <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -61,9 +70,132 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-tracing-bom</artifactId>
+                <version>${micrometer-tracing.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>6.0.2</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            
+            <!-- Common Dependencies -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct</artifactId>
+                <version>${mapstruct.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sendgrid</groupId>
+                <artifactId>sendgrid-java</artifactId>
+                <version>${sendgrid.version}</version>
+            </dependency>
+            <!-- Test Dependencies -->
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-junit-jupiter</artifactId>
+                <version>${mockito.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers</artifactId>
+                <version>${testcontainers.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${testcontainers.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${testcontainers.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>kafka</artifactId>
+                <version>${testcontainers.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.awaitility</groupId>
+                <artifactId>awaitility</artifactId>
+                <version>${awaitility.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf.version}</version>
+            </dependency>
+            <!-- Force JRE variant of guava everywhere (grpc-bom manages version, we select JRE classifier) -->
+            <!-- Multiple gRPC deps pull Android variant, but Spring Boot needs JRE -->
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
+            </dependency>
+            <!-- Resolve error_prone_annotations conflict: grpc-api wants 2.28.0, guava JRE pulls 2.26.1 -->
+            <dependency>
+                <groupId>com.google.errorprone</groupId>
+                <artifactId>error_prone_annotations</artifactId>
+                <version>${errorprone.version}</version>
+            </dependency>
+            <!-- Align checker-qual: postgresql has 3.41.0, guava JRE has 3.42.0 -->
+            <dependency>
+                <groupId>org.checkerframework</groupId>
+                <artifactId>checker-qual</artifactId>
+                <version>${checkerqual.version}</version>
+            </dependency>
+            <!-- Align j2objc-annotations: guava wants 3.0.0, protobuf-java-util pulls 2.8 -->
+            <dependency>
+                <groupId>com.google.j2objc</groupId>
+                <artifactId>j2objc-annotations</artifactId>
+                <version>${j2objc.version}</version>
+            </dependency>
+            <!-- Kafka client version managed by Spring Boot BOM -->
+            <!-- Note: Spring Boot BOM manages kafka-clients version through spring-kafka -->
+            <!-- If direct kafka-clients dependency is needed, version comes from Spring Boot BOM -->
+            <!-- Log4j2 starter for high-throughput deterministic logging (optional) -->
+            <!-- IMPORTANT: When a module adopts Log4j2, it MUST exclude spring-boot-starter-logging -->
+            <!-- Example usage in child module:
+                 <dependency>
+                     <groupId>org.springframework.boot</groupId>
+                     <artifactId>spring-boot-starter-log4j2</artifactId>
+                 </dependency>
+                 <exclusions>
+                     <exclusion>
+                         <groupId>org.springframework.boot</groupId>
+                         <artifactId>spring-boot-starter-logging</artifactId>
+                     </exclusion>
+                 </exclusions>
+            -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-log4j2</artifactId>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -75,14 +207,22 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
+                    <configuration>
+                        <excludes>
+                            <exclude>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                            </exclude>
+                        </excludes>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.11.0</version>
+                    <version>3.14.1</version>
                     <configuration>
-                        <source>${java.version}</source>
-                        <target>${java.version}</target>
+                        <release>${java.version}</release>
+                        <parameters>true</parameters>
                         <annotationProcessorPaths>
                             <path>
                                 <groupId>org.projectlombok</groupId>
@@ -97,8 +237,94 @@
                         </annotationProcessorPaths>
                     </configuration>
                 </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire.version}</version>
+                    <configuration>
+                        <includes>
+                            <include>**/*Test.java</include>
+                            <include>**/*Tests.java</include>
+                        </includes>
+                        <excludes>
+                            <exclude>**/*IT.java</exclude>
+                        </excludes>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${failsafe.version}</version>
+                    <configuration>
+                        <includes>
+                            <include>**/*IT.java</include>
+                        </includes>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>integration-test</goal>
+                                <goal>verify</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.xolstice.maven.plugins</groupId>
+                    <artifactId>protobuf-maven-plugin</artifactId>
+                    <version>${protobuf-maven-plugin.version}</version>
+                    <configuration>
+                        <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
+                        <pluginId>grpc-java</pluginId>
+                        <pluginArtifact>io.grpc:protoc-gen-grpc-java:${grpc.version}:exe:${os.detected.classifier}</pluginArtifact>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>compile</goal>
+                                <goal>compile-custom</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>${maven-enforcer.version}</version>
+                    <executions>
+                        <execution>
+                            <id>enforce</id>
+                            <goals>
+                                <goal>enforce</goal>
+                            </goals>
+                            <configuration>
+                                <rules>
+                                    <!-- Enforce dependency convergence to prevent version conflicts -->
+                                    <!-- Critical for Kafka + gRPC + Netty + WebClient -->
+                                    <dependencyConvergence/>
+                                    <!-- Require Java 17+ -->
+                                    <requireJavaVersion>
+                                        <version>[17,)</version>
+                                    </requireJavaVersion>
+                                    <!-- Require Maven 3.6+ -->
+                                    <requireMavenVersion>
+                                        <version>[3.6.0,)</version>
+                                    </requireMavenVersion>
+                                </rules>
+                                <fail>true</fail>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <!-- Enforce dependency convergence at parent level -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
 </project>
 

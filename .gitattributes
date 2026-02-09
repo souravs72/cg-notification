@@ -1,0 +1,35 @@
+# =====================================================
+# File integrity rules — DO NOT NORMALIZE ANYTHING
+# =====================================================
+
+# Disable Git text normalization globally
+* -text
+
+# Explicitly mark known text files but still disable normalization
+*.java       -text
+*.xml        -text
+*.yml        -text
+*.yaml       -text
+*.properties -text
+*.sql        -text
+*.md         -text
+*.json       -text
+*.proto      -text
+*.sh         -text
+*.py         -text
+
+# Binary files — never touched
+*.jar   binary
+*.class binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.tar   binary
+*.gz    binary
+
+# Build artifacts — never tracked as text
+target/** -text

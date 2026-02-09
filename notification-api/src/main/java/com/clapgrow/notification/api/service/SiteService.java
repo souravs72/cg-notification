@@ -11,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -71,11 +70,36 @@ public class SiteService {
     }
     
 
+    /**
+     * Validate API key and return the associated site.
+     * 
+     * ⚠️ PERFORMANCE NOTE: This method performs O(n) verification where n = number of active sites.
+     * This is necessary because BCrypt hashing (with salt) prevents direct hash lookup.
+     * Each site's hash must be verified individually.
+     * 
+     * Current mitigations:
+     * - Only queries active, non-deleted sites (database-level filter)
+     * - Index on api_key_hash improves query performance
+     * - Stops on first match (findFirst)
+     * 
+     * Future optimization options:
+     * - Add in-memory cache for frequently validated keys
+     * - Consider lookup table with deterministic hash (separate from BCrypt for lookup only)
+     * - Rate limit validation attempts per IP
+     * 
+     * @param apiKey The raw API key to validate
+     * @return The FrappeSite associated with the API key
+     * @throws SecurityException if the API key is invalid or no active site matches
+     */
     public FrappeSite validateApiKey(String apiKey) {
-        return siteRepository.findAll().stream()
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            throw new SecurityException("API key is required");
+        }
+        
+        // Query only active, non-deleted sites (database-level filter for performance)
+        // Must verify each hash because BCrypt uses salt (can't do direct hash lookup)
+        return siteRepository.findByIsActiveTrueAndIsDeletedFalse().stream()
             .filter(site -> apiKeyService.validateApiKey(apiKey, site.getApiKeyHash()))
-            .filter(FrappeSite::getIsActive)
-            .filter(site -> !Boolean.TRUE.equals(site.getIsDeleted()))
             .findFirst()
             .orElseThrow(() -> new SecurityException("Invalid or inactive API key"));
     }
@@ -86,9 +110,7 @@ public class SiteService {
     }
 
     public List<FrappeSite> getAllSites() {
-        return siteRepository.findAll().stream()
-            .filter(site -> !Boolean.TRUE.equals(site.getIsDeleted()))
-            .collect(Collectors.toList());
+        return siteRepository.findByIsActiveTrueAndIsDeletedFalse();
     }
 
     @Transactional
@@ -104,6 +126,18 @@ public class SiteService {
     @Transactional
     public FrappeSite updateSite(FrappeSite site) {
         return siteRepository.save(site);
+    }
+
+    @Transactional
+    public String regenerateApiKey(UUID siteId) {
+        FrappeSite site = getSiteById(siteId);
+        String newApiKey = apiKeyService.generateApiKey();
+        site.setApiKey(newApiKey);
+        site.setApiKeyHash(apiKeyService.hashApiKey(newApiKey));
+        site.setUpdatedBy("SYSTEM");
+        siteRepository.save(site);
+        log.info("Regenerated API key for site: {} with ID: {}", site.getSiteName(), siteId);
+        return newApiKey;
     }
 }
 

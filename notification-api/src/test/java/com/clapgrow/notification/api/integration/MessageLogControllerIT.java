@@ -45,7 +45,7 @@ class MessageLogControllerIT extends BaseIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Clean up test data
+        // Clean up any existing test data
         messageLogRepository.deleteAll();
         siteRepository.deleteAll();
 
@@ -167,4 +167,3 @@ class MessageLogControllerIT extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.totalElements").value(5));
     }
 }
-

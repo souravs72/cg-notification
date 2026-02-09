@@ -2,6 +2,7 @@ package com.clapgrow.notification.api.controller;
 
 import com.clapgrow.notification.api.entity.User;
 import com.clapgrow.notification.api.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,7 @@ public class AuthController {
     @PostMapping("/login")
     public String login(@RequestParam String email, 
                        @RequestParam String password,
+                       HttpServletRequest request,
                        HttpSession session,
                        Model model) {
         try {
@@ -52,16 +54,16 @@ public class AuthController {
                 return "auth/login";
             }
 
-            // Set user in session
+            // CRITICAL SECURITY FIX: Regenerate session ID to prevent session fixation attacks
+            // This ensures that even if an attacker knows the session ID before login,
+            // they cannot use it after the user authenticates
+            request.changeSessionId();
+            
+            // Set only userId in session - all other data fetched from DB on demand
+            // Note: changeSessionId() modifies the session in place, so we can continue using the same session object
             session.setAttribute("userId", user.getId().toString());
-            session.setAttribute("userEmail", user.getEmail());
-            session.setAttribute("wasenderApiKey", user.getWasenderApiKey());
-            session.setAttribute("subscriptionType", user.getSubscriptionType());
-            session.setAttribute("subscriptionStatus", user.getSubscriptionStatus());
-            session.setAttribute("sessionsAllowed", user.getSessionsAllowed());
-            session.setAttribute("sessionsUsed", user.getSessionsUsed());
 
-            log.info("User logged in: {}", user.getEmail());
+            log.info("User logged in: {} (session regenerated for security)", user.getEmail());
             return "redirect:/admin/dashboard";
 
         } catch (Exception e) {
@@ -75,7 +77,8 @@ public class AuthController {
     public String register(@RequestParam String email,
                           @RequestParam String password,
                           @RequestParam String confirmPassword,
-                          @RequestParam String wasenderApiKey,
+                          @RequestParam(required = false) String wasenderApiKey,
+                          HttpServletRequest request,
                           HttpSession session,
                           Model model) {
         try {
@@ -95,24 +98,19 @@ public class AuthController {
                 return "auth/register";
             }
 
-            if (wasenderApiKey == null || wasenderApiKey.trim().isEmpty()) {
-                model.addAttribute("error", "WASender API key is required");
-                return "auth/register";
-            }
-
-            // Register user (this will validate WASender API key and get subscription info)
+            // Register user (WASender API key is optional - can be added later)
             User user = userService.registerUser(email, password, wasenderApiKey);
 
-            // Set user in session
+            // CRITICAL SECURITY FIX: Regenerate session ID to prevent session fixation attacks
+            // This ensures that even if an attacker knows the session ID before registration,
+            // they cannot use it after the user authenticates
+            request.changeSessionId();
+            
+            // Set only userId in session - all other data fetched from DB on demand
+            // Note: changeSessionId() modifies the session in place, so we can continue using the same session object
             session.setAttribute("userId", user.getId().toString());
-            session.setAttribute("userEmail", user.getEmail());
-            session.setAttribute("wasenderApiKey", user.getWasenderApiKey());
-            session.setAttribute("subscriptionType", user.getSubscriptionType());
-            session.setAttribute("subscriptionStatus", user.getSubscriptionStatus());
-            session.setAttribute("sessionsAllowed", user.getSessionsAllowed());
-            session.setAttribute("sessionsUsed", user.getSessionsUsed());
 
-            log.info("User registered: {}", user.getEmail());
+            log.info("User registered: {} (session regenerated for security)", user.getEmail());
             return "redirect:/admin/dashboard";
 
         } catch (IllegalArgumentException e) {
@@ -126,32 +124,41 @@ public class AuthController {
         }
     }
 
-    @PostMapping("/logout")
+    @GetMapping("/logout")
     public String logout(HttpSession session) {
-        String email = (String) session.getAttribute("userEmail");
+        String userId = (String) session.getAttribute("userId");
         session.invalidate();
-        log.info("User logged out: {}", email);
+        log.info("User logged out: userId={}", userId);
+        return "redirect:/auth/login";
+    }
+    
+    @PostMapping("/logout")
+    public String logoutPost(HttpSession session) {
+        String userId = (String) session.getAttribute("userId");
+        session.invalidate();
+        log.info("User logged out: userId={}", userId);
         return "redirect:/auth/login";
     }
 
     @GetMapping("/api/current-user")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> getCurrentUser(HttpSession session) {
-        Map<String, Object> userInfo = new HashMap<>();
-        
-        String userId = (String) session.getAttribute("userId");
-        if (userId == null) {
+        try {
+            // Fetch fresh user data from database
+            User user = userService.getCurrentUser(session);
+            
+            Map<String, Object> userInfo = new HashMap<>();
+            userInfo.put("userId", user.getId().toString());
+            userInfo.put("email", user.getEmail());
+            userInfo.put("subscriptionType", user.getSubscriptionType());
+            userInfo.put("subscriptionStatus", user.getSubscriptionStatus());
+            userInfo.put("sessionsAllowed", user.getSessionsAllowed());
+            userInfo.put("sessionsUsed", user.getSessionsUsed());
+
+            return ResponseEntity.ok(userInfo);
+        } catch (IllegalStateException e) {
             return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         }
-
-        userInfo.put("userId", userId);
-        userInfo.put("email", session.getAttribute("userEmail"));
-        userInfo.put("subscriptionType", session.getAttribute("subscriptionType"));
-        userInfo.put("subscriptionStatus", session.getAttribute("subscriptionStatus"));
-        userInfo.put("sessionsAllowed", session.getAttribute("sessionsAllowed"));
-        userInfo.put("sessionsUsed", session.getAttribute("sessionsUsed"));
-
-        return ResponseEntity.ok(userInfo);
     }
 
     @Data

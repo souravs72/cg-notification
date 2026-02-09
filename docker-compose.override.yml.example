@@ -1,23 +1,12 @@
-# Copy this file to docker-compose.override.yml and customize as needed
-# This file allows you to override settings without modifying docker-compose.yml
-
-version: '3.8'
-
 services:
   notification-api:
     environment:
-      # Override any environment variables here
-      SPRING_PROFILES_ACTIVE: production
-      
+      SPRING_PROFILES_ACTIVE: local
+
   whatsapp-worker:
     environment:
-      WASENDER_API_KEY: ${WASENDER_API_KEY}
-      
+      SPRING_PROFILES_ACTIVE: local
+
   email-worker:
     environment:
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
-      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
-      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME}
-
-
-
+      SPRING_PROFILES_ACTIVE: local

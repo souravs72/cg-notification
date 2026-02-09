@@ -1,8 +1,10 @@
 package com.clapgrow.notification.api.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.TransactionException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -49,6 +51,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    @ExceptionHandler(AdminServiceException.class)
+    public ResponseEntity<ErrorResponse> handleAdminServiceException(AdminServiceException e) {
+        log.error("Admin service error: {}", e.getMessage(), e);
+        ErrorResponse error = new ErrorResponse(
+            "ADMIN_SERVICE_ERROR",
+            e.getMessage(),
+            LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationExceptions(
             MethodArgumentNotValidException e) {
@@ -59,13 +72,37 @@ public class GlobalExceptionHandler {
             errors.put(fieldName, errorMessage);
         });
         
+        // Standardized error response format
         Map<String, Object> response = new HashMap<>();
-        response.put("status", "VALIDATION_ERROR");
+        response.put("success", false);
+        response.put("errorCode", "VALIDATION_ERROR");
         response.put("message", "Validation failed");
         response.put("errors", errors);
         response.put("timestamp", LocalDateTime.now());
         
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ErrorResponse> handleDataAccessException(DataAccessException e) {
+        log.error("Database access error: {}", e.getMessage(), e);
+        ErrorResponse error = new ErrorResponse(
+            "DATABASE_ERROR",
+            "Database error occurred. Please try again.",
+            LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+
+    @ExceptionHandler(TransactionException.class)
+    public ResponseEntity<ErrorResponse> handleTransactionException(TransactionException e) {
+        log.error("Transaction error: {}", e.getMessage(), e);
+        ErrorResponse error = new ErrorResponse(
+            "TRANSACTION_ERROR",
+            "Transaction error occurred. Please try again.",
+            LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 
     @ExceptionHandler(Exception.class)
@@ -79,19 +116,26 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 
+    /**
+     * Standardized error response format.
+     * All endpoints should return this format for consistency.
+     */
     public static class ErrorResponse {
-        private String status;
+        private boolean success = false;
+        private String errorCode;
         private String message;
         private LocalDateTime timestamp;
 
-        public ErrorResponse(String status, String message, LocalDateTime timestamp) {
-            this.status = status;
+        public ErrorResponse(String errorCode, String message, LocalDateTime timestamp) {
+            this.errorCode = errorCode;
             this.message = message;
             this.timestamp = timestamp;
         }
 
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
+        public boolean isSuccess() { return success; }
+        public void setSuccess(boolean success) { this.success = success; }
+        public String getErrorCode() { return errorCode; }
+        public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
         public String getMessage() { return message; }
         public void setMessage(String message) { this.message = message; }
         public LocalDateTime getTimestamp() { return timestamp; }

@@ -1,3 +1,4 @@
+---
 name: CI
 
 on:
@@ -26,189 +27,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      zookeeper:
-        image: confluentinc/cp-zookeeper:7.5.0
-        env:
-          ZOOKEEPER_CLIENT_PORT: 2181
-          ZOOKEEPER_TICK_TIME: 2000
-        ports:
-          - 2181:2181
-
-      kafka:
-        image: confluentinc/cp-kafka:7.5.0
-        env:
-          KAFKA_BROKER_ID: 1
-          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-        ports:
-          - 9092:9092
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: "temurin"
-          cache: "maven"
-
-      - name: Cache Maven dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
-
-      - name: Build common-proto
-        run: |
-          cd common-proto
-          mvn clean install -DskipTests
-
-      - name: Build and test all modules
-        run: mvn clean verify
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
-          SPRING_DATASOURCE_USERNAME: notification_user
-          SPRING_DATASOURCE_PASSWORD: notification_pass
-          SPRING_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: "**/target/surefire-reports/**/*.xml"
-          retention-days: 7
-
-      - name: Upload coverage reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-reports
-          path: "**/target/site/jacoco/**"
-          retention-days: 7
-          if-no-files-found: ignore
-
-  code-quality:
-    name: Code Quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: "temurin"
-          cache: "maven"
-
-      - name: Run Maven checkstyle
-        run: mvn checkstyle:check
-        continue-on-error: true
-
-      - name: Analyze with SonarCloud
-        if: github.event_name == 'pull_request'
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        continue-on-error: true
-
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: "temurin"
-          cache: "maven"
-
-      - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: "cg-notification"
-          path: "."
-          format: "HTML"
-          args: >
-            --failOnCVSS 7
-            --enableRetired
-        continue-on-error: true
-
-      - name: Upload security report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-report
-          path: reports
-          retention-days: 30
-
-  docker-build:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [build]
-
-    strategy:
-      matrix:
-        service: [notification-api, email-worker, whatsapp-worker]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ${{ matrix.service }}/Dockerfile
-          push: false
-          tags: cg-notification-${{ matrix.service }}:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Test Docker image
-        run: |
-          docker run --rm cg-notification-${{ matrix.service }}:test --version || true
-
-  integration-test:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [build, docker-build]
-
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: notification_db
-          POSTGRES_USER: notification_user
-          POSTGRES_PASSWORD: notification_pass
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U notification_user -d notification_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -239,17 +58,277 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: "temurin"
           cache: "maven"
 
+      - name: Cache Maven dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Build common-proto
+        run: |
+          cd common-proto
+          mvn clean install -DskipTests
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client || true
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U notification_user -d notification_db; then
+              echo "PostgreSQL is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: PostgreSQL not ready yet, waiting..."
+            sleep 2
+          done
+          echo "PostgreSQL failed to become ready"
+          exit 1
+
+      - name: Wait for Kafka to be ready
+        run: |
+          echo "Waiting for Kafka to be ready..."
+          sudo apt-get update && sudo apt-get install -y netcat-openbsd || true
+          for i in {1..30}; do
+            if nc -z localhost 9092 2>/dev/null; then
+              echo "Kafka is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: Kafka not ready yet, waiting..."
+            sleep 2
+          done
+          echo "Kafka failed to become ready"
+          exit 1
+
+      - name: Build and test all modules
+        run: mvn clean verify
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
+          SPRING_DATASOURCE_USERNAME: notification_user
+          SPRING_DATASOURCE_PASSWORD: notification_pass
+          SPRING_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results
+          path: "**/target/surefire-reports/**/*.xml"
+          retention-days: 7
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-reports
+          path: "**/target/site/jacoco/**"
+          retention-days: 7
+          if-no-files-found: ignore
+
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Run Maven checkstyle
+        run: mvn checkstyle:check
+        continue-on-error: true
+
+      - name: Analyze with SonarCloud
+        if: github.event_name == 'pull_request'
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        continue-on-error: true
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "cg-notification"
+          path: "."
+          format: "HTML"
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+        continue-on-error: true
+
+      - name: Upload security report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: security-report
+          path: reports
+          retention-days: 30
+          if-no-files-found: ignore
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build]
+
+    strategy:
+      matrix:
+        service: [notification-api, email-worker, whatsapp-worker]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.service }}/Dockerfile
+          push: false
+          tags: cg-notification-${{ matrix.service }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        run: |
+          docker run --rm cg-notification-${{ matrix.service }}:test --version || true
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [build, docker-build]
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: notification_db
+          POSTGRES_USER: notification_user
+          POSTGRES_PASSWORD: notification_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U notification_user -d notification_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      zookeeper:
+        image: confluentinc/cp-zookeeper:7.5.0
+        env:
+          ZOOKEEPER_CLIENT_PORT: 2181
+          ZOOKEEPER_TICK_TIME: 2000
+        ports:
+          - 2181:2181
+
+      kafka:
+        image: confluentinc/cp-kafka:7.5.0
+        env:
+          KAFKA_BROKER_ID: 1
+          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "kafka-broker-api-versions --bootstrap-server localhost:9092"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+          cache: "maven"
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client || true
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U notification_user -d notification_db; then
+              echo "PostgreSQL is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: PostgreSQL not ready yet, waiting..."
+            sleep 2
+          done
+          echo "PostgreSQL failed to become ready"
+          exit 1
+
+      - name: Wait for Kafka to be ready
+        run: |
+          echo "Waiting for Kafka to be ready..."
+          sudo apt-get update && sudo apt-get install -y netcat-openbsd || true
+          for i in {1..30}; do
+            if nc -z localhost 9092 2>/dev/null; then
+              echo "Kafka is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: Kafka not ready yet, waiting..."
+            sleep 2
+          done
+          echo "Kafka failed to become ready"
+          exit 1
+
       - name: Run integration tests
-        run: mvn verify -DskipTests=false
+        run: mvn verify -DskipITs=false
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
           SPRING_DATASOURCE_USERNAME: notification_user
@@ -263,7 +342,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check YAML syntax
         uses: ibiqlik/action-yamllint@v3

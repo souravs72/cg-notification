@@ -1,39 +1,22 @@
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 
-# Copy parent pom first and install it to local Maven repository
+# Copy parent POM and all modules (Maven validates all modules in parent POM)
 COPY pom.xml .
-RUN mvn install -N -DskipTests
+COPY common-proto ./common-proto
+COPY notification-api ./notification-api
+COPY email-worker ./email-worker
+COPY whatsapp-worker ./whatsapp-worker
 
-# Copy common-proto and build it
-COPY common-proto/pom.xml ./common-proto/
-COPY common-proto/src ./common-proto/src
-WORKDIR /app/common-proto
-RUN mvn clean install -DskipTests
+# Build only email-worker and its dependencies (common-proto)
+# Cache Maven dependencies for faster subsequent builds
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -q -pl email-worker -am clean package -DskipTests
 
-# Build email-worker
-WORKDIR /app
-COPY email-worker/pom.xml ./email-worker/
-COPY email-worker/src ./email-worker/src
-WORKDIR /app/email-worker
-RUN mvn clean package spring-boot:repackage -DskipTests
-
-# Runtime stage
-FROM eclipse-temurin:17-jre-alpine
+FROM gcr.io/distroless/java17-debian12:nonroot
 WORKDIR /app
 
-# Install curl for healthchecks
-RUN apk add --no-cache curl
-
-RUN addgroup -S spring && adduser -S spring -G spring
-USER spring:spring
-
-COPY --from=build /app/email-worker/target/email-worker-*.jar app.jar
+COPY --from=build /app/email-worker/target/email-worker.jar app.jar
 
 EXPOSE 8081
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:8081/actuator/health || exit 1
-
-ENTRYPOINT ["java", "-jar", "app.jar"]
-
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]
