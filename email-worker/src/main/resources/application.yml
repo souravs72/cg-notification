@@ -2,7 +2,7 @@ spring:
   application:
     name: email-worker
   main:
-    web-application-type: none
+    web-application-type: servlet  # Use servlet for management server (needed for actuator endpoints)
 
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/notification_db}
@@ -28,23 +28,27 @@ spring:
         connection:
           provider_disables_autocommit: true
 
-  kafka:
-    # IMPORTANT:
-    # Default matches Docker internal Kafka listener (kafka:29092).
-    # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
-    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
-    listener:
-      shutdown-timeout: ${KAFKA_LISTENER_SHUTDOWN_TIMEOUT:30s}
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
+      credentials:
+        use-default-aws-credentials-chain: true
+      sqs:
+        endpoint: ${AWS_SQS_ENDPOINT:}
+      sqs.listener:
+        max-concurrent-messages: ${SQS_MAX_CONCURRENT_MESSAGES:10}
+        max-messages-per-poll: ${SQS_MAX_MESSAGES_PER_POLL:10}
 
-kafka:
-  consumer:
-    group-id: ${KAFKA_CONSUMER_GROUP_ID:email-worker-group}
-    environment-prefix: ${KAFKA_CONSUMER_ENV_PREFIX:}
-    concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
+messaging:
+  sqs:
+    queues:
+      email: ${MESSAGING_SQS_QUEUE_EMAIL:notifications-email-queue}
 
-# Server port not needed (web-application-type: none)
-# server:
-#   port: 8081
+# Use management server port instead of main server port
+# This allows actuator endpoints without full servlet stack overhead
+server:
+  port: -1  # Disable main server port (we only need management server)
 
 sendgrid:
   api:
@@ -54,6 +58,8 @@ sendgrid:
     name: ${SENDGRID_FROM_NAME}
 
 management:
+  server:
+    port: ${SERVER_PORT:8081}  # Management server port for health checks
   endpoints:
     web:
       exposure:
@@ -71,8 +77,5 @@ logging:
   level:
     root: ${LOG_LEVEL_ROOT:INFO}
     com.clapgrow.notification: ${LOG_LEVEL_APP:INFO}
-    org.springframework.kafka: INFO
-
-springdoc:
-  swagger-ui:
-    enabled: false
+    io.awspring.cloud: WARN
+    software.amazon.awssdk: WARN

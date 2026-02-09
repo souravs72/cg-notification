@@ -9,10 +9,8 @@ import reactor.netty.http.client.HttpClient;
 import java.time.Duration;
 
 /**
- * WebClient configuration for MVC application.
- * Uses Reactor Netty HTTP client (not server) for WebClient.
- * WebFlux auto-configuration is explicitly excluded in NotificationApiApplication
- * to prevent reactive stack activation while allowing WebClient usage.
+ * WebClient configuration for outbound HTTP calls.
+ * Uses Reactor Netty as the HTTP client only (no reactive server).
  */
 @Configuration
 public class WebClientConfig {

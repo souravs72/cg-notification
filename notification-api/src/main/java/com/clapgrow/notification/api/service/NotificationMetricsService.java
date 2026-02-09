@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * - Messages sent / failed / retried
  * - Retry count histogram
  * - DLQ count per channel
- * - Kafka publish latency
+ * - Messaging (SNS) publish latency
  * 
  * Metrics are exposed at /actuator/prometheus
  * 
@@ -43,7 +43,7 @@ public class NotificationMetricsService {
     private final Map<NotificationChannel, Counter> messageDeliveredCounters = new EnumMap<>(NotificationChannel.class);
     private final Map<NotificationChannel, Counter> dlqCounters = new EnumMap<>(NotificationChannel.class);
     private final Map<NotificationChannel, DistributionSummary> retryCountHistograms = new EnumMap<>(NotificationChannel.class);
-    private final Map<NotificationChannel, Timer> kafkaPublishTimers = new EnumMap<>(NotificationChannel.class);
+    private final Map<NotificationChannel, Timer> messagingPublishTimers = new EnumMap<>(NotificationChannel.class);
     
     /**
      * Initialize all metric objects once at startup.
@@ -53,10 +53,9 @@ public class NotificationMetricsService {
     void init() {
         for (NotificationChannel channel : NotificationChannel.values()) {
             // ⚠️ METRIC SEMANTICS: "sent" actually means "accepted by API"
-            // Message is accepted and persisted, but Kafka publish happens asynchronously
-            // Consider renaming to "notification.messages.accepted" in future
+            // Message is accepted and persisted; SNS publish happens asynchronously after commit
             messageSentCounters.put(channel, Counter.builder("notification.messages.sent")
-                .description("Total number of messages accepted by API (persisted to DB, Kafka publish is async)")
+                .description("Total number of messages accepted by API (persisted to DB, SNS publish is async)")
                 .tag("channel", channel.name())
                 .register(meterRegistry));
             
@@ -86,8 +85,8 @@ public class NotificationMetricsService {
                 .publishPercentiles(0.5, 0.75, 0.95, 0.99)
                 .register(meterRegistry));
             
-            kafkaPublishTimers.put(channel, Timer.builder("notification.kafka.publish.latency")
-                .description("Time taken to publish message to Kafka")
+            messagingPublishTimers.put(channel, Timer.builder("notification.messaging.publish.latency")
+                .description("Time taken to publish message to SNS")
                 .tag("channel", channel.name())
                 .publishPercentiles(0.5, 0.75, 0.95, 0.99)
                 .register(meterRegistry));
@@ -120,8 +119,8 @@ public class NotificationMetricsService {
         return retryCountHistograms.get(channel);
     }
     
-    private Timer getKafkaPublishTimer(NotificationChannel channel) {
-        return kafkaPublishTimers.get(channel);
+    private Timer getMessagingPublishTimer(NotificationChannel channel) {
+        return messagingPublishTimers.get(channel);
     }
     
     /**
@@ -161,21 +160,17 @@ public class NotificationMetricsService {
     }
     
     /**
-     * Record Kafka publish latency.
+     * Record messaging (SNS) publish latency.
      */
-    public void recordKafkaPublishLatency(NotificationChannel channel, long durationMillis) {
-        getKafkaPublishTimer(channel).record(durationMillis, TimeUnit.MILLISECONDS);
+    public void recordMessagingPublishLatency(NotificationChannel channel, long durationMillis) {
+        getMessagingPublishTimer(channel).record(durationMillis, TimeUnit.MILLISECONDS);
     }
     
     /**
-     * Record Kafka publish latency using a Timer.Sample.
-     * Usage:
-     *   Timer.Sample sample = Timer.start(meterRegistry);
-     *   // ... do work ...
-     *   recordKafkaPublishLatency(channel, sample);
+     * Record messaging (SNS) publish latency using a Timer.Sample.
      */
-    public void recordKafkaPublishLatency(NotificationChannel channel, Timer.Sample sample) {
-        sample.stop(getKafkaPublishTimer(channel));
+    public void recordMessagingPublishLatency(NotificationChannel channel, Timer.Sample sample) {
+        sample.stop(getMessagingPublishTimer(channel));
     }
     
     /**

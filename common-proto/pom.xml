@@ -18,12 +18,6 @@
     <description>Shared gRPC protocol buffer definitions and common utilities</description>
 
     <dependencies>
-        <!-- Kafka (for shared Kafka consumer configuration utilities) -->
-        <!-- Version managed by parent POM's Spring Boot BOM -->
-        <dependency>
-            <groupId>org.apache.kafka</groupId>
-            <artifactId>kafka-clients</artifactId>
-        </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-stub</artifactId>

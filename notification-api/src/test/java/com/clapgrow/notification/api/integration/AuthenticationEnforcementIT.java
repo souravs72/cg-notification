@@ -51,8 +51,8 @@ class AuthenticationEnforcementIT extends BaseIntegrationTest {
     @Test
     @DisplayName("/admin/api/** should fail with 401 without X-Admin-Key")
     void testAdminApiFailsWithoutAdminKey() throws Exception {
-        // Test admin API endpoints without X-Admin-Key header
-        mockMvc.perform(get("/admin/api/dashboard"))
+        // Test admin API endpoints without X-Admin-Key header (use real endpoints: /admin/api/metrics, /admin/api/messages/recent)
+        mockMvc.perform(get("/admin/api/metrics"))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.success").value(false))
             .andExpect(jsonPath("$.error").value("Authentication required"));
@@ -66,7 +66,7 @@ class AuthenticationEnforcementIT extends BaseIntegrationTest {
     @Test
     @DisplayName("/admin/api/** should fail with 401 with invalid X-Admin-Key")
     void testAdminApiFailsWithInvalidAdminKey() throws Exception {
-        mockMvc.perform(get("/admin/api/dashboard")
+        mockMvc.perform(get("/admin/api/metrics")
                 .header("X-Admin-Key", "invalid-key"))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.success").value(false));
@@ -75,24 +75,20 @@ class AuthenticationEnforcementIT extends BaseIntegrationTest {
     @Test
     @DisplayName("/admin/api/** should succeed with valid X-Admin-Key")
     void testAdminApiSucceedsWithValidAdminKey() throws Exception {
-        // Note: This test may need adjustment based on actual endpoint implementation
-        // and whether they require additional setup (e.g., database records)
-        // The key point is that X-Admin-Key authentication works
-        mockMvc.perform(get("/admin/api/dashboard")
+        // Use real admin API endpoint that requires X-Admin-Key
+        mockMvc.perform(get("/admin/api/metrics")
                 .header("X-Admin-Key", adminApiKey))
             .andExpect(status().isOk());
     }
 
     @Test
-    @DisplayName("/admin/api/** should NOT accept session authentication")
-    void testAdminApiDoesNotAcceptSessionAuth() throws Exception {
-        // Even with a valid session, admin APIs should require X-Admin-Key
-        // This test verifies that session auth is explicitly blocked for /admin/api/**
-        mockMvc.perform(get("/admin/api/dashboard")
+    @DisplayName("/admin/api/** accepts session auth for dashboard JS (session OR X-Admin-Key)")
+    void testAdminApiAcceptsSessionAuth() throws Exception {
+        // Admin API allows session so dashboard pages can fetch /admin/api/metrics with credentials: same-origin
+        mockMvc.perform(get("/admin/api/metrics")
                 .sessionAttr("userId", "test-user-id"))
-            .andExpect(status().isUnauthorized())
-            .andExpect(jsonPath("$.success").value(false))
-            .andExpect(jsonPath("$.error").value("Authentication required"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalSites").exists());
     }
 
     @Test

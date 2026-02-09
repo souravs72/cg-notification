@@ -7,8 +7,8 @@ name: Infrastructure Services Template
 #
 # Copy-paste the services block into jobs that need it.
 #
-# Since services cannot be shared, merge jobs that need the same
-# infrastructure to avoid duplicate service spin-up and improve CI speed.
+# Messaging: SNS/SQS via LocalStack (replaces Kafka). Run scripts/init-localstack-sns-sqs.sh
+# with AWS_ENDPOINT_URL=http://localhost:4566 after LocalStack is ready.
 
 on:
   workflow_call:
@@ -34,36 +34,28 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      zookeeper:
-        image: confluentinc/cp-zookeeper:7.5.0
+      localstack:
+        image: localstack/localstack:latest
         env:
-          ZOOKEEPER_CLIENT_PORT: 2181
-          ZOOKEEPER_TICK_TIME: 2000
+          SERVICES: sns,sqs
+          DEBUG: "0"
         ports:
-          - 2181:2181
-
-      kafka:
-        image: confluentinc/cp-kafka:7.5.0
-        env:
-          KAFKA_BROKER_ID: 1
-          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-        ports:
-          - 9092:9092
+          - 4566:4566
         options: >-
-          --health-cmd "sh -c 'nc -z localhost 9092 || exit 1'"
+          --health-cmd "curl -sf http://localhost:4566/_localstack/health || exit 1"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 10
+          --health-retries 15
 
 # Standard environment variables for services:
 # SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
 # SPRING_DATASOURCE_USERNAME: notification_user
 # SPRING_DATASOURCE_PASSWORD: notification_pass
-# SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+# AWS_REGION: us-east-1
+# AWS_ACCESS_KEY_ID: test
+# AWS_SECRET_ACCESS_KEY: test
+# AWS_SNS_ENDPOINT: http://localhost:4566
+# AWS_SQS_ENDPOINT: http://localhost:4566
 
 # Standard wait steps (add to your job steps):
 #   - name: Wait for PostgreSQL to be ready
@@ -81,18 +73,14 @@ jobs:
 #       echo "PostgreSQL failed to become ready"
 #       exit 1
 #
-#   - name: Wait for Kafka to be ready
+#   - name: Wait for LocalStack and init SNS/SQS
 #     run: |
-#       echo "Waiting for Kafka to be ready..."
-#       sudo apt-get update && sudo apt-get install -y netcat-openbsd || true
 #       for i in {1..30}; do
-#         if nc -z kafka 9092 2>/dev/null; then
-#           echo "Kafka is ready!"
-#           exit 0
-#         fi
-#         echo "Attempt $i/30: Kafka not ready yet, waiting..."
+#         if curl -sf http://localhost:4566/_localstack/health > /dev/null 2>&1; then break; fi
 #         sleep 2
 #       done
-#       echo "Kafka failed to become ready"
-#       exit 1
+#       curl -sf http://localhost:4566/_localstack/health || exit 1
+#       export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
+#       export AWS_ENDPOINT_URL=http://localhost:4566
+#       bash scripts/init-localstack-sns-sqs.sh
 

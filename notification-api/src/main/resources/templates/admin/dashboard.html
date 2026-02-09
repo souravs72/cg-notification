@@ -394,7 +394,7 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="text-muted mb-2">Total Sites</h6>
-                                <div class="metric-value" th:text="${metrics.totalSites}">0</div>
+                                <div class="metric-value" id="metricTotalSites" th:text="${metrics.totalSites}">0</div>
                             </div>
                             <i class="bi bi-building fs-1 text-muted"></i>
                         </div>
@@ -407,7 +407,7 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="text-muted mb-2">Total Messages Sent</h6>
-                                <div class="metric-value" th:text="${metrics.totalMessagesSent}">0</div>
+                                <div class="metric-value" id="metricTotalSent" th:text="${metrics.totalMessagesSent}">0</div>
                             </div>
                             <i class="bi bi-send fs-1 text-primary"></i>
                         </div>
@@ -420,7 +420,7 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="text-muted mb-2">Successful</h6>
-                                <div class="metric-value text-success" th:text="${metrics.totalMessagesSuccess}">0</div>
+                                <div class="metric-value text-success" id="metricTotalSuccess" th:text="${metrics.totalMessagesSuccess}">0</div>
                             </div>
                             <i class="bi bi-check-circle fs-1 text-success"></i>
                         </div>
@@ -433,7 +433,7 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="text-muted mb-2">Failed</h6>
-                                <div class="metric-value text-danger" th:text="${metrics.totalMessagesFailed}">0</div>
+                                <div class="metric-value text-danger" id="metricTotalFailed" th:text="${metrics.totalMessagesFailed}">0</div>
                             </div>
                             <i class="bi bi-x-circle fs-1 text-danger"></i>
                         </div>
@@ -448,12 +448,12 @@
                 <div class="card">
                     <div class="card-body text-center">
                         <h5 class="card-title">Overall Success Rate</h5>
-                        <div class="display-4 fw-bold" 
+                        <div class="display-4 fw-bold" id="metricOverallSuccessRate"
                              th:classappend="${metrics.overallSuccessRate >= 95} ? 'text-success' : (${metrics.overallSuccessRate >= 80} ? 'text-warning' : 'text-danger')"
                              th:text="${metrics.overallSuccessRate} + '%'">0%</div>
                         <p class="text-muted mt-2">
-                            <span th:text="${metrics.totalMessagesSuccess}">0</span> successful out of 
-                            <span th:text="${metrics.totalMessagesSent}">0</span> total messages
+                            <span id="metricSuccessCount" th:text="${metrics.totalMessagesSuccess}">0</span> successful out of
+                            <span id="metricSentCount" th:text="${metrics.totalMessagesSent}">0</span> total messages
                         </p>
                     </div>
                 </div>
@@ -558,6 +558,7 @@
                                         <th>Channel</th>
                                         <th>Recipient</th>
                                         <th>Status</th>
+                                        <th>Created At</th>
                                         <th>Scheduled At</th>
                                         <th>Sent At</th>
                                         <th>Delivered At</th>
@@ -566,7 +567,7 @@
                                 </thead>
                                 <tbody id="messagesTableBody">
                                     <tr>
-                                        <td colspan="9" class="text-center text-muted">Loading messages...</td>
+                                        <td colspan="10" class="text-center text-muted">Loading messages...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -795,6 +796,7 @@
                             <th>Channel</th>
                             <th>Recipient</th>
                             <th>Status</th>
+                            <th>Created At</th>
                             <th>Scheduled At</th>
                             <th>Sent At</th>
                             <th>Delivered At</th>
@@ -803,7 +805,7 @@
                     </thead>
                     <tbody id="maximizedMessagesTableBody">
                         <tr>
-                            <td colspan="9" class="text-center text-muted">Loading messages...</td>
+                            <td colspan="10" class="text-center text-muted">Loading messages...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -1027,14 +1029,111 @@
             channelChart.update();
         }
 
+        /** Partial refresh: updates only the data sections, no full page reload */
         function refreshDashboard() {
-            location.reload();
+            refreshDashboardData();
+        }
+
+        /** Refresh all dashboard data sections (charts, tables, activity) without reloading the page */
+        function refreshDashboardData() {
+            loadDashboardMetrics();
+            loadRecentActivity();
+            loadSessionStats();
+            loadRecentMessages().then(() => updateActivityChart());
+        }
+
+        /** Fetch /admin/api/metrics and update summary cards, status chart, channel chart, sites table */
+        function loadDashboardMetrics() {
+            fetch('/admin/api/metrics', { credentials: 'same-origin' })
+                .then(response => parseJsonResponse(response))
+                .then(data => {
+                    if (!data) return;
+                    // Summary cards
+                    const el = id => document.getElementById(id);
+                    if (el('metricTotalSites')) el('metricTotalSites').textContent = data.totalSites ?? 0;
+                    if (el('metricTotalSent')) el('metricTotalSent').textContent = data.totalMessagesSent ?? 0;
+                    if (el('metricTotalSuccess')) el('metricTotalSuccess').textContent = data.totalMessagesSuccess ?? 0;
+                    if (el('metricTotalFailed')) el('metricTotalFailed').textContent = data.totalMessagesFailed ?? 0;
+                    const rate = data.overallSuccessRate ?? 0;
+                    const rateEl = el('metricOverallSuccessRate');
+                    if (rateEl) {
+                        rateEl.textContent = rate + '%';
+                        rateEl.className = 'display-4 fw-bold ' + (rate >= 95 ? 'text-success' : rate >= 80 ? 'text-warning' : 'text-danger');
+                    }
+                    if (el('metricSuccessCount')) el('metricSuccessCount').textContent = data.totalMessagesSuccess ?? 0;
+                    if (el('metricSentCount')) el('metricSentCount').textContent = data.totalMessagesSent ?? 0;
+                    // Status chart
+                    const success = data.totalMessagesSuccess ?? 0;
+                    const failed = data.totalMessagesFailed ?? 0;
+                    if (statusChart) {
+                        if (success === 0 && failed === 0) {
+                            statusChart.data.labels = ['No messages'];
+                            statusChart.data.datasets[0].data = [1];
+                            statusChart.data.datasets[0].backgroundColor = ['#e9ecef'];
+                        } else {
+                            statusChart.data.labels = ['Successful', 'Failed'];
+                            statusChart.data.datasets[0].data = [success, failed];
+                            statusChart.data.datasets[0].backgroundColor = ['#198754', '#dc3545'];
+                        }
+                        statusChart.update();
+                    }
+                    // Channel chart
+                    let emailTotal = 0, whatsappTotal = 0;
+                    (data.siteMetrics || []).forEach(site => {
+                        const cm = site.channelMetrics || {};
+                        if (cm.EMAIL && cm.EMAIL.totalSent) emailTotal += cm.EMAIL.totalSent;
+                        if (cm.WHATSAPP && cm.WHATSAPP.totalSent) whatsappTotal += cm.WHATSAPP.totalSent;
+                    });
+                    if (channelChart) {
+                        if (emailTotal === 0 && whatsappTotal === 0) {
+                            channelChart.data.labels = ['No messages'];
+                            channelChart.data.datasets[0].data = [0];
+                        } else {
+                            channelChart.data.labels = ['Email', 'WhatsApp'];
+                            channelChart.data.datasets[0].data = [emailTotal, whatsappTotal];
+                            channelChart.data.datasets[0].backgroundColor = ['#0d6efd', '#198754'];
+                        }
+                        channelChart.update();
+                    }
+                    // Sites table
+                    const metrics = data.siteMetrics || [];
+                    sitesData = metrics.map(site => {
+                        const cm = site.channelMetrics || {};
+                        const emailSent = (cm.EMAIL && cm.EMAIL.totalSent) ? cm.EMAIL.totalSent : 0;
+                        const waSent = (cm.WHATSAPP && cm.WHATSAPP.totalSent) ? cm.WHATSAPP.totalSent : 0;
+                        const sr = site.successRate ?? 0;
+                        const srClass = sr >= 95 ? 'bg-success' : sr >= 80 ? 'bg-warning' : 'bg-danger';
+                        const siteNameHtml = '<strong>' + escapeHtml(site.siteName || 'Unknown') + '</strong>' +
+                            (site.siteId == null ? ' <span class="badge bg-secondary ms-2">No Site</span>' : '');
+                        const actionsHtml = site.siteId != null
+                            ? '<button class="btn btn-sm btn-danger delete-site-btn" data-site-id="' + site.siteId + '" data-site-name="' + escapeHtml(site.siteName || '') + '" title="Delete Site"><i class="bi bi-trash"></i></button>'
+                            : '<span class="text-muted">-</span>';
+                        const row = '<tr><td>' + siteNameHtml + '</td><td>' + (site.totalSent ?? 0) + '</td>' +
+                            '<td class="text-success">' + (site.totalSuccess ?? 0) + '</td><td class="text-danger">' + (site.totalFailed ?? 0) + '</td>' +
+                            '<td><span class="badge success-rate-badge ' + srClass + '">' + sr + '%</span></td>' +
+                            '<td>' + (emailSent > 0 ? '<span class="badge bg-info">' + emailSent + '</span>' : '-') + '</td>' +
+                            '<td>' + (waSent > 0 ? '<span class="badge bg-success">' + waSent + '</span>' : '-') + '</td>' +
+                            '<td>' + actionsHtml + '</td></tr>';
+                        return { html: row, siteId: site.siteId };
+                    });
+                    sitesCurrentPage = 1;
+                    renderSitesTable();
+                    const maxBody = document.getElementById('maximizedSitesTableBody');
+                    if (maxBody && maxBody.closest('.modal')?.classList.contains('show')) {
+                        renderMaximizedSitesTable();
+                    }
+                })
+                .catch(err => console.error('Error loading dashboard metrics:', err));
         }
 
         function loadRecentMessages() {
-            return fetch('/admin/api/messages/recent?limit=2500')
-                .then(response => response.json())
-                .then(data => {
+            return fetch('/admin/api/messages/recent?limit=500', { credentials: 'same-origin' })
+                .then(response => parseJsonResponse(response).then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    if (!ok || !Array.isArray(data)) {
+                        const errMsg = (data && data.error) ? data.error : 'Error loading messages';
+                        throw new Error(errMsg);
+                    }
                     messagesData = data;
                     messagesCurrentPage = 1;
                     messagesCurrentFilter = 'recent';
@@ -1043,15 +1142,19 @@
                 .catch(error => {
                     console.error('Error loading messages:', error);
                     messagesData = [];
-                    document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="9" class="text-center text-danger">Error loading messages</td></tr>';
+                    const tbody = document.getElementById('messagesTableBody');
+                    if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">' + escapeHtml(error.message) + '</td></tr>';
                 });
         }
 
         function loadScheduledMessages() {
-            return fetch('/admin/api/messages/scheduled?limit=2500')
-                .then(response => response.json())
-                .then(data => {
+            return fetch('/admin/api/messages/scheduled?limit=500', { credentials: 'same-origin' })
+                .then(response => parseJsonResponse(response).then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    if (!ok || !Array.isArray(data)) {
+                        const errMsg = (data && data.error) ? data.error : 'Error loading scheduled messages';
+                        throw new Error(errMsg);
+                    }
                     messagesData = data;
                     messagesCurrentPage = 1;
                     messagesCurrentFilter = 'scheduled';
@@ -1060,15 +1163,19 @@
                 .catch(error => {
                     console.error('Error loading scheduled messages:', error);
                     messagesData = [];
-                    document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="9" class="text-center text-danger">Error loading scheduled messages</td></tr>';
+                    const tbody = document.getElementById('messagesTableBody');
+                    if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">' + escapeHtml(error.message) + '</td></tr>';
                 });
         }
 
         function loadFailedMessages() {
-            return fetch('/admin/api/messages/failed?limit=2500')
-                .then(response => response.json())
-                .then(data => {
+            return fetch('/admin/api/messages/failed?limit=500', { credentials: 'same-origin' })
+                .then(response => parseJsonResponse(response).then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    if (!ok || !Array.isArray(data)) {
+                        const errMsg = (data && data.error) ? data.error : 'Error loading failed messages';
+                        throw new Error(errMsg);
+                    }
                     messagesData = data;
                     messagesCurrentPage = 1;
                     messagesCurrentFilter = 'failed';
@@ -1077,8 +1184,8 @@
                 .catch(error => {
                     console.error('Error loading failed messages:', error);
                     messagesData = [];
-                    document.getElementById('messagesTableBody').innerHTML = 
-                        '<tr><td colspan="9" class="text-center text-danger">Error loading failed messages</td></tr>';
+                    const tbody = document.getElementById('messagesTableBody');
+                    if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">' + escapeHtml(error.message) + '</td></tr>';
                 });
         }
 
@@ -1255,15 +1362,14 @@
             });
         }
 
-        // Load messages on page load
+        // Eager load: fetch metrics and all dashboard data immediately on page load (no 0% delay)
+        loadDashboardMetrics();
         loadRecentMessages();
         loadSessionStats();
         loadRecentActivity();
 
-        // Auto-refresh every 30 seconds
-        setInterval(refreshDashboard, 30000);
-        setInterval(loadSessionStats, 30000);
-        setInterval(loadRecentActivity, 30000);
+        // Auto-refresh data sections every 30 seconds (no full page reload)
+        setInterval(refreshDashboardData, 30000);
 
         // Load session stats
         function loadSessionStats() {
@@ -1318,18 +1424,20 @@
 
         // Load recent activity
         function loadRecentActivity() {
-            fetch('/admin/api/messages/recent?limit=5')
-                .then(response => response.json())
+            fetch('/admin/api/messages/recent?limit=5', { credentials: 'same-origin' })
+                .then(response => parseJsonResponse(response))
                 .then(data => {
+                    if (!data) return;
                     const container = document.getElementById('recentActivity');
-                    if (!data || data.length === 0) {
+                    if (!container) return;
+                    if (!Array.isArray(data) || data.length === 0) {
                         container.innerHTML = '<p class="text-center text-muted py-3">No recent activity</p>';
                         return;
                     }
                     
                     container.innerHTML = data.map(msg => {
-                        const time = msg.sentAt ? formatDateTimeLocal(msg.sentAt) : 
-                                    (msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : 'N/A');
+                        const timeValue = msg.sentAt || msg.deliveredAt || msg.scheduledAt || msg.createdAt;
+                        const time = timeValue ? formatDateTimeLocal(timeValue) : 'N/A';
                         const statusClass = msg.status === 'DELIVERED' ? 'success' : 
                                           msg.status === 'FAILED' ? 'danger' : 
                                           msg.status === 'PENDING' ? 'warning' : 'info';
@@ -1615,10 +1723,11 @@
             if (!messageActivityChart) return;
             
             const filter = document.getElementById('activityChartFilter')?.value || 'today';
-            const limit = filter === 'overall' ? 5000 : (filter === 'today' ? 1000 : 100);
+            // Fetch enough messages to cover the date range: today=1000, lastWeek=3000, overall=5000
+            const limit = filter === 'overall' ? 5000 : (filter === 'today' ? 1000 : 3000);
             
-            fetch(`/admin/api/messages/recent?limit=${limit}`)
-                .then(response => response.json())
+            fetch(`/admin/api/messages/recent?limit=${limit}`, { credentials: 'same-origin' })
+                .then(response => parseJsonResponse(response))
                 .then(data => {
                     if (!data || data.length === 0) {
                         messageActivityChart.data.labels = [];
@@ -1726,13 +1835,15 @@
                     });
                     
                     // Process messages and categorize by status
-                    const successStatuses = ['DELIVERED'];
+                    // Include SENT as success - many messages stay in SENT until delivery confirmation
+                    const successStatuses = ['DELIVERED', 'SENT'];
                     const failedStatuses = ['FAILED', 'BOUNCED', 'REJECTED'];
                     
                     data.forEach(msg => {
-                        if (!msg.sentAt) return;
+                        const dateValue = msg.sentAt || msg.deliveredAt || msg.createdAt;
+                        if (!dateValue) return;
                         
-                        const msgDate = new Date(msg.sentAt);
+                        const msgDate = new Date(dateValue);
                         let key;
                         
                         if (filter === 'today') {
@@ -1830,6 +1941,24 @@
             return div.innerHTML;
         }
 
+        /** Safely parse JSON from fetch response. Handles HTML (redirect/login/error) without throwing. */
+        function parseJsonResponse(response) {
+            if (response.status === 401 || response.redirected) {
+                window.location.href = '/auth/login';
+                return Promise.reject(new Error('Unauthorized'));
+            }
+            return response.text().then(text => {
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    if (text.trim().startsWith('<')) {
+                        window.location.href = '/auth/login';
+                    }
+                    return Promise.reject(new Error('Invalid response from server'));
+                }
+            });
+        }
+
         // Pagination state for messages
         let messagesData = [];
         let messagesCurrentPage = 1;
@@ -1870,10 +1999,10 @@
             const tbody = document.getElementById('messagesTableBody');
             if (tbody) {
                 if (pageData.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No messages found</td></tr>';
                     // Fill remaining rows to maintain fixed height
                     for (let i = 1; i < messagesPageSize; i++) {
-                        tbody.innerHTML += '<tr><td colspan="9" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
+                        tbody.innerHTML += '<tr><td colspan="10" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
                     }
                 } else {
                     let html = pageData.map((msg, index) => {
@@ -1910,7 +2039,7 @@
                     // Fill remaining rows to maintain fixed height
                     const remainingRows = messagesPageSize - pageData.length;
                     for (let i = 0; i < remainingRows; i++) {
-                        html += '<tr><td colspan="9" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
+                        html += '<tr><td colspan="10" class="text-center text-muted" style="height: 50px;">&nbsp;</td></tr>';
                     }
                     
                     tbody.innerHTML = html;
@@ -2029,15 +2158,19 @@
                     </div>
                     ` : ''}
                     <div class="row mb-3">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
+                            <strong>Created At:</strong><br>
+                            ${msg.createdAt ? formatDateTimeLocal(msg.createdAt) : '-'}
+                        </div>
+                        <div class="col-md-3">
                             <strong>Scheduled At:</strong><br>
                             ${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <strong>Sent At:</strong><br>
                             ${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <strong>Delivered At:</strong><br>
                             ${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}
                         </div>
@@ -2162,7 +2295,7 @@
             const tbody = document.getElementById('maximizedMessagesTableBody');
             if (tbody) {
                 if (pageData.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No messages found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No messages found</td></tr>';
                 } else {
                     tbody.innerHTML = pageData.map((msg, index) => {
                         const rowClass = messagesCurrentFilter === 'scheduled' ? 'table-info' : 
@@ -2183,6 +2316,7 @@
                                     msg.status === 'SCHEDULED' ? 'bg-info' : 'bg-secondary'
                                 }">${msg.status}</span>
                             </td>
+                            <td><small>${msg.createdAt ? formatDateTimeLocal(msg.createdAt) : '-'}</small></td>
                             <td><small class="${messagesCurrentFilter === 'scheduled' ? 'fw-bold' : ''}">${msg.scheduledAt ? formatDateTimeLocal(msg.scheduledAt) : '-'}</small></td>
                             <td><small>${msg.sentAt ? formatDateTimeLocal(msg.sentAt) : '-'}</small></td>
                             <td><small>${msg.deliveredAt ? formatDateTimeLocal(msg.deliveredAt) : '-'}</small></td>

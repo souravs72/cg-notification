@@ -7,3 +7,5 @@
 | [03-operations](03-operations.md) | Local Docker, env vars, metrics, common failures |
 | [04-extensibility](04-extensibility.md) | Adding a provider or channel; what not to change |
 | [05-security-and-logging](05-security-and-logging.md) | What never to log; where secrets are resolved |
+| [SECRETS](SECRETS.md) | AWS Secrets Manager reference: all secrets, where they're used, how to set/rotate |
+| [MSK-TO-SNS-SQS-MIGRATION](MSK-TO-SNS-SQS-MIGRATION.md) | Production guide: migrate from MSK (Kafka) to SNS/SQS, Spring Boot changes, Terraform, cost |

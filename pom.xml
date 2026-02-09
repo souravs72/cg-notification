@@ -31,7 +31,7 @@
         <postgresql.version>42.7.1</postgresql.version>
         <lombok.version>1.18.42</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <springdoc.version>3.0.1</springdoc.version>
+        <springdoc.version>2.4.0</springdoc.version>
         <testcontainers.version>1.19.3</testcontainers.version>
         <mockito.version>5.21.0</mockito.version>
         <awaitility.version>4.2.0</awaitility.version>
@@ -50,6 +50,7 @@
         <errorprone.version>2.46.0</errorprone.version>
         <checkerqual.version>3.42.0</checkerqual.version>
         <j2objc.version>3.1</j2objc.version>
+        <spring-cloud-aws.version>3.2.0</spring-cloud-aws.version>
     </properties>
 
     <dependencyManagement>
@@ -83,12 +84,26 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>io.awspring.cloud</groupId>
+                <artifactId>spring-cloud-aws-dependencies</artifactId>
+                <version>${spring-cloud-aws.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             
             <!-- Common Dependencies -->
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.version}</version>
+                <exclusions>
+                    <!-- Exclude conflicting checker-qual version, use managed version -->
+                    <exclusion>
+                        <groupId>org.checkerframework</groupId>
+                        <artifactId>checker-qual</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             <dependency>
                 <groupId>org.projectlombok</groupId>
@@ -137,11 +152,6 @@
                 <version>${testcontainers.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>kafka</artifactId>
-                <version>${testcontainers.version}</version>
-            </dependency>
-            <dependency>
                 <groupId>org.awaitility</groupId>
                 <artifactId>awaitility</artifactId>
                 <version>${awaitility.version}</version>
@@ -176,9 +186,6 @@
                 <artifactId>j2objc-annotations</artifactId>
                 <version>${j2objc.version}</version>
             </dependency>
-            <!-- Kafka client version managed by Spring Boot BOM -->
-            <!-- Note: Spring Boot BOM manages kafka-clients version through spring-kafka -->
-            <!-- If direct kafka-clients dependency is needed, version comes from Spring Boot BOM -->
             <!-- Log4j2 starter for high-throughput deterministic logging (optional) -->
             <!-- IMPORTANT: When a module adopts Log4j2, it MUST exclude spring-boot-starter-logging -->
             <!-- Example usage in child module:
@@ -300,7 +307,7 @@
                             <configuration>
                                 <rules>
                                     <!-- Enforce dependency convergence to prevent version conflicts -->
-                                    <!-- Critical for Kafka + gRPC + Netty + WebClient -->
+                                    <!-- Critical for gRPC + Netty + WebClient -->
                                     <dependencyConvergence/>
                                     <!-- Require Java 17+ -->
                                     <requireJavaVersion>

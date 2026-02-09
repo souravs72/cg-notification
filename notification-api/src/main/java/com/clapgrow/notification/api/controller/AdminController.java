@@ -75,7 +75,14 @@ public class AdminController {
                 error.put("error", "Authentication required");
                 return ResponseEntity.status(401).body(error);
             }
-            adminAuthService.validateAdminKey(adminKey);
+            try {
+                adminAuthService.validateAdminKey(adminKey);
+            } catch (SecurityException e) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", e.getMessage());
+                return ResponseEntity.status(401).body(error);
+            }
         }
         // Session authentication successful (or API key validated above)
         return null; // Authentication successful
@@ -83,13 +90,18 @@ public class AdminController {
 
     @GetMapping("/dashboard")
     public String dashboard(Model model, HttpSession session) {
-        // Get fresh user info from database
-        User user = userService.getCurrentUser(session);
-        
-        model.addAttribute("user", user);
-        AdminDashboardResponse metrics = adminService.getDashboardMetrics();
-        model.addAttribute("metrics", metrics);
-        return "admin/dashboard";
+        try {
+            // Get fresh user info from database (single query)
+            User user = userService.getCurrentUser(session);
+            model.addAttribute("user", user);
+            // Use empty placeholder - JS loads metrics via /admin/api/metrics (avoids N+1 DB queries blocking response)
+            model.addAttribute("metrics", AdminDashboardResponse.empty());
+            return "admin/dashboard";
+        } catch (IllegalStateException e) {
+            // Session invalid or user not found - redirect to login
+            log.warn("Dashboard access failed: {} - redirecting to login", e.getMessage());
+            return "redirect:/auth/login";
+        }
     }
 
     @GetMapping("/sites")
@@ -145,7 +157,8 @@ public class AdminController {
         if (authError != null) {
             return authError;
         }
-        List<MessageDetailResponse> messages = adminService.getRecentMessages(limit);
+        int cappedLimit = Math.min(limit, 500); // Cap to prevent OOM (loading 2500+ full MessageLog with body)
+        List<MessageDetailResponse> messages = adminService.getRecentMessages(cappedLimit);
         return ResponseEntity.ok(messages);
     }
 
@@ -169,7 +182,8 @@ public class AdminController {
         if (authError != null) {
             return authError;
         }
-        List<MessageDetailResponse> messages = adminService.getFailedMessages(limit);
+        int cappedLimit = Math.min(limit, 500); // Cap to prevent OOM
+        List<MessageDetailResponse> messages = adminService.getFailedMessages(cappedLimit);
         return ResponseEntity.ok(messages);
     }
 
@@ -277,7 +291,8 @@ public class AdminController {
             return authError;
         }
         try {
-            List<MessageDetailResponse> messages = adminService.getScheduledMessages(limit);
+            int cappedLimit = Math.min(limit, 500); // Cap to prevent OOM
+            List<MessageDetailResponse> messages = adminService.getScheduledMessages(cappedLimit);
             return ResponseEntity.ok(messages);
         } catch (Exception e) {
             log.error("Error retrieving scheduled messages", e);
