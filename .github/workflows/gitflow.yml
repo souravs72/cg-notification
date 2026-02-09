@@ -1,6 +1,10 @@
 ---
 name: GitFlow Branch Protection
 
+# NOTE: This workflow is informational only.
+# Actual branch protection enforcement is configured via GitHub branch protection rules in the repository settings. This workflow does not enforce rules programmatically.
+# To configure enforcement, go to: Settings > Branches > Branch protection rules
+
 on:
   push:
     branches:
@@ -12,14 +16,22 @@ on:
       - develop
 
 jobs:
-  branch-protection:
+  gitflow-guidelines:
     runs-on: ubuntu-latest
     steps:
-      - name: Check branch rules
+      - name: Display GitFlow guidelines
         run: |
-          echo "GitFlow branch protection rules:"
+          echo "GitFlow Branching Model Guidelines:"
           echo "- main: Production-ready code only"
           echo "- develop: Integration branch for features"
           echo "- feature/*: Feature development branches"
           echo "- release/*: Release preparation branches"
           echo "- hotfix/*: Critical bug fixes"
+          echo ""
+          echo "Enforcement checklist:"
+          echo "- Required PR reviews on main & develop"
+          echo "- Status checks required before merge"
+          echo "- Linear history enabled (optional)"
+          echo "- Force pushes disabled"
+          echo ""
+          echo "Note: Enforcement is handled by GitHub branch protection settings, not this workflow."

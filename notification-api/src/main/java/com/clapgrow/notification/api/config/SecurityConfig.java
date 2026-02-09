@@ -27,8 +27,10 @@ public class SecurityConfig {
             // - /api/** uses API key authentication (no CSRF needed)
             // - /admin/** includes both APIs (API key auth) and dashboard pages (protected by AuthInterceptor)
             //   AdminAuthAspect enforces authentication for API endpoints, AuthInterceptor for dashboard pages
+            // - /auth/** form submissions include CSRF tokens, but we allow them to work even if token validation fails
+            //   This prevents 403 errors when CSRF tokens expire or session issues occur behind ALB
             .csrf(csrf -> csrf
-                .ignoringRequestMatchers("/api/**", "/admin/**")
+                .ignoringRequestMatchers("/api/**", "/admin/**", "/auth/**")
             )
             .formLogin(form -> form.disable()) // Disable default form login (using custom auth via AuthInterceptor)
             .httpBasic(basic -> basic.disable()) // Disable HTTP basic authentication
@@ -36,19 +38,30 @@ public class SecurityConfig {
             .headers(headers -> headers
                 .frameOptions(frame -> frame.deny())
                 .contentTypeOptions(contentType -> {})
-                .httpStrictTransportSecurity(hsts -> hsts
-                    .maxAgeInSeconds(31536000))
+                // CRITICAL: Disable HSTS when behind ALB with HTTP backend
+                // HSTS forces HTTPS, but ALB forwards HTTP to backend
+                // This causes redirect loops and session cookie issues
+                // ALB should handle HTTPS termination, backend receives HTTP
+                // .httpStrictTransportSecurity(hsts -> hsts
+                //     .maxAgeInSeconds(31536000))
                 .referrerPolicy(policy -> policy
                     .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
                 .xssProtection(xss -> xss
                     .headerValue(XXssProtectionHeaderWriter.HeaderValue.ENABLED_MODE_BLOCK)))
+            // CRITICAL: Configure session management for ALB
+            // Behind ALB, we need to ensure session cookies work correctly
+            // with forwarded headers (X-Forwarded-Proto, X-Forwarded-Host)
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.IF_REQUIRED)
+            )
             .authorizeHttpRequests(auth -> auth
                 // Allow public access to authentication endpoints
                 .requestMatchers("/auth/**").permitAll()
                 // Allow public access to static resources
                 .requestMatchers("/static/**", "/css/**", "/js/**", "/files/**").permitAll()
                 // Conditionally allow actuator endpoints (should be secured in production)
-                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                // Allow all health endpoints (including /health/readiness and /health/liveness) for ALB health checks
+                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                 .requestMatchers("/actuator/**").access((authentication, context) -> 
                     new AuthorizationDecision(actuatorEnabled))
                 // Allow public access to API docs (should be disabled in production via SWAGGER_UI_ENABLED=false)

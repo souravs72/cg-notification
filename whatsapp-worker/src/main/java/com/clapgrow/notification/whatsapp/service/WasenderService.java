@@ -406,11 +406,11 @@ public class WasenderService implements WhatsAppProvider<NotificationPayload> {
         } catch (DataAccessException e) {
             log.error("Database error resolving API key for siteId={}, whatsappSessionName={}: {}", 
                 payload.getSiteId(), payload.getWhatsappSessionName(), e.getMessage(), e);
-            return null; // Fail fast - will be retried by KafkaRetryService
+            return null; // Fail fast - will be retried by MessagingRetryService
         } catch (Exception e) {
             log.error("Unexpected error resolving API key for siteId={}, whatsappSessionName={}: {}", 
                 payload.getSiteId(), payload.getWhatsappSessionName(), e.getMessage(), e);
-            return null; // Fail fast - will be retried by KafkaRetryService
+            return null; // Fail fast - will be retried by MessagingRetryService
         }
     }
 }

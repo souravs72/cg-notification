@@ -208,7 +208,9 @@ public class AdminService {
 
     public List<MessageDetailResponse> getScheduledMessages(int limit) {
         try {
-            Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.ASC, "scheduledAt"));
+            // Native query already has ORDER BY m.scheduled_at ASC; no Sort in Pageable to avoid
+            // Spring appending ", m.scheduledAt asc" (wrong column name: scheduledat vs scheduled_at)
+            Pageable pageable = PageRequest.of(0, limit);
             Page<MessageLog> messagePage = messageLogRepository.findByStatusOrderByScheduledAtAsc(
                 DeliveryStatus.SCHEDULED.name(), pageable
             );

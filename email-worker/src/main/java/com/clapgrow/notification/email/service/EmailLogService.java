@@ -14,8 +14,7 @@ import java.util.UUID;
 /**
  * Email message log service.
  * 
- * ⚠️ NOTE: This duplicates code from WhatsAppLogService, but workers can't share code
- * from notification-api module. Both services maintain the same logic for consistency.
+ * ⚠️ NOTE: This duplicates code from WhatsAppLogService, but workers can't share code from notification-api module. Both services maintain the same logic for consistency.
  */
 @Service
 @RequiredArgsConstructor
@@ -54,7 +53,7 @@ public class EmailLogService {
     }
 
     /**
-     * ⚠️ RETRY COUNT OWNERSHIP: Only KafkaRetryService should mutate retry_count.
+     * ⚠️ RETRY COUNT OWNERSHIP: Only MessagingRetryService (API) should mutate retry_count.
      * Consumers should only set FAILED status, never increment retry counters.
      * This method is kept for read-only access if needed, but should not be used for mutations.
      */
@@ -117,6 +116,20 @@ public class EmailLogService {
     public Optional<UUID> getSiteId(String messageId) {
         MessageSiteLookup lookup = getMessageSiteLookup(messageId);
         return lookup.found() && lookup.siteId() != null ? Optional.of(lookup.siteId()) : Optional.empty();
+    }
+
+    /**
+     * Get current status for a message (for idempotency: skip if already DELIVERED).
+     */
+    public Optional<String> getStatus(String messageId) {
+        try {
+            String sql = "SELECT status::text FROM message_logs WHERE message_id = ?";
+            List<String> results = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString(1), messageId);
+            return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+        } catch (Exception e) {
+            log.warn("Failed to get status for {}: {}", messageId, e.getMessage());
+            return Optional.empty();
+        }
     }
 }
 

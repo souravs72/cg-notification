@@ -251,7 +251,9 @@ public interface MessageLogRepository extends JpaRepository<MessageLog, UUID> {
      * @param pageable Pagination parameters
      * @return Page of scheduled messages
      */
-    @Query(value = "SELECT * FROM message_logs m WHERE m.status = CAST(:status AS delivery_status) AND m.scheduled_at IS NOT NULL ORDER BY m.scheduled_at ASC", nativeQuery = true)
+    @Query(value = "SELECT * FROM message_logs m WHERE m.status = CAST(:status AS delivery_status) AND m.scheduled_at IS NOT NULL ORDER BY m.scheduled_at ASC",
+           countQuery = "SELECT count(*) FROM message_logs m WHERE m.status = CAST(:status AS delivery_status) AND m.scheduled_at IS NOT NULL",
+           nativeQuery = true)
     Page<MessageLog> findByStatusOrderByScheduledAtAsc(
         @Param("status") String status,
         Pageable pageable

@@ -34,58 +34,45 @@ services:
       timeout: 5s
       retries: 5
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: notification-zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
+  redis:
+    image: redis:7-alpine
+    container_name: notification-redis
     ports:
-      - "2181:2181"
+      - "6379:6379"
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "2181"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: notification-kafka
-    depends_on:
-      zookeeper:
-        condition: service_healthy
+  localstack:
+    image: localstack/localstack:latest
+    container_name: notification-localstack
     ports:
-      - "9092:9092"
+      - "4566:4566"
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
-
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-
+      SERVICES: sns,sqs
+      DEBUG: "0"
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: notification-kafka-ui
+  init-sns-sqs:
+    image: amazon/aws-cli:latest
+    container_name: notification-init-sns-sqs
     depends_on:
-      kafka:
+      localstack:
         condition: service_healthy
-    ports:
-      - "8089:8080"
     environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - ./scripts/init-localstack-sns-sqs.sh:/scripts/init-localstack-sns-sqs.sh
+    entrypoint: ["sh", "-c", "chmod +x /scripts/init-localstack-sns-sqs.sh && AWS_ENDPOINT_URL=http://localstack:4566 /scripts/init-localstack-sns-sqs.sh"]
 
   notification-api:
     build:
@@ -95,7 +82,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
+      init-sns-sqs:
+        condition: service_completed_successfully
+      redis:
         condition: service_healthy
     ports:
       - "8080:8080"
@@ -103,9 +92,17 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-      WASENDER_API_KEY: ${WASENDER_API_KEY}
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_SNS_ENDPOINT: http://localstack:4566
+      AWS_SQS_ENDPOINT: http://localstack:4566
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_SESSION_STORE_TYPE: redis
+      MANAGEMENT_TRACING_ENABLED: false
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key}
+      WASENDER_API_KEY: ${WASENDER_API_KEY:-}
     volumes:
       - notification_uploads:/app/uploads
 
@@ -117,13 +114,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      init-sns-sqs:
+        condition: service_completed_successfully
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_SQS_ENDPOINT: http://localstack:4566
+      MESSAGING_SQS_QUEUE_EMAIL: notifications-email-queue
       SENDGRID_API_KEY: ${SENDGRID_API_KEY}
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
       SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME}
@@ -136,13 +137,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      init-sns-sqs:
+        condition: service_completed_successfully
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_SQS_ENDPOINT: http://localstack:4566
+      MESSAGING_SQS_QUEUE_WHATSAPP: notifications-whatsapp-queue
       WASENDER_API_KEY: ${WASENDER_API_KEY}
 
 volumes:

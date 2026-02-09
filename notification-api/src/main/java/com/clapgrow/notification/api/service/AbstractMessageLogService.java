@@ -14,7 +14,7 @@ import java.util.List;
  * Provides common functionality for updating message status and querying retry counts.
  * This reduces duplication and ensures consistent behavior across all channels.
  * 
- * ⚠️ RETRY COUNT OWNERSHIP: Only KafkaRetryService should mutate retry_count.
+ * ⚠️ RETRY COUNT OWNERSHIP: Only MessagingRetryService should mutate retry_count.
  * Consumers should only set FAILED status, never increment retry counters.
  */
 @RequiredArgsConstructor
@@ -75,7 +75,7 @@ public abstract class AbstractMessageLogService {
     /**
      * Get retry count for a message (read-only).
      * 
-     * ⚠️ RETRY COUNT OWNERSHIP: Only KafkaRetryService should mutate retry_count.
+     * ⚠️ RETRY COUNT OWNERSHIP: Only MessagingRetryService should mutate retry_count.
      * This method is kept for read-only access if needed, but should not be used for mutations.
      * 
      * @param messageId Message ID

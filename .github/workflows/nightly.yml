@@ -1,6 +1,8 @@
 ---
 name: Nightly Build
 
+# Infrastructure: Postgres + LocalStack (SNS/SQS). See .github/workflows/infrastructure.yml for reference.
+
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -27,14 +29,18 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      kafka:
-        image: confluentinc/cp-kafka:7.5.0
+      localstack:
+        image: localstack/localstack:latest
         env:
-          KAFKA_BROKER_ID: 1
-          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          SERVICES: sns,sqs
+          DEBUG: "0"
         ports:
-          - 9092:9092
+          - 4566:4566
+        options: >-
+          --health-cmd "curl -sf http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
 
     steps:
       - name: Checkout code
@@ -49,14 +55,51 @@ jobs:
 
       - name: Update dependencies
         run: mvn versions:display-dependency-updates versions:display-plugin-updates
+        continue-on-error: true
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client || true
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U notification_user -d notification_db; then
+              echo "PostgreSQL is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: PostgreSQL not ready yet, waiting..."
+            sleep 2
+          done
+          echo "PostgreSQL failed to become ready"
+          exit 1
+
+      - name: Wait for LocalStack and init SNS/SQS
+        run: |
+          echo "Waiting for LocalStack to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:4566/_localstack/health > /dev/null 2>&1; then
+              echo "LocalStack is ready!"
+              break
+            fi
+            echo "Attempt $i/30: LocalStack not ready yet, waiting..."
+            sleep 2
+          done
+          curl -sf http://localhost:4566/_localstack/health || exit 1
+          export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
+          export AWS_ENDPOINT_URL=http://localhost:4566
+          bash scripts/init-localstack-sns-sqs.sh
+          echo "SNS/SQS resources created in LocalStack"
 
       - name: Build with all tests
-        run: mvn clean verify
+        run: mvn clean verify -DskipITs=false
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
           SPRING_DATASOURCE_USERNAME: notification_user
           SPRING_DATASOURCE_PASSWORD: notification_pass
-          SPRING_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          AWS_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_SNS_ENDPOINT: http://localhost:4566
+          AWS_SQS_ENDPOINT: http://localhost:4566
 
       - name: Generate dependency report
         run: mvn dependency:tree -DoutputFile=dependencies.txt
@@ -68,4 +111,6 @@ jobs:
           path: |
             dependencies.txt
             **/target/surefire-reports/**
+            **/target/site/jacoco/**
           retention-days: 30
+          if-no-files-found: ignore
