@@ -37,11 +37,13 @@ spring:
     listener:
       shutdown-timeout: ${KAFKA_LISTENER_SHUTDOWN_TIMEOUT:30s}
 
+# Email: instant delivery. No per-message delay (unlike WhatsApp). Bulk emails processed in parallel.
 kafka:
   consumer:
     group-id: ${KAFKA_CONSUMER_GROUP_ID:email-worker-group}
     environment-prefix: ${KAFKA_CONSUMER_ENV_PREFIX:}
-    concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
+    # Higher default concurrency so bulk email never backs up; email has no per-session delay
+    concurrency: ${KAFKA_CONSUMER_CONCURRENCY:10}
 
 # Use management server port instead of main server port
 # This allows actuator endpoints without full servlet stack overhead

@@ -18,20 +18,24 @@ import java.util.UUID;
 
 /**
  * Email message processing service.
- * 
+ *
+ * ⚠️ DELIVERY POLICY: Email is sent immediately. There is no per-message delay.
+ * Bulk emails are processed in parallel (subject to consumer concurrency). This is
+ * intentional: email has no provider rate limit like WhatsApp; instant delivery is required.
+ *
  * ⚠️ RETRY STRATEGY: Fail-fast consumer (consistent with WhatsApp consumer)
- * 
+ *
  * This consumer fails fast and does NOT perform retries or sleep.
  * All retries are handled by KafkaRetryService (producer-side retry authority).
- * 
+ *
  * Benefits:
  * - No Thread.sleep() blocking consumer threads
  * - Single retry authority reduces complexity
  * - Better throughput and resource utilization
  * - Consistent retry logic across all channels
- * 
+ *
  * Flow:
- * 1. Consumer processes message
+ * 1. Consumer processes message (send immediately)
  * 2. On failure: Mark as FAILED (CONSUMER) and acknowledge
  * 3. KafkaRetryService picks up FAILED messages and retries them
  */
