@@ -74,14 +74,16 @@ public class AuthInterceptor implements HandlerInterceptor {
             // For non-API admin routes (dashboard pages), require session authentication
             HttpSession session = request.getSession(false);
             if (session == null || session.getAttribute("userId") == null) {
-                // CRITICAL: Enhanced logging for redirect loop debugging
-                String cookies = request.getHeader("Cookie");
-                log.warn("Unauthorized dashboard access to {} - no session or userId missing. " +
-                    "Session={}, userId={}, cookies={}", 
-                    path, 
-                    session != null ? session.getId() : "null", 
+                // CRITICAL: Log reason for redirect to login (for CloudWatch / log diagnosis)
+                String cookieHeader = request.getHeader("Cookie");
+                String jsessionIdFromCookie = parseJSessionIdFromCookie(cookieHeader);
+                log.warn("SESSION_MISSING redirect to login path={} session={} userId={} cookies={} " +
+                    "JSESSIONID_from_cookie={} possible_cause=session_not_in_store (if_redis=check_connectivity else_in_memory=different_ecs_task_or_expired)",
+                    path,
+                    session != null ? session.getId() : "null",
                     session != null ? session.getAttribute("userId") : "null",
-                    cookies != null ? "present" : "missing");
+                    cookieHeader != null ? "present" : "missing",
+                    jsessionIdFromCookie != null ? jsessionIdFromCookie : "none");
                 // Clear stale JSESSIONID so browser gets a clean slate on next login
                 // (task restart loses in-memory sessions; old cookie would keep triggering 401)
                 Cookie clearCookie = new Cookie("JSESSIONID", "");
@@ -98,6 +100,19 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         return true;
+    }
+
+    /** Extract JSESSIONID value from Cookie header for log correlation (e.g. session existed in cookie but not in this task). */
+    private static String parseJSessionIdFromCookie(String cookieHeader) {
+        if (cookieHeader == null || cookieHeader.isEmpty()) return null;
+        for (String part : cookieHeader.split(";")) {
+            String trimmed = part.trim();
+            if (trimmed.startsWith("JSESSIONID=")) {
+                int eq = trimmed.indexOf('=');
+                return eq >= 0 && eq < trimmed.length() - 1 ? trimmed.substring(eq + 1).trim() : null;
+            }
+        }
+        return null;
     }
 }
 

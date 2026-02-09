@@ -73,16 +73,19 @@ resource "aws_ecs_task_definition" "api" {
           name  = "WHATSAPP_WORKER_API_BASE_URL"
           value = "http://whatsapp-worker.cg-notification.local:8082"
         },
-        # Spring Session: use none (in-memory) - API runs in RDS VPC, Redis in Terraform VPC (no connectivity).
-        # ALB stickiness keeps users on same task so sessions work.
+        # Spring Session: Redis in RDS VPC so sessions persist across ECS tasks and survive deploys.
+        # Fixes "logged out after ~30s" when in-memory sessions were used (request hit different task).
         {
           name  = "SPRING_SESSION_STORE_TYPE"
-          value = "none"
+          value = "redis"
         },
-        # Disable Redis autoconfig - avoids connection attempts when Redis unreachable
         {
-          name  = "SPRING_AUTOCONFIGURE_EXCLUDE"
-          value = "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration"
+          name  = "SPRING_DATA_REDIS_HOST"
+          value = aws_elasticache_replication_group.redis_rds_vpc.primary_endpoint_address
+        },
+        {
+          name  = "SPRING_DATA_REDIS_SSL_ENABLED"
+          value = "true"
         },
         {
           name  = "FILE_UPLOAD_DIR"
@@ -98,6 +101,10 @@ resource "aws_ecs_task_definition" "api" {
         {
           name      = "SPRING_DATASOURCE_PASSWORD"
           valueFrom = aws_secretsmanager_secret.db_password_only.arn
+        },
+        {
+          name      = "SPRING_DATA_REDIS_PASSWORD"
+          valueFrom = aws_secretsmanager_secret.redis_password_rds_vpc.arn
         },
         {
           name      = "ADMIN_API_KEY"

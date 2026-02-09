@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Integration tests for NotificationController.
- * Tests the full request/response cycle including database and Kafka interactions.
+ * Tests the full request/response cycle including database and SNS/SQS interactions.
  */
 @AutoConfigureMockMvc
 @Transactional

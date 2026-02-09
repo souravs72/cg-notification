@@ -75,7 +75,14 @@ public class AdminController {
                 error.put("error", "Authentication required");
                 return ResponseEntity.status(401).body(error);
             }
-            adminAuthService.validateAdminKey(adminKey);
+            try {
+                adminAuthService.validateAdminKey(adminKey);
+            } catch (SecurityException e) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("error", e.getMessage());
+                return ResponseEntity.status(401).body(error);
+            }
         }
         // Session authentication successful (or API key validated above)
         return null; // Authentication successful

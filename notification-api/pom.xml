@@ -244,11 +244,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
-                    <!-- Skip integration tests based on skipITs property -->
-                    <!-- 'skip' is the correct parameter for Failsafe plugin (not skipTests) -->
-                    <!-- skipTests is for Surefire (unit tests), skip is for Failsafe (integration tests) -->
-                    <!-- Default: true (skipped in local dev), CI can override with -DskipITs=false -->
                     <skip>${skipITs}</skip>
+                    <!-- Use classes directory instead of repackaged JAR so main classes are on classpath (fat jar has BOOT-INF/classes) -->
+                    <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+                    <!-- Single fork: all ITs share one JVM and one Testcontainers Postgres (faster, avoids connection refused on fork teardown) -->
+                    <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
                 </configuration>
             </plugin>
         </plugins>

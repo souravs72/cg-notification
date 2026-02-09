@@ -29,6 +29,7 @@ resource "aws_ecs_service" "api" {
     aws_lb_listener.http,
     null_resource.alb_listeners,
     aws_db_instance.main,
+    aws_elasticache_replication_group.redis_rds_vpc,
   ]
 
   tags = {

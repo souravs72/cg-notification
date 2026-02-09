@@ -46,6 +46,7 @@ resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
           aws_secretsmanager_secret.db_password.arn,
           aws_secretsmanager_secret.db_password_only.arn,
           aws_secretsmanager_secret.redis_password.arn,
+          aws_secretsmanager_secret.redis_password_rds_vpc.arn,
           aws_secretsmanager_secret.sendgrid_api_key.arn,
           aws_secretsmanager_secret.sendgrid_from_email.arn,
           aws_secretsmanager_secret.sendgrid_from_name.arn,

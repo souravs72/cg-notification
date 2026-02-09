@@ -2,6 +2,9 @@ package com.clapgrow.notification.api.integration;
 
 import com.clapgrow.notification.api.NotificationApiApplication;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.SpringBootTestContextBootstrapper;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.BootstrapWith;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -18,8 +21,17 @@ import org.testcontainers.utility.DockerImageName;
  */
 @SpringBootTest(
     classes = NotificationApiApplication.class,
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+        "spring.cloud.aws.enabled=false",
+        "spring.main.web-application-type=servlet",
+        "spring.task.scheduling.enabled=false",
+        "spring.session.store-type=none",
+        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration"
+    }
 )
+@BootstrapWith(SpringBootTestContextBootstrapper.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Testcontainers
 public abstract class BaseIntegrationTest {
 
@@ -39,6 +51,10 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
 
+        // Use in-memory session so ITs do not require Redis
+        registry.add("spring.session.store-type", () -> "none");
+        registry.add("spring.data.redis.repositories.enabled", () -> "false");
+
         registry.add("spring.cloud.aws.region.static", () -> "us-east-1");
         registry.add("spring.cloud.aws.credentials.access-key", () -> "test");
         registry.add("spring.cloud.aws.credentials.secret-key", () -> "test");
@@ -47,6 +63,11 @@ public abstract class BaseIntegrationTest {
         registry.add("messaging.sqs.queues.email-dlq", () -> "notifications-email-dlq");
         registry.add("messaging.sqs.queues.whatsapp-dlq", () -> "notifications-whatsapp-dlq");
 
+        registry.add("admin.api-key", () -> "test-admin-key");
+        registry.add("ADMIN_API_KEY", () -> "test-admin-key");
+
+        registry.add("file.upload.dir", () -> System.getProperty("java.io.tmpdir") + "/notification-api-uploads");
+
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
         registry.add("spring.jpa.show-sql", () -> "false");
         registry.add("spring.jpa.properties.hibernate.format_sql", () -> "false");
@@ -54,7 +75,9 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.datasource.hikari.maximum-pool-size", () -> "5");
         registry.add("spring.datasource.hikari.connection-timeout", () -> "30000");
         registry.add("spring.datasource.hikari.idle-timeout", () -> "600000");
-        registry.add("spring.datasource.hikari.max-lifetime", () -> "1800000");
+        registry.add("spring.datasource.hikari.max-lifetime", () -> "30000");
+        registry.add("spring.datasource.hikari.validation-timeout", () -> "5000");
+        registry.add("spring.datasource.hikari.leak-detection-threshold", () -> "10000");
 
         registry.add("spring.sql.init.mode", () -> "always");
         registry.add("spring.sql.init.schema-locations", () -> "classpath:schema-test.sql");

@@ -164,6 +164,91 @@ curl -X POST http://localhost:8080/api/v1/notifications/send \
   }'
 ```
 
+## Deploy on AWS
+
+Use the existing Terraform + scripts to deploy to AWS (ECS Fargate, RDS, Redis, ALB, SNS/SQS).
+
+### Prerequisites
+
+- **AWS CLI** – `aws --version`, credentials via `aws configure` or `AWS_PROFILE`
+- **Terraform** ≥ 1.0 – `terraform version`
+- **Docker** – for building and pushing images
+- **jq**, **curl** – for deploy script health checks
+
+### 1. Set AWS identity
+
+```bash
+export AWS_PROFILE=your-profile    # or use aws configure
+export AWS_REGION=ap-south-1       # or your region
+aws sts get-caller-identity        # verify
+```
+
+### 2. One-time Terraform config
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars: set s3_bucket_name (globally unique), region, counts, etc.
+# Optional: configure backend in backend.tf for remote state (see backend.tf.example)
+cd ..
+```
+
+### 3. Set secrets (for first deploy or secret rotation)
+
+Export these **before** running the deploy script (they are written to AWS Secrets Manager):
+
+```bash
+export WASENDER_API_KEY=your-wasender-api-key
+export SENDGRID_API_KEY=your-sendgrid-api-key
+export SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+export SENDGRID_FROM_NAME="Your App"
+export ADMIN_API_KEY=your-secure-admin-api-key
+```
+
+### 4. Full deployment (infra + app)
+
+From the **project root**:
+
+```bash
+chmod +x scripts/deploy-trigger.sh
+./scripts/deploy-trigger.sh
+```
+
+This will: Terraform apply (VPC, RDS, Redis, ECS, ALB, ECR, SNS/SQS, WAF, etc.) → inject secrets → run DB migrations → build and push Docker images → deploy ECS services → wait for stability → run health checks.
+
+**Optional – custom domain and HTTPS:**
+
+```bash
+./scripts/deploy-trigger.sh --domain=notifications.yourdomain.com --route53-zone-id=Z1234567890ABC
+```
+
+If you omit `--route53-zone-id`, the script prints the ACM CNAME records for you to add in your DNS provider.
+
+**Subsequent deploys (app only, no infra changes):**
+
+```bash
+./scripts/deploy-to-aws.sh
+# Or with a specific image tag:
+./scripts/deploy-to-aws.sh --image-tag=$(git rev-parse --short HEAD)
+```
+
+Or skip Terraform but still run migrations and build/push:
+
+```bash
+./scripts/deploy-trigger.sh --skip-terraform
+```
+
+### 5. After deploy
+
+- **API URL:** `http://<alb_dns_name>` (from `terraform output alb_dns_name`) or your custom domain if set.
+- **Health:** `curl http://<alb_dns>/actuator/health`
+- **Admin:** `http://<alb_dns>/admin/dashboard` (use `X-Admin-Key` or log in via `/auth/login`)
+- **Logs:** `aws logs tail /ecs/cg-notification-api --follow --region $AWS_REGION`
+
+Full details, troubleshooting, and manual steps: `terraform/DEPLOYMENT.md` and `scripts/deploy-trigger.sh --help`.
+
+---
+
 ## Production Deployment
 
 ### Security Checklist

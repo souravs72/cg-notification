@@ -102,6 +102,11 @@ spring:
 
 server:
   port: 8080
+  # Session timeout: 30 days (matches cookie max-age and setMaxInactiveInterval in AuthController)
+  # With Redis session store, sessions survive task restarts and are shared across ECS tasks.
+  servlet:
+    session:
+      timeout: 30d  # 30 days (matches cookie max-age and setMaxInactiveInterval in AuthController)
   # CRITICAL: Enable forwarded headers support for ALB
   # ALB terminates HTTPS and forwards HTTP to backend
   # Spring needs to trust X-Forwarded-* headers to properly handle:

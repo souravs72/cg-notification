@@ -338,10 +338,14 @@ main() {
       "aws rds describe-db-instances --db-instance-identifier cg-notification-db --region $AWS_REGION --query 'DBInstances[0].DBInstanceStatus' --output text | grep -q available" \
       600 15 || log_warn "RDS may still be initializing"
     
-    log_info "Waiting for Redis cluster..."
-    wait_for_resource "Redis" \
-      "aws elasticache describe-replication-groups --replication-group-id cg-notification-redis --region $AWS_REGION --query 'ReplicationGroups[0].Status' --output text | grep -q available" \
-      300 15 || log_warn "Redis may still be initializing"
+    log_info "Waiting for Redis cluster (Terraform VPC)..."
+    wait_for_resource "Redis (Terraform VPC)" \
+      "aws elasticache describe-replication-groups --replication-group-id cg-notification-redis --region $AWS_REGION --query 'ReplicationGroups[0].Status' --output text 2>/dev/null | grep -q available" \
+      300 15 || log_warn "Redis (Terraform VPC) may still be initializing"
+    log_info "Waiting for Redis cluster (RDS VPC - API session store)..."
+    wait_for_resource "Redis (RDS VPC)" \
+      "aws elasticache describe-replication-groups --replication-group-id cg-notif-redis-rds --region $AWS_REGION --query 'ReplicationGroups[0].Status' --output text 2>/dev/null | grep -q available" \
+      600 15 || log_warn "Redis (RDS VPC) may still be initializing"
     
     echo ""
   else
