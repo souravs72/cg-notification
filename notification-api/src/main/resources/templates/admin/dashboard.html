@@ -1362,7 +1362,8 @@
             });
         }
 
-        // Load messages on page load
+        // Eager load: fetch metrics and all dashboard data immediately on page load (no 0% delay)
+        loadDashboardMetrics();
         loadRecentMessages();
         loadSessionStats();
         loadRecentActivity();
