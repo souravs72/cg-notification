@@ -24,7 +24,25 @@ public class AuthController {
     private final UserService userService;
 
     @GetMapping("/login")
-    public String loginPage(@RequestParam(required = false) String error, Model model) {
+    public String loginPage(@RequestParam(required = false) String error, 
+                           HttpServletRequest request,
+                           Model model) {
+        // Check session without creating a new one (use getSession(false))
+        // This prevents redirect loops if session cookie isn't working
+        HttpSession session = request.getSession(false);
+        if (session != null && session.getAttribute("userId") != null) {
+            String userId = (String) session.getAttribute("userId");
+            log.info("User already logged in (userId={}, sessionId={}), redirecting to dashboard", 
+                userId, session.getId());
+            return "redirect:/admin/dashboard";
+        }
+        
+        // CRITICAL: Log when login page is accessed without session for debugging
+        String cookies = request.getHeader("Cookie");
+        log.debug("Login page accessed - session={}, cookies={}", 
+            session != null ? session.getId() : "null", 
+            cookies != null ? "present" : "missing");
+        
         if (error != null) {
             model.addAttribute("error", "Invalid email or password");
         }
@@ -32,7 +50,16 @@ public class AuthController {
     }
 
     @GetMapping("/register")
-    public String registerPage(@RequestParam(required = false) String error, Model model) {
+    public String registerPage(@RequestParam(required = false) String error, 
+                              HttpServletRequest request,
+                              Model model) {
+        // If user is already logged in, redirect to dashboard (prevent registration while logged in)
+        HttpSession session = request.getSession(false);
+        if (session != null && session.getAttribute("userId") != null) {
+            log.debug("User already logged in, redirecting to dashboard");
+            return "redirect:/admin/dashboard";
+        }
+        
         if (error != null) {
             model.addAttribute("error", error);
         }
@@ -54,16 +81,18 @@ public class AuthController {
                 return "auth/login";
             }
 
-            // CRITICAL SECURITY FIX: Regenerate session ID to prevent session fixation attacks
-            // This ensures that even if an attacker knows the session ID before login,
-            // they cannot use it after the user authenticates
-            request.changeSessionId();
-            
-            // Set only userId in session - all other data fetched from DB on demand
-            // Note: changeSessionId() modifies the session in place, so we can continue using the same session object
+            // Set userId in session. Reuse same session ID (no changeSessionId) so browser
+            // cookie keeps working behind ALB - changeSessionId caused cookie mismatch/logouts.
             session.setAttribute("userId", user.getId().toString());
+            session.setMaxInactiveInterval(2592000); // 30 days (matches application.yml max-age)
+            
+            // Access session ID for logging/debugging
+            String sessionId = session.getId();
+            session.setAttribute("_sessionInitialized", "true");
+            
+            log.info("User logged in: {} (userId={}, sessionId={})", 
+                user.getEmail(), user.getId(), sessionId);
 
-            log.info("User logged in: {} (session regenerated for security)", user.getEmail());
             return "redirect:/admin/dashboard";
 
         } catch (Exception e) {
@@ -101,16 +130,20 @@ public class AuthController {
             // Register user (WASender API key is optional - can be added later)
             User user = userService.registerUser(email, password, wasenderApiKey);
 
-            // CRITICAL SECURITY FIX: Regenerate session ID to prevent session fixation attacks
-            // This ensures that even if an attacker knows the session ID before registration,
-            // they cannot use it after the user authenticates
-            request.changeSessionId();
+            // For registration, we don't need changeSessionId() because
+            // registration is a new-user flow (no pre-existing session fixation risk).
             
-            // Set only userId in session - all other data fetched from DB on demand
-            // Note: changeSessionId() modifies the session in place, so we can continue using the same session object
+            // Set userId in session - this will create/use the existing session
+            // The session cookie will be set properly by Spring's session management
             session.setAttribute("userId", user.getId().toString());
+            session.setMaxInactiveInterval(2592000); // 30 days (matches application.yml max-age)
+            
+            // Access session ID for logging/debugging
+            String sessionId = session.getId();
+            session.setAttribute("_sessionInitialized", "true");
+            
+            log.info("User registered: {} (userId={}, sessionId={})", user.getEmail(), user.getId(), sessionId);
 
-            log.info("User registered: {} (session regenerated for security)", user.getEmail());
             return "redirect:/admin/dashboard";
 
         } catch (IllegalArgumentException e) {

@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,15 +29,9 @@ import java.util.UUID;
 @Slf4j
 public class ScheduledMessageService {
     
-    @Value("${spring.kafka.topics.email:notifications-email}")
-    private String emailTopic;
-    
-    @Value("${spring.kafka.topics.whatsapp:notifications-whatsapp}")
-    private String whatsappTopic;
-    
     private final MessageLogRepository messageLogRepository;
     private final FrappeSiteRepository siteRepository;
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final SnsNotificationSender snsNotificationSender;
     private final ObjectMapper objectMapper;
     @SuppressWarnings("unused") // Reserved for future use
     private final WasenderConfigService wasenderConfigService;
@@ -173,34 +166,25 @@ public class ScheduledMessageService {
         MessageLog messageLog = messageLogRepository.findByMessageId(messageId)
             .orElseThrow(() -> new IllegalArgumentException("Message not found after atomic update: " + messageId));
 
-        // Prepare Kafka payload BEFORE transaction commits
-        String topic = getTopicForChannel(messageLog.getChannel());
         String payload = serializeNotificationPayload(messageLog);
-        
-        // Register synchronization to send Kafka AFTER transaction commits
-        // This ensures Kafka send happens outside the DB transaction boundary
+        com.clapgrow.notification.api.enums.NotificationChannel channel = messageLog.getChannel();
+
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                // Kafka send happens AFTER successful DB commit
-                kafkaTemplate.send(topic, messageId, payload)
-                    .whenComplete((result, ex) -> {
-                        if (ex != null) {
-                            log.error("Failed to publish scheduled message {} to Kafka topic {} after commit", 
-                                messageId, topic, ex);
-                            // Update message status to FAILED for reconciliation
-                            // This runs in a separate transaction to avoid conflicts
-                            try {
-                                updateMessageLogStatus(messageId, DeliveryStatus.FAILED, 
-                                    "Kafka publish failed: " + (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName()),
-                                    com.clapgrow.notification.api.enums.FailureType.KAFKA);
-                            } catch (Exception updateEx) {
-                                log.error("Failed to update message log status after Kafka failure for messageId={}", messageId, updateEx);
-                            }
-                        } else {
-                            log.info("Published scheduled message {} to Kafka topic {} after commit", messageId, topic);
-                        }
-                    });
+                try {
+                    snsNotificationSender.publish(channel, messageId, payload);
+                    log.info("Published scheduled message {} to SNS after commit", messageId);
+                } catch (Exception ex) {
+                    log.error("Failed to publish scheduled message {} to SNS after commit", messageId, ex);
+                    try {
+                        updateMessageLogStatus(messageId, DeliveryStatus.FAILED,
+                            "SNS publish failed: " + (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName()),
+                            com.clapgrow.notification.api.enums.FailureType.KAFKA);
+                    } catch (Exception updateEx) {
+                        log.error("Failed to update message log status after SNS failure for messageId={}", messageId, updateEx);
+                    }
+                }
             }
         });
     }
@@ -361,14 +345,6 @@ public class ScheduledMessageService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to serialize notification payload", e);
         }
-    }
-
-    private String getTopicForChannel(com.clapgrow.notification.api.enums.NotificationChannel channel) {
-        return switch (channel) {
-            case EMAIL -> emailTopic;
-            case WHATSAPP -> whatsappTopic;
-            default -> throw new IllegalArgumentException("Unsupported channel: " + channel);
-        };
     }
 
     private String generateMessageId() {

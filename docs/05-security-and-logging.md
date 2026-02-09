@@ -22,5 +22,13 @@ Safe to log: `siteId`, `messageId`, provider name, HTTP status codes, error cate
 - API/Admin: when surfacing provider errors to clients, use only parsed `message`/`error` or a generic “details redacted” string, never the raw response body.
 - Exceptions that may wrap provider responses (e.g. WebClientResponseException): do not pass the exception message or body into log format strings. Log type + status (and “response redacted”) instead.
 
+## Running behind an ALB (session & security basics)
 
-
+- **TLS termination**: HTTPS terminates at the ALB; backend services see plain HTTP.
+- **Forwarded headers**: Configure the API to trust `X-Forwarded-*` headers (for example `server.forward-headers-strategy=framework`) so redirects, CSRF/session logic, and generated links use the correct scheme and host.
+- **HSTS**: Do **not** enable strict-transport-security headers from the app when an ALB already handles HTTPS; this can interact badly with HTTP between ALB and backend and contribute to redirect loops.
+- **Session cookie**: Configure cookies explicitly for ALB scenarios, for example:
+  - `same-site: lax` so redirects after login keep the session cookie.
+  - `http-only: true` to prevent JavaScript access.
+  - A reasonable `max-age` (for example 30 days) based on your UX/security trade-offs.
+- **WAF and auth paths**: When placing AWS WAF in front of the ALB with managed rule sets, add a small allow rule for `/auth/**` so login/register are not blocked, and keep rate limiting enabled to protect them.

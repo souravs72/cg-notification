@@ -1,0 +1,86 @@
+---
+name: Infrastructure Services Template
+
+# ⚠️ IMPORTANT LIMITATION
+# GitHub Actions does NOT support sharing services via reusable workflows.
+# This file is a *reference template only*, not a reusable service provider.
+#
+# Copy-paste the services block into jobs that need it.
+#
+# Messaging: SNS/SQS via LocalStack (replaces Kafka). Run scripts/init-localstack-sns-sqs.sh
+# with AWS_ENDPOINT_URL=http://localhost:4566 after LocalStack is ready.
+
+on:
+  workflow_call:
+
+jobs:
+  reference-only:
+    name: Infrastructure Services Template (Reference Only)
+    runs-on: ubuntu-latest
+    # This job is for documentation only - do not attempt to run it
+    # Copy the services section below into jobs that need infrastructure
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: notification_db
+          POSTGRES_USER: notification_user
+          POSTGRES_PASSWORD: notification_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U notification_user -d notification_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      localstack:
+        image: localstack/localstack:latest
+        env:
+          SERVICES: sns,sqs
+          DEBUG: "0"
+        ports:
+          - 4566:4566
+        options: >-
+          --health-cmd "curl -sf http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
+
+# Standard environment variables for services:
+# SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notification_db
+# SPRING_DATASOURCE_USERNAME: notification_user
+# SPRING_DATASOURCE_PASSWORD: notification_pass
+# AWS_REGION: us-east-1
+# AWS_ACCESS_KEY_ID: test
+# AWS_SECRET_ACCESS_KEY: test
+# AWS_SNS_ENDPOINT: http://localhost:4566
+# AWS_SQS_ENDPOINT: http://localhost:4566
+
+# Standard wait steps (add to your job steps):
+#   - name: Wait for PostgreSQL to be ready
+#     run: |
+#       sudo apt-get update && sudo apt-get install -y postgresql-client || true
+#       echo "Waiting for PostgreSQL to be ready..."
+#       for i in {1..30}; do
+#         if pg_isready -h localhost -p 5432 -U notification_user -d notification_db; then
+#           echo "PostgreSQL is ready!"
+#           exit 0
+#         fi
+#         echo "Attempt $i/30: PostgreSQL not ready yet, waiting..."
+#         sleep 2
+#       done
+#       echo "PostgreSQL failed to become ready"
+#       exit 1
+#
+#   - name: Wait for LocalStack and init SNS/SQS
+#     run: |
+#       for i in {1..30}; do
+#         if curl -sf http://localhost:4566/_localstack/health > /dev/null 2>&1; then break; fi
+#         sleep 2
+#       done
+#       curl -sf http://localhost:4566/_localstack/health || exit 1
+#       export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
+#       export AWS_ENDPOINT_URL=http://localhost:4566
+#       bash scripts/init-localstack-sns-sqs.sh
+

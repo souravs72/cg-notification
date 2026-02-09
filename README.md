@@ -44,9 +44,8 @@ A production-grade, multi-tenant notification platform built with Spring Boot, K
     - [Code Style](#code-style)
     - [Project Structure](#project-structure)
   - [🚢 Deployment](#-deployment)
-    - [Production Checklist](#production-checklist)
-    - [Production Environment Variables](#production-environment-variables)
-    - [Docker Compose Override](#docker-compose-override)
+    - [Local vs AWS](#local-vs-aws)
+    - [Local profile override (optional)](#local-profile-override-optional)
     - [Rebuilding After Code Changes](#rebuilding-after-code-changes)
   - [⚙️ Configuration](#️-configuration)
     - [Environment Variables Reference](#environment-variables-reference)
@@ -325,60 +324,32 @@ cg-notification/
 
 ## 🚢 Deployment
 
-### Production Checklist
+### Local vs AWS
 
-- [ ] Change default database passwords
-- [ ] Use Docker secrets or external secret management (e.g., AWS Secrets Manager, HashiCorp Vault)
-- [ ] Enable HTTPS/TLS
-- [ ] Configure firewall rules
-- [ ] Set up monitoring and alerting (Prometheus, Grafana)
-- [ ] Configure log aggregation (ELK stack, CloudWatch)
-- [ ] Set up backup strategy for PostgreSQL
-- [ ] Enable authentication for admin dashboard
-- [ ] Configure rate limiting
-- [ ] Set up health check monitoring
+- **Local Docker (quick dev loop)**
+  Use `docker compose up -d` with `docker-compose.yml` as shown in the quick start above.
 
-### Production Environment Variables
+- **Local ECS-like + deploy to AWS**
+  Use the ECS‑style compose file and helper scripts described in `README_LOCAL_TESTING.md`:
+  - `docker-compose -f docker-compose.ecs-test.yml up -d --build`
+  - `./scripts/test-health-probes.sh`
+  - `./scripts/deploy-to-aws.sh` (optional, when you’re happy with local tests)
+
+- **Real AWS infrastructure (ALB → ECS → RDS + MSK, WAF, etc.)**
+  Two scripts:
+  - **Full deploy** (first time or infra changes): `./scripts/deploy-trigger.sh` — Terraform → Secrets → Migrations → MSK → Build → ECS → Health check
+  - **App-only deploy** (code changes only): `./scripts/deploy-to-aws.sh` — Build JARs → Docker → ECR → ECS rollout (no Terraform/migrations)
+  - See `terraform/README.md` and `terraform/DEPLOYMENT.md` for details.
+
+### Local profile override (optional)
+
+For local development, if you prefer to run the services with the `local` Spring profile while still using `docker-compose.yml`, you can copy the example override:
 
 ```bash
-# Database
-SPRING_DATASOURCE_URL=jdbc:postgresql://your-db-host:5432/notification_db
-SPRING_DATASOURCE_USERNAME=your-db-user
-SPRING_DATASOURCE_PASSWORD=your-secure-password
-
-# Kafka
-SPRING_KAFKA_BOOTSTRAP_SERVERS=your-kafka-host:9092
-
-# API Keys
-SENDGRID_API_KEY=your-production-sendgrid-key
-WASENDER_API_KEY=your-production-wasender-key
-SENDGRID_FROM_EMAIL=noreply@yourdomain.com
-SENDGRID_FROM_NAME=Your Company
+cp docker-compose.override.yml.example docker-compose.override.yml
 ```
 
-### Docker Compose Override
-
-Create `docker-compose.override.yml` for production:
-
-```yaml
-services:
-  notification-api:
-    environment:
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
-      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
-    restart: unless-stopped
-
-  email-worker:
-    environment:
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
-    restart: unless-stopped
-
-  whatsapp-worker:
-    environment:
-      WASENDER_API_KEY: ${WASENDER_API_KEY}
-    restart: unless-stopped
-```
+This sets `SPRING_PROFILES_ACTIVE=local` for the three services when you run `docker compose up`. It is only intended for local development, not for production.
 
 ### Rebuilding After Code Changes
 
@@ -392,210 +363,15 @@ docker compose build --no-cache
 docker compose up -d
 ```
 
-## ⚙️ Configuration
+## ⚙️ Configuration & Operations
 
-### Environment Variables Reference
+For deeper details on configuration, invariants, and runtime operations (metrics, failure modes, etc.), see:
 
-| Variable                         | Description                   | Example                                           | Required For                      |
-| -------------------------------- | ----------------------------- | ------------------------------------------------- | --------------------------------- |
-| `WASENDER_API_KEY`               | WASender API key for WhatsApp | `your-wasender-api-key`                           | notification-api, whatsapp-worker |
-| `SENDGRID_API_KEY`               | SendGrid API key for emails   | `SG.xxxxx`                                        | email-worker                      |
-| `SENDGRID_FROM_EMAIL`            | Default sender email          | `noreply@yourdomain.com`                          | email-worker                      |
-| `SENDGRID_FROM_NAME`             | Default sender name           | `Your Company`                                    | email-worker                      |
-| `SPRING_DATASOURCE_URL`          | Database URL                  | `jdbc:postgresql://postgres:5432/notification_db` | All services                      |
-| `SPRING_DATASOURCE_USERNAME`     | Database username             | `notification_user`                               | All services                      |
-| `SPRING_DATASOURCE_PASSWORD`     | Database password             | `notification_pass`                               | All services                      |
-| `SPRING_KAFKA_BOOTSTRAP_SERVERS` | Kafka brokers                 | `kafka:29092`                                     | All services                      |
+- `docs/02-invariants-and-rules.md`
+- `docs/03-operations.md`
+- `docs/05-security-and-logging.md`
 
-### WhatsApp Session Configuration
-
-Each site can have its own WhatsApp session. To set up:
-
-1. Navigate to Admin Dashboard → WhatsApp Sessions (http://localhost:8080/admin/sessions)
-2. Create a new session with a unique name
-3. Scan the QR code with WhatsApp
-4. Link the session to your site
-
-**Session Architecture Options:**
-
-- **One Session Per Site**: Each site has its own WhatsApp account (isolated)
-- **Shared Session**: All sites use the same WhatsApp account/number
-- **Hybrid**: Some sites share, others have dedicated sessions
-
-## 🔧 Troubleshooting
-
-### Services Won't Start
-
-```bash
-# Check if ports are available
-netstat -tulpn | grep -E '8080|8081|8083|5433|9092'
-
-# Check Docker logs
-docker compose logs [service-name]
-
-# Verify Docker is running
-docker info
-```
-
-### Database Connection Issues
-
-```bash
-# Connect to database
-docker exec -it notification-postgres psql -U notification_user -d notification_db
-
-# Check tables
-\dt
-
-# Check message logs
-SELECT COUNT(*) FROM message_logs;
-
-# Check sites
-SELECT site_name, is_active FROM frappe_sites;
-```
-
-### Kafka Issues
-
-```bash
-# List topics
-docker exec -it notification-kafka kafka-topics --list --bootstrap-server localhost:9092
-
-# Check consumer groups
-docker exec -it notification-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --list
-
-# View Kafka UI
-open http://localhost:8089
-```
-
-### Worker Not Processing Messages
-
-1. **Check worker logs:**
-
-```bash
-docker compose logs email-worker
-docker compose logs whatsapp-worker
-```
-
-2. **Verify API keys are set:**
-
-```bash
-docker compose config | grep -E "SENDGRID|WASENDER"
-```
-
-3. **Check message logs for errors:**
-
-```bash
-docker exec -it notification-postgres psql -U notification_user -d notification_db \
-  -c "SELECT message_id, status, error_message FROM message_logs WHERE status = 'FAILED' LIMIT 10;"
-```
-
-4. **Verify Kafka consumer groups:**
-
-```bash
-docker exec -it notification-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --list
-```
-
-### WASender API Key Issues
-
-**Problem**: `401 Unauthorized` from WASender API
-
-**Solutions:**
-
-1. Verify API key is set:
-
-   ```bash
-   echo $WASENDER_API_KEY
-   docker exec notification-api env | grep WASENDER
-   ```
-
-2. Set it if missing:
-
-   ```bash
-   export WASENDER_API_KEY=your-actual-key
-   docker restart notification-api
-   ```
-
-3. Verify API key is valid and not expired
-
-### Local Development Issues
-
-**Port Conflicts:**
-
-```bash
-lsof -i :8080  # API
-lsof -i :8081  # Email Worker
-lsof -i :8082  # WhatsApp Worker
-lsof -i :5433  # PostgreSQL
-lsof -i :9092  # Kafka
-```
-
-**Database Connection:**
-
-- Ensure using correct port: `5433` for Docker, `5432` for local PostgreSQL
-- Verify connection string in `application-local.yml` when using `local` profile
-
-**Kafka Connection:**
-
-- Wait for Kafka to be fully ready (can take 30-60 seconds)
-- Check Kafka logs: `docker compose logs kafka`
-
-### Build Failures
-
-```bash
-# Clean and rebuild
-mvn clean install -DskipTests
-
-# Rebuild Docker images
-docker compose build --no-cache
-
-# Check Maven version
-mvn -version  # Should be 3.9+
-```
-
-### Health Check Failures
-
-```bash
-# Check API health
-curl http://localhost:8080/actuator/health
-
-# Check worker health
-curl http://localhost:8081/actuator/health
-curl http://localhost:8083/actuator/health
-
-# View detailed health info
-curl http://localhost:8080/actuator/health | jq
-```
-
-## 📊 Monitoring
-
-### Health Endpoints
-
-- API: `http://localhost:8080/actuator/health`
-- Email Worker: `http://localhost:8081/actuator/health`
-- WhatsApp Worker: `http://localhost:8083/actuator/health`
-
-### Prometheus Metrics
-
-- API: `http://localhost:8080/actuator/prometheus`
-- Email Worker: `http://localhost:8081/actuator/prometheus`
-- WhatsApp Worker: `http://localhost:8083/actuator/prometheus`
-
-### Kafka UI
-
-Access at `http://localhost:8089` to monitor:
-
-- Topics and partitions
-- Consumer groups
-- Message throughput
-- Consumer lag
-
-### Admin Dashboard
-
-Access at `http://localhost:8080/admin/dashboard` for:
-
-- Overall metrics
-- Site-wise statistics
-- Recent messages
-- Success rates
+Those docs cover what must never change, how metrics are interpreted, and where to look when things go wrong.
 
 ## 📚 Documentation
 

@@ -17,3 +17,15 @@ DO $$ BEGIN
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
+
+DO $$ BEGIN
+    CREATE TYPE failure_type AS ENUM ('KAFKA', 'CONSUMER');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE history_source AS ENUM ('API', 'TRIGGER', 'WORKER');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;

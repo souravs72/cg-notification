@@ -1,0 +1,170 @@
+# Docker Compose configuration that mimics ECS Fargate deployment
+# Use this to test locally before deploying to AWS
+# 
+# Usage:
+#   docker-compose -f docker-compose.ecs-test.yml up --build
+#   ./scripts/test-health-probes.sh
+#
+# This setup matches ECS task definitions:
+# - Health checks on /actuator/health/liveness
+# - Readiness checks on /actuator/health/readiness
+# - Same environment variables as ECS
+# - Same port mappings as ECS
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: notification-postgres-ecs-test
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: notification_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_ecs:/var/lib/postgresql/data
+      - ./deployment/init-db.sql:/docker-entrypoint-initdb.d/00-init.sql
+      - ./deployment/migration-add-users.sql:/docker-entrypoint-initdb.d/01-users.sql
+      - ./deployment/migration-add-wasender-config.sql:/docker-entrypoint-initdb.d/02-wasender-config.sql
+      - ./deployment/migration-add-message-fields.sql:/docker-entrypoint-initdb.d/03-message-fields.sql
+      - ./deployment/migration-add-retrying-status.sql:/docker-entrypoint-initdb.d/04-retrying-status.sql
+      - ./deployment/migration-add-failure-type.sql:/docker-entrypoint-initdb.d/05-failure-type.sql
+      - ./deployment/migration-add-failure-type-constraint.sql:/docker-entrypoint-initdb.d/06-failure-type-constraint.sql
+      - ./deployment/migration-add-message-status-history.sql:/docker-entrypoint-initdb.d/07-message-status-history.sql
+      - ./deployment/migration-add-history-source-column.sql:/docker-entrypoint-initdb.d/08-history-source-column.sql
+      - ./deployment/migration-add-status-history-trigger.sql:/docker-entrypoint-initdb.d/09-status-history-trigger.sql
+      - ./deployment/migration-add-email-config.sql:/docker-entrypoint-initdb.d/10-email-config.sql
+      - ./deployment/migration-add-whatsapp-session.sql:/docker-entrypoint-initdb.d/11-whatsapp-session.sql
+      - ./deployment/migration-make-site-id-nullable.sql:/docker-entrypoint-initdb.d/12-site-nullable.sql
+      - ./deployment/migration-add-whatsapp-sessions-table.sql:/docker-entrypoint-initdb.d/13-whatsapp-sessions-table.sql
+      - ./deployment/migration-add-sendgrid-config.sql:/docker-entrypoint-initdb.d/14-sendgrid-config.sql
+      - ./deployment/migration-add-sendgrid-email-config.sql:/docker-entrypoint-initdb.d/15-sendgrid-email-config.sql
+      - ./deployment/migration-add-partial-unique-indexes.sql:/docker-entrypoint-initdb.d/16-partial-unique-indexes.sql
+      - ./deployment/migration-skip-metrics-when-site-id-null.sql:/docker-entrypoint-initdb.d/17-skip-metrics-when-site-id-null.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notification_user -d notification_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: notification-localstack-ecs-test
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: sns,sqs
+      DEBUG: "0"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  init-sns-sqs:
+    image: amazon/aws-cli:latest
+    container_name: notification-init-sns-sqs-ecs-test
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - ./scripts/init-localstack-sns-sqs.sh:/scripts/init-localstack-sns-sqs.sh
+    entrypoint: ["sh", "-c", "chmod +x /scripts/init-localstack-sns-sqs.sh && AWS_ENDPOINT_URL=http://localstack:4566 /scripts/init-localstack-sns-sqs.sh"]
+
+  # Notification API - matches ECS task definition
+  notification-api:
+    build:
+      context: .
+      dockerfile: notification-api/Dockerfile
+    container_name: notification-api-ecs-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init-sns-sqs:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    environment:
+      # Match ECS task definition environment variables (SNS/SQS instead of Kafka)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
+      SPRING_DATASOURCE_USERNAME: notification_user
+      SPRING_DATASOURCE_PASSWORD: notification_pass
+      AWS_REGION: us-east-1
+      AWS_SNS_ENDPOINT: http://localstack:4566
+      AWS_SQS_ENDPOINT: http://localstack:4566
+      SPRING_PROFILES_ACTIVE: prod
+      FILE_UPLOAD_DIR: /app/uploads
+      FILE_UPLOAD_BASE_URL: http://localhost:8080/files
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-test-admin-key}
+      WASENDER_API_KEY: ${WASENDER_API_KEY:-test-wasender-key}
+    volumes:
+      - notification_uploads_ecs:/app/uploads
+    # Note: distroless image doesn't have curl/wget for healthchecks
+    # Health checks are done via test-health-probes.sh script from host
+    # ECS uses /actuator/health/liveness for health checks (ALB target group)
+
+  # Email Worker - matches ECS task definition
+  email-worker:
+    build:
+      context: .
+      dockerfile: email-worker/Dockerfile
+    container_name: email-worker-ecs-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init-sns-sqs:
+        condition: service_completed_successfully
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
+      SPRING_DATASOURCE_USERNAME: notification_user
+      SPRING_DATASOURCE_PASSWORD: notification_pass
+      AWS_REGION: us-east-1
+      AWS_SQS_ENDPOINT: http://localstack:4566
+      MESSAGING_SQS_QUEUE_EMAIL: notifications-email-queue
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: "8081"
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-test-sendgrid-key}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-test@example.com}
+      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-Test Service}
+    # Note: distroless image doesn't have curl/wget for healthchecks
+    # Health checks are done via test-health-probes.sh script from host
+
+  # WhatsApp Worker - matches ECS task definition
+  whatsapp-worker:
+    build:
+      context: .
+      dockerfile: whatsapp-worker/Dockerfile
+    container_name: whatsapp-worker-ecs-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init-sns-sqs:
+        condition: service_completed_successfully
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
+      SPRING_DATASOURCE_USERNAME: notification_user
+      SPRING_DATASOURCE_PASSWORD: notification_pass
+      AWS_REGION: us-east-1
+      AWS_SQS_ENDPOINT: http://localstack:4566
+      MESSAGING_SQS_QUEUE_WHATSAPP: notifications-whatsapp-queue
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: "8082"
+      WASENDER_API_KEY: ${WASENDER_API_KEY:-test-wasender-key}
+    # Note: distroless image doesn't have curl/wget for healthchecks
+    # Health checks are done via test-health-probes.sh script from host
+
+volumes:
+  postgres_data_ecs:
+  notification_uploads_ecs:

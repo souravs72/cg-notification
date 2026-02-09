@@ -15,13 +15,14 @@
     <packaging>jar</packaging>
 
     <name>Email Worker</name>
-    <description>Kafka consumer for email notifications using SendGrid</description>
+    <description>SQS consumer for email notifications using SendGrid</description>
 
     <dependencies>
-        <!-- Spring Boot Starters -->
+        <!-- Required for management server port (even with web-application-type: none) -->
+        <!-- Using servlet-based web for management server (lighter than full webflux) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -43,23 +44,16 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Kafka -->
+        <!-- AWS SQS (replaces Kafka) -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sqs</artifactId>
         </dependency>
 
         <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <exclusions>
-                <!-- Exclude conflicting checker-qual version, use managed version -->
-                <exclusion>
-                    <groupId>org.checkerframework</groupId>
-                    <artifactId>checker-qual</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <!-- SendGrid -->

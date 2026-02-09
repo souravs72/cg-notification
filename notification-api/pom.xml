@@ -15,7 +15,7 @@
     <packaging>jar</packaging>
 
     <name>Notification API</name>
-    <description>REST API Gateway with authentication and Kafka dispatcher</description>
+    <description>REST API Gateway with authentication and SNS/SQS dispatcher</description>
 
     <dependencies>
         <!-- MVC API -->
@@ -24,16 +24,20 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- WebClient (safe with MVC; no reactive server starts) -->
-        <!-- ⚠️ IMPORTANT: When using spring-boot-starter-webflux with spring-boot-starter-web:
-             1. NEVER add @EnableWebFlux annotation
-             2. NEVER define a reactive server (NettyReactiveWebServerFactory, etc.)
-             3. ALWAYS exclude WebFluxAutoConfiguration in @SpringBootApplication
-             This dependency is ONLY for WebClient HTTP client functionality, not reactive server.
-        -->
+        <!-- WebClient for outbound HTTP only; no reactive server (exclude reactor-netty server) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-reactor-netty</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor.netty</groupId>
+            <artifactId>reactor-netty</artifactId>
         </dependency>
 
         <!-- View + Persistence -->
@@ -74,10 +78,24 @@
             <artifactId>zipkin-reporter-brave</artifactId>
         </dependency>
 
-        <!-- Kafka -->
+        <!-- AWS SNS/SQS (replaces Kafka) -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sns</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sqs</artifactId>
+        </dependency>
+
+        <!-- Distributed HTTP Sessions (ECS multi-task safe) -->
+        <dependency>
+            <groupId>org.springframework.session</groupId>
+            <artifactId>spring-session-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
         <!-- Database -->
@@ -137,7 +155,7 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- OpenAPI -->
+        <!-- OpenAPI: 2.4.0 works with Spring Boot 3.3.x; 2.5.0+ requires Spring 6.2 (ApiVersionStrategy) -->
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
@@ -165,11 +183,6 @@
             <artifactId>mockito-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka-test</artifactId>
-            <scope>test</scope>
-        </dependency>
         <!-- Testcontainers -->
         <dependency>
             <groupId>org.testcontainers</groupId>
@@ -184,11 +197,6 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>kafka</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -211,6 +219,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.clapgrow.notification.api.NotificationApiApplication</mainClass>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>
@@ -223,6 +234,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <argLine>-XX:+EnableDynamicAgentLoading</argLine>
                     <excludes>
                         <exclude>**/QRCodeRenderingTest.java</exclude>
                     </excludes>
@@ -232,11 +244,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
-                    <!-- Skip integration tests based on skipITs property -->
-                    <!-- 'skip' is the correct parameter for Failsafe plugin (not skipTests) -->
-                    <!-- skipTests is for Surefire (unit tests), skip is for Failsafe (integration tests) -->
-                    <!-- Default: true (skipped in local dev), CI can override with -DskipITs=false -->
                     <skip>${skipITs}</skip>
+                    <!-- Use classes directory instead of repackaged JAR so main classes are on classpath (fat jar has BOOT-INF/classes) -->
+                    <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+                    <!-- Single fork: all ITs share one JVM and one Testcontainers Postgres (faster, avoids connection refused on fork teardown) -->
+                    <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
                 </configuration>
             </plugin>
         </plugins>

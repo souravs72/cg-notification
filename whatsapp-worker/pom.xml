@@ -15,14 +15,10 @@
     <packaging>jar</packaging>
 
     <name>WhatsApp Worker</name>
-    <description>Kafka consumer for WhatsApp notifications using WASender</description>
+    <description>SQS consumer for WhatsApp notifications using WASender</description>
 
     <dependencies>
-        <!-- Spring Boot Starters -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
-        </dependency>
+        <!-- Required for servlet-based REST API and actuator endpoints -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -47,23 +43,16 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Kafka -->
+        <!-- AWS SQS (replaces Kafka) -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sqs</artifactId>
         </dependency>
 
         <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <exclusions>
-                <!-- Exclude conflicting checker-qual version, use managed version -->
-                <exclusion>
-                    <groupId>org.checkerframework</groupId>
-                    <artifactId>checker-qual</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <!-- HTTP Client for WASender (minimal dependency, no reactive server) -->
