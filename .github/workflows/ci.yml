@@ -233,7 +233,7 @@ jobs:
 
       - name: Test Docker image
         run: |
-          docker run --rm cg-notification-${{ matrix.service }}:test java -version
+          docker run --rm --entrypoint java cg-notification-${{ matrix.service }}:test -version
 
   lint:
     name: Lint
