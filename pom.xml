@@ -47,7 +47,7 @@
         <skipITs>true</skipITs>
         <!-- Dependency version alignment -->
         <guava.version>33.5.0-jre</guava.version>
-        <errorprone.version>2.46.0</errorprone.version>
+        <errorprone.version>2.47.0</errorprone.version>
         <checkerqual.version>3.53.0</checkerqual.version>
         <j2objc.version>3.1</j2objc.version>
         <spring-cloud-aws.version>3.2.0</spring-cloud-aws.version>
