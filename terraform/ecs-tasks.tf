@@ -1,14 +1,9 @@
 # Local values for common configuration
-# msk_cluster_arn, msk_topic_arn, msk_group_arn are used in IAM (iam.tf) for least-privilege MSK permissions.
 locals {
-  msk_bootstrap_brokers = aws_msk_serverless_cluster.main.bootstrap_brokers_sasl_iam
-  msk_cluster_arn      = aws_msk_serverless_cluster.main.arn
-  msk_topic_arn        = "${replace(aws_msk_serverless_cluster.main.arn, ":cluster/", ":topic/")}/*"
-  msk_group_arn        = "${replace(aws_msk_serverless_cluster.main.arn, ":cluster/", ":group/")}/*"
-  rds_endpoint         = aws_db_instance.main.endpoint
-  rds_proxy_endpoint   = aws_db_proxy.main.endpoint
-  aws_region           = var.aws_region
-  account_id           = data.aws_caller_identity.current.account_id
+  rds_endpoint       = aws_db_instance.main.endpoint
+  rds_proxy_endpoint = aws_db_proxy.main.endpoint
+  aws_region         = var.aws_region
+  account_id         = data.aws_caller_identity.current.account_id
 }
 
 # Task Definition for notification-api
@@ -17,7 +12,7 @@ resource "aws_ecs_task_definition" "api" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "1024"
-  memory                   = "4096"  # 4GB - OOM occurred at 2GB and 3GB during Kafka/consumer retry batches (100+ msgs)
+  memory                   = "4096"  # 4GB - sufficient for API + SNS/SQS and retry batches
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.api_task.arn
 
@@ -44,12 +39,25 @@ resource "aws_ecs_task_definition" "api" {
           value = var.rds_master_username
         },
         {
-          name  = "SPRING_KAFKA_BOOTSTRAP_SERVERS"
-          value = local.msk_bootstrap_brokers
+          name  = "AWS_REGION"
+          value = local.aws_region
+        },
+        # Use topic ARN so SNS client does not call CreateTopic (avoids IAM CreateTopic requirement)
+        {
+          name  = "MESSAGING_SNS_TOPIC_EMAIL"
+          value = aws_sns_topic.email.arn
         },
         {
-          name  = "SPRING_KAFKA_MSK_IAM_ENABLED"
-          value = "true"
+          name  = "MESSAGING_SNS_TOPIC_WHATSAPP"
+          value = aws_sns_topic.whatsapp.arn
+        },
+        {
+          name  = "MESSAGING_SQS_QUEUE_EMAIL_DLQ"
+          value = aws_sqs_queue.email_dlq.name
+        },
+        {
+          name  = "MESSAGING_SQS_QUEUE_WHATSAPP_DLQ"
+          value = aws_sqs_queue.whatsapp_dlq.name
         },
         {
           name  = "SPRING_PROFILES_ACTIVE"
@@ -154,20 +162,16 @@ resource "aws_ecs_task_definition" "email_worker" {
           value = var.rds_master_username
         },
         {
-          name  = "SPRING_KAFKA_BOOTSTRAP_SERVERS"
-          value = local.msk_bootstrap_brokers
+          name  = "AWS_REGION"
+          value = local.aws_region
         },
         {
-          name  = "SPRING_KAFKA_MSK_IAM_ENABLED"
-          value = "true"
+          name  = "MESSAGING_SQS_QUEUE_EMAIL"
+          value = aws_sqs_queue.email.name
         },
         {
           name  = "SPRING_PROFILES_ACTIVE"
           value = "prod"
-        },
-        {
-          name  = "KAFKA_CONSUMER_GROUP_ID"
-          value = "email-worker-${var.environment}"
         },
         {
           name  = "SERVER_PORT"
@@ -247,20 +251,16 @@ resource "aws_ecs_task_definition" "whatsapp_worker" {
           value = var.rds_master_username
         },
         {
-          name  = "SPRING_KAFKA_BOOTSTRAP_SERVERS"
-          value = local.msk_bootstrap_brokers
+          name  = "AWS_REGION"
+          value = local.aws_region
         },
         {
-          name  = "SPRING_KAFKA_MSK_IAM_ENABLED"
-          value = "true"
+          name  = "MESSAGING_SQS_QUEUE_WHATSAPP"
+          value = aws_sqs_queue.whatsapp.name
         },
         {
           name  = "SPRING_PROFILES_ACTIVE"
           value = "prod"
-        },
-        {
-          name  = "KAFKA_CONSUMER_GROUP_ID"
-          value = "whatsapp-worker-${var.environment}"
         },
         {
           name  = "SERVER_PORT"

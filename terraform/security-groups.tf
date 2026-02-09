@@ -184,47 +184,6 @@ resource "aws_security_group" "rds_proxy" {
   }
 }
 
-# Security group for MSK
-resource "aws_security_group" "msk" {
-  name        = "cg-notification-msk-sg"
-  description = "Security group for cg-notification MSK"
-  vpc_id      = aws_vpc.main.id
-
-  # MSK Serverless with IAM uses port 9098 for client connections
-  ingress {
-    description     = "Kafka IAM auth from ECS tasks"
-    from_port       = 9098
-    to_port         = 9098
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
-  }
-
-  # CRITICAL: Ephemeral ports required for client ↔ broker connections (NOT internode)
-  # MSK Serverless brokers are managed by AWS; internode traffic is AWS-managed
-  # Required for: Kafka clients open multiple outbound TCP connections during rebalancing,
-  # fetch/produce pipelines, and connection churn
-  # Without this, consumers will randomly fail during rebalancing
-  ingress {
-    description     = "Kafka ephemeral ports from ECS tasks (client-broker connections)"
-    from_port       = 1024
-    to_port         = 65535
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
-  }
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "cg-notification-msk-sg"
-  }
-}
-
 # Allow ALB to access ECS tasks on port 8080
 resource "aws_security_group_rule" "ecs_from_alb" {
   type                     = "ingress"

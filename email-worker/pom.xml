@@ -15,7 +15,7 @@
     <packaging>jar</packaging>
 
     <name>Email Worker</name>
-    <description>Kafka consumer for email notifications using SendGrid</description>
+    <description>SQS consumer for email notifications using SendGrid</description>
 
     <dependencies>
         <!-- Required for management server port (even with web-application-type: none) -->
@@ -44,14 +44,10 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Kafka -->
+        <!-- AWS SQS (replaces Kafka) -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.msk</groupId>
-            <artifactId>aws-msk-iam-auth</artifactId>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sqs</artifactId>
         </dependency>
 
         <!-- Database -->

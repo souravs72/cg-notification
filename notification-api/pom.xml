@@ -15,7 +15,7 @@
     <packaging>jar</packaging>
 
     <name>Notification API</name>
-    <description>REST API Gateway with authentication and Kafka dispatcher</description>
+    <description>REST API Gateway with authentication and SNS/SQS dispatcher</description>
 
     <dependencies>
         <!-- MVC API -->
@@ -78,14 +78,14 @@
             <artifactId>zipkin-reporter-brave</artifactId>
         </dependency>
 
-        <!-- Kafka -->
+        <!-- AWS SNS/SQS (replaces Kafka) -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sns</artifactId>
         </dependency>
         <dependency>
-            <groupId>software.amazon.msk</groupId>
-            <artifactId>aws-msk-iam-auth</artifactId>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sqs</artifactId>
         </dependency>
 
         <!-- Distributed HTTP Sessions (ECS multi-task safe) -->
@@ -183,11 +183,6 @@
             <artifactId>mockito-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka-test</artifactId>
-            <scope>test</scope>
-        </dependency>
         <!-- Testcontainers -->
         <dependency>
             <groupId>org.testcontainers</groupId>
@@ -202,11 +197,6 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>kafka</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

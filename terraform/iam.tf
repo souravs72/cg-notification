@@ -59,7 +59,7 @@ resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
 
 # Separate task roles for each service (security best practice - limits blast radius)
 
-# 1. API Task Role (Kafka Produce + S3)
+# 1. API Task Role (SNS/SQS + S3)
 resource "aws_iam_role" "api_task" {
   name = "cg-api-task-role"
 
@@ -81,32 +81,22 @@ resource "aws_iam_role" "api_task" {
   }
 }
 
-resource "aws_iam_role_policy" "api_task_msk_s3" {
-  name = "MSK-S3-Access"
+resource "aws_iam_role_policy" "api_task_sns_sqs_s3" {
+  name = "SNS-SQS-S3-Access"
   role = aws_iam_role.api_task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        # Cluster-level: Connect, DescribeCluster, WriteDataIdempotently (idempotent producer).
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:Connect",
-          "kafka-cluster:DescribeCluster",
-          "kafka-cluster:WriteDataIdempotently"
-        ]
-        Resource = [local.msk_cluster_arn]
+        Effect   = "Allow"
+        Action   = ["sns:Publish", "sns:PublishBatch", "sns:CreateTopic", "sns:GetTopicAttributes"]
+        Resource = [aws_sns_topic.email.arn, aws_sns_topic.whatsapp.arn]
       },
       {
-        # Topic-level: CreateTopic, DescribeTopic, WriteData (producer).
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:CreateTopic",
-          "kafka-cluster:DescribeTopic",
-          "kafka-cluster:WriteData"
-        ]
-        Resource = [local.msk_topic_arn]
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = [aws_sqs_queue.email_dlq.arn, aws_sqs_queue.whatsapp_dlq.arn]
       },
       {
         Effect = "Allow"
@@ -118,9 +108,6 @@ resource "aws_iam_role_policy" "api_task_msk_s3" {
         Resource = "${aws_s3_bucket.uploads.arn}/*"
       },
       {
-        # CRITICAL: KMS permissions required for S3 SSE-KMS encryption
-        # S3 uses KMS on behalf of the caller, so task role needs KMS permissions
-        # Without this, PutObject will fail with AccessDenied: kms:GenerateDataKey
         Effect = "Allow"
         Action = [
           "kms:Decrypt",
@@ -133,7 +120,7 @@ resource "aws_iam_role_policy" "api_task_msk_s3" {
   })
 }
 
-# 2. Email Worker Task Role (Kafka Consume only)
+# 2. Email Worker Task Role (SQS consume)
 resource "aws_iam_role" "email_worker_task" {
   name = "cg-email-worker-task-role"
 
@@ -155,42 +142,35 @@ resource "aws_iam_role" "email_worker_task" {
   }
 }
 
-resource "aws_iam_role_policy" "email_worker_task_msk" {
-  name = "MSK-Access"
+resource "aws_iam_role_policy" "email_worker_task_sqs" {
+  name = "SQS-Access"
   role = aws_iam_role.email_worker_task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # Resolve queue by name (GetQueueUrl by name requires Resource "*" per AWS)
       {
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:Connect",
-          "kafka-cluster:DescribeCluster"
-        ]
-        Resource = [local.msk_cluster_arn]
+        Effect   = "Allow"
+        Action   = ["sqs:GetQueueUrl", "sqs:GetQueueAttributes"]
+        Resource = "*"
       },
       {
         Effect = "Allow"
         Action = [
-          "kafka-cluster:DescribeTopic",
-          "kafka-cluster:ReadData"
+          "sqs:CreateQueue",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:ChangeMessageVisibility"
         ]
-        Resource = [local.msk_topic_arn]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:DescribeGroup",
-          "kafka-cluster:AlterGroup"
-        ]
-        Resource = [local.msk_group_arn]
+        Resource = [aws_sqs_queue.email.arn]
       }
     ]
   })
 }
 
-# 3. WhatsApp Worker Task Role (Kafka Consume only)
+# 3. WhatsApp Worker Task Role (SQS consume)
 resource "aws_iam_role" "whatsapp_worker_task" {
   name = "cg-whatsapp-worker-task-role"
 
@@ -212,36 +192,29 @@ resource "aws_iam_role" "whatsapp_worker_task" {
   }
 }
 
-resource "aws_iam_role_policy" "whatsapp_worker_task_msk" {
-  name = "MSK-Access"
+resource "aws_iam_role_policy" "whatsapp_worker_task_sqs" {
+  name = "SQS-Access"
   role = aws_iam_role.whatsapp_worker_task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # Resolve queue by name (GetQueueUrl by name requires Resource "*" per AWS)
       {
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:Connect",
-          "kafka-cluster:DescribeCluster"
-        ]
-        Resource = [local.msk_cluster_arn]
+        Effect   = "Allow"
+        Action   = ["sqs:GetQueueUrl", "sqs:GetQueueAttributes"]
+        Resource = "*"
       },
       {
         Effect = "Allow"
         Action = [
-          "kafka-cluster:DescribeTopic",
-          "kafka-cluster:ReadData"
+          "sqs:CreateQueue",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:ChangeMessageVisibility"
         ]
-        Resource = [local.msk_topic_arn]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:DescribeGroup",
-          "kafka-cluster:AlterGroup"
-        ]
-        Resource = [local.msk_group_arn]
+        Resource = [aws_sqs_queue.whatsapp.arn]
       }
     ]
   })

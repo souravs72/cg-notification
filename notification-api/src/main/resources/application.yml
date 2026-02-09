@@ -41,20 +41,16 @@ spring:
         connection:
           provider_disables_autocommit: true
 
-  kafka:
-    # IMPORTANT:
-    # Default matches Docker internal Kafka listener (kafka:29092).
-    # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
-    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
-    # Enable when using MSK Serverless (SASL/IAM on 9098). Set SPRING_KAFKA_MSK_IAM_ENABLED=true in ECS.
-    msk-iam-enabled: ${SPRING_KAFKA_MSK_IAM_ENABLED:false}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      acks: all
-      retries: 3
-      max-in-flight-requests-per-connection: 1
-      enable-idempotence: true
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
+      credentials:
+        use-default-aws-credentials-chain: true
+      sns:
+        endpoint: ${AWS_SNS_ENDPOINT:}
+      sqs:
+        endpoint: ${AWS_SQS_ENDPOINT:}
 
   servlet:
     multipart:
@@ -153,11 +149,25 @@ cors:
   allowed-headers: "${CORS_ALLOWED_HEADERS:*}"
   max-age: ${CORS_MAX_AGE:3600}
 
+messaging:
+  backend: ${MESSAGING_BACKEND:sns}
+  sns:
+    topics:
+      email: ${MESSAGING_SNS_TOPIC_EMAIL:notifications-email}
+      whatsapp: ${MESSAGING_SNS_TOPIC_WHATSAPP:notifications-whatsapp}
+  sqs:
+    queues:
+      email: ${MESSAGING_SQS_QUEUE_EMAIL:notifications-email-queue}
+      whatsapp: ${MESSAGING_SQS_QUEUE_WHATSAPP:notifications-whatsapp-queue}
+      email-dlq: ${MESSAGING_SQS_QUEUE_EMAIL_DLQ:notifications-email-dlq}
+      whatsapp-dlq: ${MESSAGING_SQS_QUEUE_WHATSAPP_DLQ:notifications-whatsapp-dlq}
+
 logging:
   level:
     root: ${LOG_LEVEL_ROOT:INFO}
     com.clapgrow.notification: ${LOG_LEVEL_APP:INFO}
-    org.springframework.kafka: INFO
+    io.awspring.cloud: WARN
+    software.amazon.awssdk: WARN
     org.springframework.security: WARN
     org.hibernate.SQL: ${LOG_SQL:false}
     org.hibernate.type.descriptor.sql.BasicBinder: ${LOG_SQL_PARAMS:false}

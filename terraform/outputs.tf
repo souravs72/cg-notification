@@ -20,12 +20,6 @@ output "rds_address" {
   value       = aws_db_instance.main.address
 }
 
-output "msk_bootstrap_brokers" {
-  description = "MSK Serverless bootstrap brokers (SASL/IAM)"
-  value       = aws_msk_serverless_cluster.main.bootstrap_brokers_sasl_iam
-  sensitive   = true
-}
-
 output "ecs_cluster_name" {
   description = "ECS cluster name"
   value       = aws_ecs_cluster.main.name
@@ -59,11 +53,6 @@ output "ecr_email_worker_repository_url" {
 output "ecr_whatsapp_worker_repository_url" {
   description = "ECR repository URL for whatsapp-worker"
   value       = aws_ecr_repository.whatsapp_worker.repository_url
-}
-
-output "ecr_kafka_admin_repository_url" {
-  description = "ECR repository URL for kafka-admin (MSK topic creation)"
-  value       = aws_ecr_repository.kafka_admin.repository_url
 }
 
 output "s3_bucket_name" {

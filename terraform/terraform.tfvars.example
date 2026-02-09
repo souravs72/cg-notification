@@ -25,9 +25,6 @@ rds_master_username    = "notification_user"
 # Suggested: add region + account hint
 s3_bucket_name = "cg-notification-uploads-ap-south-1-YOUR-SUFFIX"
 
-# MSK Configuration
-msk_cluster_name = "cg-notification-msk"
-
 # ECS Configuration
 ecs_cluster_name = "cg-notification-cluster"
 

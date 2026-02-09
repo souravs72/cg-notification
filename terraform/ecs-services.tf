@@ -29,7 +29,6 @@ resource "aws_ecs_service" "api" {
     aws_lb_listener.http,
     null_resource.alb_listeners,
     aws_db_instance.main,
-    aws_msk_serverless_cluster.main,
   ]
 
   tags = {
@@ -58,7 +57,6 @@ resource "aws_ecs_service" "email_worker" {
 
   depends_on = [
     aws_db_instance.main,
-    aws_msk_serverless_cluster.main
   ]
 
   tags = {
@@ -97,7 +95,6 @@ resource "aws_ecs_service" "whatsapp_worker" {
 
   depends_on = [
     aws_db_instance.main,
-    aws_msk_serverless_cluster.main
   ]
 
   tags = {

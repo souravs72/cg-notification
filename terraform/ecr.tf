@@ -138,37 +138,4 @@ resource "aws_ecr_lifecycle_policy" "migration" {
   })
 }
 
-# ECR Repository for kafka-admin (MSK topic creation)
-resource "aws_ecr_repository" "kafka_admin" {
-  name                 = "cg-notification/kafka-admin"
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name = "cg-notification-kafka-admin"
-  }
-}
-
-resource "aws_ecr_lifecycle_policy" "kafka_admin" {
-  repository = aws_ecr_repository.kafka_admin.name
-
-  policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep last 5 images"
-      selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 5
-      }
-      action = {
-        type = "expire"
-      }
-    }]
-  })
-}
 

@@ -141,26 +141,6 @@ fi
 
 echo ""
 echo "=========================================="
-echo "Testing Kafka Connectivity"
-echo "=========================================="
-
-# Test Kafka health (should be included in readiness check)
-if [ "$JQ_AVAILABLE" = true ]; then
-    API_READINESS_FULL=$(curl -s "$BASE_URL_API/actuator/health/readiness")
-    KAFKA_STATUS=$(echo "$API_READINESS_FULL" | jq -r '.components.kafka.status' 2>/dev/null || echo "unknown")
-    
-    if [ "$KAFKA_STATUS" = "UP" ]; then
-        echo -e "${GREEN}✓${NC} Kafka connectivity: UP"
-    else
-        echo -e "${YELLOW}⚠${NC} Kafka connectivity: $KAFKA_STATUS (may not be exposed in health check)"
-    fi
-else
-    # Without jq, assume Kafka is OK if readiness check passes
-    echo -e "${GREEN}✓${NC} Kafka connectivity: UP (readiness check passed)"
-fi
-
-echo ""
-echo "=========================================="
 echo "Summary"
 echo "=========================================="
 echo -e "${GREEN}All health checks passed!${NC}"

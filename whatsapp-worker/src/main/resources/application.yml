@@ -28,20 +28,22 @@ spring:
         connection:
           provider_disables_autocommit: true
 
-  kafka:
-    # IMPORTANT:
-    # Default matches Docker internal Kafka listener (kafka:29092).
-    # Production MUST override via SPRING_KAFKA_BOOTSTRAP_SERVERS.
-    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
-    msk-iam-enabled: ${SPRING_KAFKA_MSK_IAM_ENABLED:false}
-    listener:
-      shutdown-timeout: ${KAFKA_LISTENER_SHUTDOWN_TIMEOUT:30s}
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
+      credentials:
+        use-default-aws-credentials-chain: true
+      sqs:
+        endpoint: ${AWS_SQS_ENDPOINT:}
+      sqs.listener:
+        max-concurrent-messages: ${SQS_MAX_CONCURRENT_MESSAGES:10}
+        max-messages-per-poll: ${SQS_MAX_MESSAGES_PER_POLL:10}
 
-kafka:
-  consumer:
-    group-id: ${KAFKA_CONSUMER_GROUP_ID:whatsapp-worker-group}
-    environment-prefix: ${KAFKA_CONSUMER_ENV_PREFIX:}
-    concurrency: ${KAFKA_CONSUMER_CONCURRENCY:3}
+messaging:
+  sqs:
+    queues:
+      whatsapp: ${MESSAGING_SQS_QUEUE_WHATSAPP:notifications-whatsapp-queue}
 
 server:
   port: ${SERVER_PORT:8082}  # REST API port for session management endpoints
@@ -74,4 +76,5 @@ logging:
   level:
     root: ${LOG_LEVEL_ROOT:INFO}
     com.clapgrow.notification: ${LOG_LEVEL_APP:INFO}
-    org.springframework.kafka: INFO
+    io.awspring.cloud: WARN
+    software.amazon.awssdk: WARN

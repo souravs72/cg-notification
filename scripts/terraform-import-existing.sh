@@ -35,7 +35,6 @@ terraform import -input=false 'aws_ecr_repository.api' 'cg-notification/api' 2>/
 terraform import -input=false 'aws_ecr_repository.email_worker' 'cg-notification/email-worker' 2>/dev/null || true
 terraform import -input=false 'aws_ecr_repository.whatsapp_worker' 'cg-notification/whatsapp-worker' 2>/dev/null || true
 terraform import -input=false 'aws_ecr_repository.migration' 'cg-notification/migration' 2>/dev/null || true
-terraform import -input=false 'aws_ecr_repository.kafka_admin' 'cg-notification/kafka-admin' 2>/dev/null || true
 
 # CloudWatch log groups
 terraform import -input=false 'aws_cloudwatch_log_group.api' '/ecs/cg-notification-api' 2>/dev/null || true
@@ -91,12 +90,6 @@ terraform import -input=false 'aws_db_proxy.main' 'cg-notification-db-proxy' 2>/
 
 # KMS alias S3 (alias may exist pointing to pre-created key)
 terraform import -input=false 'aws_kms_alias.s3' 'alias/cg-notification-s3' 2>/dev/null || true
-
-# MSK Serverless - need ARN
-MSK_ARN=$(aws kafka list-clusters-v2 --region "$AWS_REGION" --query "ClusterInfoList[?ClusterName=='cg-notification-msk'].ClusterArn" --output text 2>/dev/null)
-if [ -n "$MSK_ARN" ] && [ "$MSK_ARN" != "None" ]; then
-  terraform import -input=false 'aws_msk_serverless_cluster.main' "$MSK_ARN" 2>/dev/null || true
-fi
 
 # ECS services (format: cluster-name/service-name)
 terraform import -input=false 'aws_ecs_service.api' 'cg-notification-cluster/notification-api-service' 2>/dev/null || true

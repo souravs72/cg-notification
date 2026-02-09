@@ -16,7 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -39,13 +38,7 @@ public class NotificationService {
     @Autowired
     private NotificationService self;
 
-    @Value("${spring.kafka.topics.email:notifications-email}")
-    private String emailTopic;
-    
-    @Value("${spring.kafka.topics.whatsapp:notifications-whatsapp}")
-    private String whatsappTopic;
-    
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final SnsNotificationSender snsNotificationSender;
     private final MessageLogRepository messageLogRepository;
     private final FrappeSiteRepository siteRepository;
     private final ObjectMapper objectMapper;
@@ -75,47 +68,33 @@ public class NotificationService {
         MessageLog messageLog = createMessageLog(messageId, request, site);
         messageLogRepository.save(messageLog);
 
-        // Prepare Kafka payload BEFORE transaction commits
-        String topic = getTopicForChannel(request.getChannel());
+        // Prepare payload BEFORE transaction commits
         String payload = serializeNotificationPayload(messageId, request, site, session);
         
-        // ⚠️ METRIC SEMANTICS: This metric means "accepted by API", not "published to Kafka"
-        // The message is accepted and persisted to DB, but Kafka publish happens asynchronously
-        // after transaction commit. Kafka publish latency is tracked separately.
+        // ⚠️ METRIC SEMANTICS: This metric means "accepted by API", not "published to SNS"
+        // The message is accepted and persisted to DB; SNS publish happens asynchronously after transaction commit.
         metricsService.recordMessageSent(request.getChannel());
         
-        // Register synchronization to send Kafka AFTER transaction commits
-        // This ensures Kafka send happens outside the DB transaction boundary
-        Timer.Sample kafkaPublishSample = Timer.start();
+        // Register synchronization to send to SNS AFTER transaction commits
+        Timer.Sample publishSample = Timer.start();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                // Kafka send happens AFTER successful DB commit
-                kafkaTemplate.send(topic, messageId, payload)
-                    .whenComplete((result, ex) -> {
-                        // Record Kafka publish latency
-                        metricsService.recordKafkaPublishLatency(request.getChannel(), kafkaPublishSample);
-                        
-                        if (ex != null) {
-                            log.error("Failed to publish message {} to Kafka topic {} after commit", messageId, topic, ex);
-                            // Update message status to FAILED for reconciliation
-                            // Metrics will be emitted automatically by MessageStatusHistoryService.appendStatusChange()
-                            // This runs in a separate transaction to avoid conflicts
-                            try {
-                                // Update message status to FAILED for reconciliation
-                                // KafkaRetryService will automatically retry these messages
-                                // TODO: Implement dead-letter topic for permanent failures after max retries
-                                // TODO: Add reconciliation job to check for orphaned messages
-                                updateMessageLogStatus(messageId, DeliveryStatus.FAILED, 
-                                    "Kafka publish failed: " + (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName()),
-                                    com.clapgrow.notification.api.enums.FailureType.KAFKA);
-                            } catch (Exception updateEx) {
-                                log.error("Failed to update message log status after Kafka failure for messageId={}", messageId, updateEx);
-                            }
-                        } else {
-                            log.info("Published message {} to Kafka topic {} after commit", messageId, topic);
-                        }
-                    });
+                try {
+                    snsNotificationSender.publish(request.getChannel(), messageId, payload);
+                    metricsService.recordMessagingPublishLatency(request.getChannel(), publishSample);
+                    log.info("Published message {} to SNS after commit", messageId);
+                } catch (Exception ex) {
+                    log.error("Failed to publish message {} to SNS after commit", messageId, ex);
+                    metricsService.recordMessagingPublishLatency(request.getChannel(), publishSample);
+                    try {
+                        updateMessageLogStatus(messageId, DeliveryStatus.FAILED,
+                            "SNS publish failed: " + (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName()),
+                            com.clapgrow.notification.api.enums.FailureType.KAFKA);
+                    } catch (Exception updateEx) {
+                        log.error("Failed to update message log status after SNS failure for messageId={}", messageId, updateEx);
+                    }
+                }
             }
         });
 
@@ -311,14 +290,6 @@ public class NotificationService {
             log.warn("Could not get user's default WhatsApp session from database: {}", e.getMessage());
         }
         return null;
-    }
-
-    private String getTopicForChannel(NotificationChannel channel) {
-        return switch (channel) {
-            case EMAIL -> emailTopic;
-            case WHATSAPP -> whatsappTopic;
-            default -> throw new IllegalArgumentException("Unsupported channel: " + channel);
-        };
     }
 
     /**

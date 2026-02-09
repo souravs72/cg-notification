@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Complete deployment script: Terraform → Secrets → Migrations → MSK → Build → Deploy → Wait → Test
+# Complete deployment script: Terraform → Secrets → Migrations → Build → Deploy → Wait → Test (SNS/SQS messaging)
 # Run from project root. Handles everything from infrastructure to health checks.
 #
 # Usage:
@@ -338,12 +338,6 @@ main() {
       "aws rds describe-db-instances --db-instance-identifier cg-notification-db --region $AWS_REGION --query 'DBInstances[0].DBInstanceStatus' --output text | grep -q available" \
       600 15 || log_warn "RDS may still be initializing"
     
-    log_info "Waiting for MSK cluster..."
-    # MSK Serverless clusters are simpler - just check if cluster exists and is accessible
-    wait_for_resource "MSK" \
-      "terraform -chdir=\"$TERRAFORM_DIR\" output -raw msk_bootstrap_brokers > /dev/null 2>&1" \
-      600 30 || log_warn "MSK may still be initializing"
-    
     log_info "Waiting for Redis cluster..."
     wait_for_resource "Redis" \
       "aws elasticache describe-replication-groups --replication-group-id cg-notification-redis --region $AWS_REGION --query 'ReplicationGroups[0].Status' --output text | grep -q available" \
@@ -393,19 +387,6 @@ main() {
     else
       log_warn "run-migrations-ecs.sh not found, skipping"
     fi
-  fi
-  echo ""
-  
-  # ===== MSK TOPICS =====
-  log_section "📨 Creating MSK Topics"
-  if [ -f "$SCRIPT_DIR/create-msk-topics.sh" ]; then
-    TERRAFORM_DIR="$TERRAFORM_DIR" "$SCRIPT_DIR/create-msk-topics.sh" || {
-      log_error "MSK topic creation failed"
-      exit 1
-    }
-    log_success "MSK topics created"
-  else
-    log_warn "create-msk-topics.sh not found, skipping"
   fi
   echo ""
   
@@ -539,7 +520,7 @@ main() {
   echo "  • Infrastructure: $( [ "$SKIP_TERRAFORM" = false ] && echo "Deployed" || echo "Skipped" )"
   echo "  • Secrets: $( [ "$SKIP_SECRETS" = false ] && echo "Injected" || echo "Skipped" )"
   echo "  • Migrations: Complete"
-  echo "  • MSK Topics: Created"
+  echo "  • Messaging: SNS/SQS (created by Terraform)"
   echo "  • Docker Images: Built and Pushed (tag: $IMAGE_TAG)"
   echo "  • ECS Services: Deployed and Stable"
   echo "  • Health Checks: Passed"

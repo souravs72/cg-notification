@@ -15,7 +15,7 @@
     <packaging>jar</packaging>
 
     <name>WhatsApp Worker</name>
-    <description>Kafka consumer for WhatsApp notifications using WASender</description>
+    <description>SQS consumer for WhatsApp notifications using WASender</description>
 
     <dependencies>
         <!-- Required for servlet-based REST API and actuator endpoints -->
@@ -43,14 +43,10 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Kafka -->
+        <!-- AWS SQS (replaces Kafka) -->
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.msk</groupId>
-            <artifactId>aws-msk-iam-auth</artifactId>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-sqs</artifactId>
         </dependency>
 
         <!-- Database -->

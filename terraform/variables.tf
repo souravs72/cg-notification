@@ -82,10 +82,17 @@ variable "s3_bucket_name" {
   default     = ""
 }
 
-variable "msk_cluster_name" {
-  description = "MSK Serverless cluster name"
+variable "app_name" {
+  description = "Application prefix for resource names (SNS, SQS)"
   type        = string
-  default     = "cg-notification-msk"
+  default     = "cg-notification"
+}
+
+# Deprecated: kept so existing terraform.tfvars with msk_cluster_name don't warn (no longer used after SNS/SQS migration)
+variable "msk_cluster_name" {
+  description = "Deprecated - unused after SNS/SQS migration"
+  type        = string
+  default     = ""
 }
 
 variable "ecs_cluster_name" {
@@ -113,9 +120,9 @@ variable "alb_deletion_protection" {
 }
 
 variable "cloudwatch_log_retention_days" {
-  description = "CloudWatch log retention in days for ECS service logs (prevents slow, silent cost creep)"
+  description = "CloudWatch log retention in days for ECS service logs (7-14 recommended for cost)"
   type        = number
-  default     = 14
+  default     = 7
 }
 
 variable "acm_certificate_arn" {

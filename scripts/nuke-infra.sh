@@ -140,22 +140,12 @@ aws ecr describe-repositories \
 done
 
 # -------------------------------------------------------------------
-# MSK TOPICS
-# -------------------------------------------------------------------
-echo "💣 Deleting MSK topics..."
-if [ -x "$SCRIPT_DIR/delete-msk-topics.sh" ]; then
-  "$SCRIPT_DIR/delete-msk-topics.sh" || true
-else
-  echo "  ⚠️ delete-msk-topics.sh not found — skipping"
-fi
-
-# -------------------------------------------------------------------
 # TERRAFORM (authoritative destroy)
 # -------------------------------------------------------------------
 echo "💣 Removing prevent_destroy lifecycle blocks..."
 cd "$TERRAFORM_DIR"
 
-LIFECYCLE_FILES=(s3.tf rds.tf msk.tf redis.tf cloudwatch.tf)
+LIFECYCLE_FILES=(s3.tf rds.tf redis.tf cloudwatch.tf)
 
 restore_backups() {
   echo ""
