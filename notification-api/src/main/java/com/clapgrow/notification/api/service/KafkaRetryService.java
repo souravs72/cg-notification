@@ -6,7 +6,9 @@ import com.clapgrow.notification.api.enums.NotificationChannel;
 import com.clapgrow.notification.api.repository.MessageLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -63,13 +65,19 @@ public class KafkaRetryService {
     @Value("${spring.kafka.topics.whatsapp-dlq:notifications-whatsapp-dlq}")
     private String whatsappDlqTopic;
     
+    /** Self-reference for proxy invocation. Required so @Transactional(REQUIRES_NEW) takes effect when
+     * calling retrySingleMessageInNewTransaction from within the same class (avoids self-invocation bypass). */
+    @Lazy
+    @Autowired
+    private KafkaRetryService self;
+
     private final MessageLogRepository messageLogRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final NotificationService notificationService;
     private final MessageStatusHistoryService messageStatusHistoryService;
     private final NotificationMetricsService metricsService;
 
-    private static final int RETRY_BATCH_SIZE = 100; // Process max 100 messages per batch for backpressure
+    private static final int RETRY_BATCH_SIZE = 50; // Reduced from 100 to lower heap pressure (OOM at 2-3GB with large backlogs)
     
     /**
      * Retry failed Kafka publishes (producer-side failures).
@@ -122,13 +130,13 @@ public class KafkaRetryService {
                 if (currentRetryCount >= MAX_RETRIES) {
                     log.warn("Message {} has exceeded max retries ({}), sending to DLQ", 
                         messageLog.getMessageId(), currentRetryCount);
-                    sendToDeadLetterTopicInNewTransaction(messageLog.getId());
+                    self.sendToDeadLetterTopicInNewTransaction(messageLog.getId());
                     continue;
                 }
                 
                 try {
-                    // Process in new transaction - isolated from other retries
-                    retrySingleMessageInNewTransaction(messageLog.getId());
+                    // Process in new transaction - isolated from other retries (use self to go through proxy)
+                    self.retrySingleMessageInNewTransaction(messageLog.getId());
                     totalProcessed++;
                 } catch (Exception e) {
                     log.error("Error retrying Kafka publish for message {}", messageLog.getMessageId(), e);
@@ -208,13 +216,13 @@ public class KafkaRetryService {
                 if (currentRetryCount >= MAX_RETRIES) {
                     log.warn("Message {} has exceeded max retries ({}), sending to DLQ", 
                         messageLog.getMessageId(), currentRetryCount);
-                    sendToDeadLetterTopicInNewTransaction(messageLog.getId());
+                    self.sendToDeadLetterTopicInNewTransaction(messageLog.getId());
                     continue;
                 }
                 
                 try {
-                    // Process in new transaction - isolated from other retries
-                    retrySingleConsumerMessageInNewTransaction(messageLog.getId());
+                    // Process in new transaction - isolated from other retries (use self to go through proxy)
+                    self.retrySingleConsumerMessageInNewTransaction(messageLog.getId());
                     totalProcessed++;
                 } catch (Exception e) {
                     log.error("Error retrying consumer processing for message {}", messageLog.getMessageId(), e);
@@ -321,15 +329,15 @@ public class KafkaRetryService {
                             
                             if (ex == null) {
                                 log.info("Successfully retried Kafka publish for message {} after commit", messageId);
-                                // Update status and clear error on success (in new transaction)
-                                updateRetrySuccess(messageId);
+                                // Update status and clear error on success (in new transaction via proxy)
+                                self.updateRetrySuccess(messageId);
                             } else {
                                 log.error("Kafka retry failed for message {} after commit", messageId, ex);
-                                // Increment retry count only on failure (in new transaction)
-                                updateRetryFailure(messageId, "Kafka retry failed: " + ex.getMessage());
+                                // Increment retry count only on failure (in new transaction via proxy)
+                                self.updateRetryFailure(messageId, "Kafka retry failed: " + ex.getMessage());
                                 
                                 // Check if max retries exceeded and send to DLQ
-                                checkAndSendToDlqIfNeeded(messageId);
+                                self.checkAndSendToDlqIfNeeded(messageId);
                             }
                         });
                 }
@@ -437,7 +445,7 @@ public class KafkaRetryService {
         messageLogRepository.findByMessageId(messageId).ifPresent(log -> {
             Integer currentRetryCount = log.getRetryCount() != null ? log.getRetryCount() : 0;
             if (currentRetryCount >= MAX_RETRIES) {
-                sendToDeadLetterTopicInNewTransaction(log.getId());
+                self.sendToDeadLetterTopicInNewTransaction(log.getId());
             }
         });
     }

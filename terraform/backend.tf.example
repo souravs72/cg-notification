@@ -1,0 +1,19 @@
+# Copy to backend.tf and set your state bucket name.
+# This stores Terraform state in S3 to prevent state loss and enable team collaboration.
+#
+# One-time setup:
+#   aws s3 mb s3://YOUR-STATE-BUCKET --region ap-south-1
+#   aws s3api put-bucket-versioning --bucket YOUR-STATE-BUCKET \
+#     --versioning-configuration Status=Enabled
+#
+# Then: terraform init -migrate-state  # migrates local state to S3
+
+terraform {
+  backend "s3" {
+    bucket         = "cg-notification-terraform-state"  # Change to your bucket name
+    key            = "cg-notification/terraform.tfstate"
+    region         = "ap-south-1"
+    encrypt        = true
+    dynamodb_table = "cg-notification-terraform-locks"  # Optional: for state locking
+  }
+}

@@ -14,17 +14,13 @@ TASK_DEFINITION_FAMILY="cg-notification-migration-task"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 ECR_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/cg-notification/migration"
 
-SUBNET_IDS="$(
-  cd "$(dirname "$0")" && terraform output -json private_subnet_ids \
-    | jq -r 'map(tostring) | join(",")'
-)"
-SECURITY_GROUP_ID="$(
-  aws ec2 describe-security-groups \
-    --filters "Name=tag:Name,Values=cg-notification-ecs-sg" \
-    --query 'SecurityGroups[0].GroupId' \
-    --output text \
-    --region "$AWS_REGION"
-)"
+# Use RDS VPC subnets and ECS SG - migration task must run where RDS Proxy is reachable.
+# RDS Proxy only allows connections from ecs_in_rds_vpc (ECS SG in RDS VPC).
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+SUBNET_IDS="$(terraform output -json migration_subnet_ids 2>/dev/null | jq -r 'join(",")' | sed 's/"//g')"
+SECURITY_GROUP_ID="$(terraform output -raw migration_security_group_id 2>/dev/null)"
+cd - >/dev/null
 EXECUTION_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/cg-notification-ecs-task-execution-role"
 RDS_PROXY_ENDPOINT="$(
   cd "$(dirname "$0")" && terraform output -raw rds_proxy_endpoint
@@ -175,41 +171,40 @@ echo "  Stopped Reason: $STOPPED_REASON"
 echo "=========================================="
 echo ""
 
-# Wait a bit for logs to appear (CloudWatch can be delayed)
+# Wait for logs to appear (CloudWatch can be delayed)
 echo "Waiting for logs to appear (may take 10-30 seconds)..."
-sleep 10
+sleep 15
 
-# Get logs - try multiple times with different approaches
+# Get logs - use task-specific log stream (format: prefix/container/taskid)
+TASK_ID=$(echo "$TASK_ARN" | rev | cut -d'/' -f1 | rev)
+LOG_STREAM="migration/migration/$TASK_ID"
+EVENTS=""
+
 echo "Migration logs:"
 echo "=========================================="
+echo "Log stream: $LOG_STREAM"
+echo ""
 
-# Try to get log stream
-LOG_STREAM=""
-for i in {1..5}; do
-  LOG_STREAM=$(aws logs describe-log-streams \
-    --log-group-name /ecs/migrations \
-    --order-by LastEventTime \
-    --descending \
-    --max-items 1 \
-    --query 'logStreams[0].logStreamName' \
-    --output text 2>/dev/null || echo "")
-  
-  if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "null" ]; then
-    break
-  fi
-  echo "  Waiting for log stream... (attempt $i/5)"
-  sleep 5
-done
-
-if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "null" ]; then
-  echo "Log stream: $LOG_STREAM"
-  echo ""
-  aws logs get-log-events \
+# Try to get logs (stream may take a moment to appear)
+for i in 1 2 3 4 5; do
+  EVENTS=$(aws logs get-log-events \
     --log-group-name /ecs/migrations \
     --log-stream-name "$LOG_STREAM" \
     --query 'events[*].message' \
-    --output text 2>/dev/null || echo "Could not retrieve log events"
-else
+    --output text 2>/dev/null || true)
+  if [ -n "$EVENTS" ] && [ "$EVENTS" != "None" ]; then
+    echo "$EVENTS"
+    break
+  fi
+  if [ $i -lt 5 ]; then
+    echo "  Waiting for logs... (attempt $i/5)"
+    sleep 5
+  else
+    echo "Could not retrieve log events. Check CloudWatch: aws logs get-log-events --log-group-name /ecs/migrations --log-stream-name $LOG_STREAM --region $AWS_REGION"
+  fi
+done
+
+if [ -z "$EVENTS" ] || [ "$EVENTS" = "None" ]; then
   echo "⚠️  No log stream found after waiting"
   echo ""
   echo "Checking task details for errors..."

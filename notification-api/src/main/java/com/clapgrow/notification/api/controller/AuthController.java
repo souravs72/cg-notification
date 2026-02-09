@@ -81,12 +81,8 @@ public class AuthController {
                 return "auth/login";
             }
 
-            // CRITICAL SECURITY FIX: Regenerate session ID to prevent session fixation attacks
-            // This ensures that even if an attacker knows the session ID before login,
-            // they cannot use it after the user authenticates
-            request.changeSessionId();
-            
-            // Set only userId in session - all other data fetched from DB on demand
+            // Set userId in session. Reuse same session ID (no changeSessionId) so browser
+            // cookie keeps working behind ALB - changeSessionId caused cookie mismatch/logouts.
             session.setAttribute("userId", user.getId().toString());
             session.setMaxInactiveInterval(2592000); // 30 days (matches application.yml max-age)
             
@@ -94,7 +90,7 @@ public class AuthController {
             String sessionId = session.getId();
             session.setAttribute("_sessionInitialized", "true");
             
-            log.info("User logged in: {} (userId={}, sessionId={}, session regenerated for security)", 
+            log.info("User logged in: {} (userId={}, sessionId={})", 
                 user.getEmail(), user.getId(), sessionId);
 
             return "redirect:/admin/dashboard";

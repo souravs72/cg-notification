@@ -23,10 +23,12 @@ export ROUTE53_ZONE_ID="${ROUTE53_ZONE_ID:-}"
 # Parse arguments
 SKIP_SECRETS=false
 SKIP_TERRAFORM=false
+SKIP_MIGRATIONS=false
 for arg in "$@"; do
   case "$arg" in
     --skip-secrets) SKIP_SECRETS=true ;;
     --skip-terraform) SKIP_TERRAFORM=true ;;
+    --skip-migrations) SKIP_MIGRATIONS=true ;;
     --image-tag=*) IMAGE_TAG="${arg#*=}" ;;
     --domain=*) DOMAIN_NAME="${arg#*=}" ;;
     --route53-zone-id=*) ROUTE53_ZONE_ID="${arg#*=}" ;;
@@ -37,6 +39,7 @@ Usage: $0 [OPTIONS]
 Options:
   --skip-secrets           Skip secret injection (use when secrets already exist)
   --skip-terraform         Skip Terraform apply (app-only deployment)
+  --skip-migrations        Skip database migrations (use when migrations already applied or password mismatch)
   --image-tag=TAG          Use specific Docker image tag (default: latest or \$IMAGE_TAG)
   --domain=DOMAIN          Custom domain name (e.g., notifications.example.com)
   --route53-zone-id=ZONE   Route53 hosted zone ID (e.g., Z123456ABCDEFG).
@@ -372,19 +375,24 @@ main() {
   fi
   
   # ===== MIGRATIONS =====
-  log_section "🗄️  Database Migrations"
-  if [ -f "$TERRAFORM_DIR/run-migrations-ecs.sh" ]; then
-    ensure_migration_image || {
-      log_error "Preparing migration image failed"
-      exit 1
-    }
-    "$TERRAFORM_DIR/run-migrations-ecs.sh" || {
-      log_error "Migrations failed"
-      exit 1
-    }
-    log_success "Migrations complete"
+  if [ "$SKIP_MIGRATIONS" = true ]; then
+    log_section "⏭️  Skipping Database Migrations (--skip-migrations)"
   else
-    log_warn "run-migrations-ecs.sh not found, skipping"
+    log_section "🗄️  Database Migrations"
+    if [ -f "$TERRAFORM_DIR/run-migrations-ecs.sh" ]; then
+      ensure_migration_image || {
+        log_error "Preparing migration image failed"
+        exit 1
+      }
+      "$TERRAFORM_DIR/run-migrations-ecs.sh" || {
+        log_error "Migrations failed. If password mismatch, ensure cg-notification/db-password-only matches RDS."
+        log_info "To continue without migrations: $0 --skip-migrations"
+        exit 1
+      }
+      log_success "Migrations complete"
+    else
+      log_warn "run-migrations-ecs.sh not found, skipping"
+    fi
   fi
   echo ""
   

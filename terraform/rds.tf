@@ -61,6 +61,11 @@ resource "aws_db_subnet_group" "main" {
   tags = {
     Name = "cg-notification-db-subnet"
   }
+
+  lifecycle {
+    # Avoid update errors when existing subnet group uses different VPC subnets
+    ignore_changes = [subnet_ids]
+  }
 }
 
 # RDS PostgreSQL Instance (Multi-AZ)
@@ -95,6 +100,8 @@ resource "aws_db_instance" "main" {
 
   lifecycle {
     prevent_destroy = true
+    # Imported instance: avoid overwriting; RDS is in different VPC than Terraform-managed SGs
+    ignore_changes = [password, kms_key_id, vpc_security_group_ids]
   }
 }
 
@@ -141,6 +148,7 @@ resource "aws_iam_role_policy" "rds_proxy_secrets" {
 }
 
 # RDS Proxy (manages connection pooling and reduces connection pressure)
+# MUST be in same VPC as RDS and ECS - uses rds-proxy-rds-vpc.tf data sources
 resource "aws_db_proxy" "main" {
   name          = "cg-notification-db-proxy"
   engine_family = "POSTGRESQL"
@@ -149,16 +157,16 @@ resource "aws_db_proxy" "main" {
     secret_arn  = aws_secretsmanager_secret.db_password.arn
   }
   role_arn               = aws_iam_role.rds_proxy.arn
-  vpc_subnet_ids         = aws_subnet.private[*].id
-  vpc_security_group_ids = [aws_security_group.rds_proxy.id] # RDS Proxy uses its own security group
+  vpc_subnet_ids         = data.aws_db_subnet_group.rds.subnet_ids
+  vpc_security_group_ids = [aws_security_group.rds_proxy_in_rds_vpc.id]
 
   require_tls = true
 
-  # Ensure IAM role and secrets are ready before creating proxy
   depends_on = [
     aws_iam_role.rds_proxy,
     aws_iam_role_policy.rds_proxy_secrets,
-    aws_secretsmanager_secret_version.db_password # Ensure secret value exists
+    aws_secretsmanager_secret_version.db_password,
+    aws_security_group.rds_proxy_in_rds_vpc
   ]
 
   tags = {

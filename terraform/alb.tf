@@ -139,21 +139,18 @@ resource "aws_s3_bucket_policy" "alb_logs" {
   })
 }
 
-# Application Load Balancer
+# Application Load Balancer - MUST be in RDS VPC to reach ECS targets (RDS Proxy is in RDS VPC)
 resource "aws_lb" "main" {
   name               = var.alb_name
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = aws_subnet.public[*].id
+  security_groups    = [aws_security_group.alb_in_rds_vpc.id]
+  subnets            = data.aws_subnets.rds_vpc_public.ids
 
   enable_deletion_protection       = var.alb_deletion_protection
   idle_timeout                     = 120
-  enable_cross_zone_load_balancing = true # Explicitly enable cross-AZ load balancing (ALB default, but explicit helps future readers)
+  enable_cross_zone_load_balancing = true
 
-  # Enable access logging on ALB (required for security forensics, WAF tuning, incident response)
-  # CRITICAL: Must wait for bucket policy to be applied before enabling access logs
-  # Using depends_on ensures bucket policy is ready before ALB tries to write logs
   depends_on = [
     aws_s3_bucket_policy.alb_logs,
     aws_s3_bucket_ownership_controls.alb_logs,
@@ -170,12 +167,12 @@ resource "aws_lb" "main" {
   }
 }
 
-# Target Group for notification-api
+# Target Group for notification-api - MUST be in RDS VPC (same as ECS targets)
 resource "aws_lb_target_group" "api" {
   name        = "cg-notification-api-tg"
   port        = 8080
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = local.rds_vpc_id
   target_type = "ip"
 
   health_check {
@@ -187,6 +184,13 @@ resource "aws_lb_target_group" "api" {
     path                = "/actuator/health/liveness" # Use liveness endpoint - checks if process is alive, not if all dependencies are ready
     protocol            = "HTTP"
     matcher             = "200"
+  }
+
+  # Sticky sessions: required when using in-memory sessions (SPRING_SESSION_STORE_TYPE=none)
+  stickiness {
+    type            = "lb_cookie"
+    cookie_duration = 86400 # 24 hours
+    enabled         = true
   }
 
   # Configure deregistration delay (smooths rolling deployments, prevents in-flight request drops)

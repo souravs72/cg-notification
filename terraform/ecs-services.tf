@@ -6,9 +6,10 @@ resource "aws_ecs_service" "api" {
   desired_count   = var.notification_api_desired_count
   launch_type     = "FARGATE"
 
+  # API runs in RDS VPC to reach RDS Proxy; ALB/target group are also in RDS VPC
   network_configuration {
-    subnets          = aws_subnet.private[*].id
-    security_groups  = [aws_security_group.ecs.id]
+    subnets          = tolist(data.aws_db_subnet_group.rds.subnet_ids)
+    security_groups  = [data.aws_security_group.ecs_in_rds_vpc.id]
     assign_public_ip = false
   }
 
@@ -18,20 +19,17 @@ resource "aws_ecs_service" "api" {
     container_port   = 8080
   }
 
-  health_check_grace_period_seconds = 300  # 5 minutes - gives Spring Boot apps time to fully start before health checks begin
-  enable_execute_command            = true # Enable ECS Exec for live debugging and emergency inspection
+  health_check_grace_period_seconds = 300
+  enable_execute_command            = true
 
   deployment_maximum_percent         = 200
   deployment_minimum_healthy_percent = 100
 
   depends_on = [
     aws_lb_listener.http,
-    null_resource.alb_listeners, # Waits for HTTPS listener if ACM cert is provided
+    null_resource.alb_listeners,
     aws_db_instance.main,
     aws_msk_serverless_cluster.main,
-    # Note: Database migrations are NOT a dependency here
-    # Migrations should be run separately (via ECS task) before starting services
-    # If using null_resource migrations, they will run automatically but are not recommended for production
   ]
 
   tags = {
@@ -65,6 +63,10 @@ resource "aws_ecs_service" "email_worker" {
 
   tags = {
     Name = "email-worker-service"
+  }
+
+  lifecycle {
+    ignore_changes = [network_configuration]
   }
 }
 
@@ -101,8 +103,9 @@ resource "aws_ecs_service" "whatsapp_worker" {
   tags = {
     Name = "whatsapp-worker-service"
   }
+
+  lifecycle {
+    # Preserve network_configuration and service_registries (registry may differ across VPCs)
+    ignore_changes = [network_configuration, service_registries]
+  }
 }
-
-
-
-

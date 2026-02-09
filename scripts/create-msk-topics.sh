@@ -19,8 +19,16 @@ LOG_GROUP="/ecs/kafka-admin"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 ECR_REPO="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/cg-notification/kafka-admin"
 
-SUBNET_IDS="$(cd "$TERRAFORM_DIR" && terraform output -json private_subnet_ids | jq -r 'join(",")')"
-SG_ID="$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=cg-notification-ecs-sg" --query 'SecurityGroups[0].GroupId' --output text --region "$AWS_REGION")"
+# Use same VPC as MSK cluster (discover from RDS - MSK/ECS/RDS typically share VPC)
+RDS_VPC_ID="$(aws rds describe-db-instances --db-instance-identifier cg-notification-db --region "$AWS_REGION" --query 'DBInstances[0].DBSubnetGroup.VpcId' --output text 2>/dev/null)"
+if [ -n "$RDS_VPC_ID" ] && [ "$RDS_VPC_ID" != "None" ]; then
+  SUBNET_IDS="$(aws rds describe-db-subnet-groups --db-subnet-group-name cg-notification-db-subnet --region "$AWS_REGION" --query 'DBSubnetGroups[0].Subnets[*].SubnetIdentifier' --output text 2>/dev/null | tr '\t' ',')"
+  SG_ID="$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=cg-notification-ecs-sg" "Name=vpc-id,Values=$RDS_VPC_ID" --query 'SecurityGroups[0].GroupId' --output text --region "$AWS_REGION" 2>/dev/null)"
+fi
+if [ -z "$SUBNET_IDS" ] || [ -z "$SG_ID" ] || [ "$SG_ID" = "None" ]; then
+  SUBNET_IDS="$(cd "$TERRAFORM_DIR" && terraform output -json private_subnet_ids | jq -r 'join(",")')"
+  SG_ID="$(cd "$TERRAFORM_DIR" && terraform output -raw ecs_security_group_id 2>/dev/null)"
+fi
 BOOTSTRAP="$(cd "$TERRAFORM_DIR" && terraform output -raw msk_bootstrap_brokers)"
 EXECUTION_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/cg-notification-ecs-task-execution-role"
 TASK_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/cg-api-task-role"

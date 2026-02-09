@@ -3,7 +3,8 @@
 *.tfstate.*
 *.tfstate.backup
 
-# Terraform plan files
+# Terraform plan files (never commit - may contain sensitive infra details)
+tfplan
 *.tfplan
 *.tfplan.*
 

@@ -84,12 +84,11 @@ public class AdminController {
     @GetMapping("/dashboard")
     public String dashboard(Model model, HttpSession session) {
         try {
-            // Get fresh user info from database
+            // Get fresh user info from database (single query)
             User user = userService.getCurrentUser(session);
-            
             model.addAttribute("user", user);
-            AdminDashboardResponse metrics = adminService.getDashboardMetrics();
-            model.addAttribute("metrics", metrics);
+            // Use empty placeholder - JS loads metrics via /admin/api/metrics (avoids N+1 DB queries blocking response)
+            model.addAttribute("metrics", AdminDashboardResponse.empty());
             return "admin/dashboard";
         } catch (IllegalStateException e) {
             // Session invalid or user not found - redirect to login
@@ -151,7 +150,8 @@ public class AdminController {
         if (authError != null) {
             return authError;
         }
-        List<MessageDetailResponse> messages = adminService.getRecentMessages(limit);
+        int cappedLimit = Math.min(limit, 500); // Cap to prevent OOM (loading 2500+ full MessageLog with body)
+        List<MessageDetailResponse> messages = adminService.getRecentMessages(cappedLimit);
         return ResponseEntity.ok(messages);
     }
 
@@ -175,7 +175,8 @@ public class AdminController {
         if (authError != null) {
             return authError;
         }
-        List<MessageDetailResponse> messages = adminService.getFailedMessages(limit);
+        int cappedLimit = Math.min(limit, 500); // Cap to prevent OOM
+        List<MessageDetailResponse> messages = adminService.getFailedMessages(cappedLimit);
         return ResponseEntity.ok(messages);
     }
 
@@ -283,7 +284,8 @@ public class AdminController {
             return authError;
         }
         try {
-            List<MessageDetailResponse> messages = adminService.getScheduledMessages(limit);
+            int cappedLimit = Math.min(limit, 500); // Cap to prevent OOM
+            List<MessageDetailResponse> messages = adminService.getScheduledMessages(cappedLimit);
             return ResponseEntity.ok(messages);
         } catch (Exception e) {
             log.error("Error retrieving scheduled messages", e);

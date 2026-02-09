@@ -10,6 +10,11 @@ resource "aws_elasticache_subnet_group" "redis" {
   tags = {
     Name = "cg-notification-redis-subnets"
   }
+
+  lifecycle {
+    # Subnet group cannot be modified when in use by a cache cluster
+    ignore_changes = [subnet_ids]
+  }
 }
 
 # Single-node Redis replication group. Transit encryption (TLS) requires replication group, not cache cluster.
@@ -35,6 +40,8 @@ resource "aws_elasticache_replication_group" "redis" {
 
   lifecycle {
     prevent_destroy = true
+    # Imported replication group: Redis is in different VPC than Terraform-managed SGs
+    ignore_changes = [auth_token, security_group_ids]
   }
 
   tags = {

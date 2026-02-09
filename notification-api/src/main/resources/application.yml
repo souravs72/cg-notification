@@ -25,6 +25,7 @@ spring:
       initialization-fail-timeout: -1
 
   jpa:
+    open-in-view: false  # API best practice: avoid lazy-loading during view rendering
     hibernate:
       ddl-auto: ${HIBERNATE_DDL_AUTO:validate}
     show-sql: false
@@ -117,9 +118,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: ${ACTUATOR_ENDPOINTS:health,info,prometheus,metrics}
+        include: health,info
+      discovery:
+        enabled: false
       base-path: /actuator
   endpoint:
+    mappings:
+      enabled: false
     health:
       probes:
         enabled: true
@@ -143,9 +148,9 @@ management:
       enabled: true
 
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+  allowed-origins: "${CORS_ALLOWED_ORIGINS:*}"
   allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,DELETE,PATCH,OPTIONS}
-  allowed-headers: ${CORS_ALLOWED_HEADERS:*}
+  allowed-headers: "${CORS_ALLOWED_HEADERS:*}"
   max-age: ${CORS_MAX_AGE:3600}
 
 logging:
@@ -158,6 +163,7 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: ${LOG_SQL_PARAMS:false}
 
 springdoc:
+  show-actuator: false
   api-docs:
     path: /api-docs
   swagger-ui:

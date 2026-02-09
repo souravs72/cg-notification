@@ -326,19 +326,20 @@ cg-notification/
 
 ### Local vs AWS
 
-- **Local Docker (quick dev loop)**  
+- **Local Docker (quick dev loop)**
   Use `docker compose up -d` with `docker-compose.yml` as shown in the quick start above.
 
-- **Local ECS-like + deploy to AWS**  
+- **Local ECS-like + deploy to AWS**
   Use the ECS‑style compose file and helper scripts described in `README_LOCAL_TESTING.md`:
   - `docker-compose -f docker-compose.ecs-test.yml up -d --build`
   - `./scripts/test-health-probes.sh`
   - `./scripts/deploy-to-aws.sh` (optional, when you’re happy with local tests)
 
-- **Real AWS infrastructure (ALB → ECS → RDS + MSK, WAF, etc.)**  
-  Full production-ready deployment is managed via Terraform. Start here:
-  - `terraform/README.md` – what the infra looks like.
-  - `terraform/DEPLOYMENT.md` – exact commands and verification steps.
+- **Real AWS infrastructure (ALB → ECS → RDS + MSK, WAF, etc.)**
+  Two scripts:
+  - **Full deploy** (first time or infra changes): `./scripts/deploy-trigger.sh` — Terraform → Secrets → Migrations → MSK → Build → ECS → Health check
+  - **App-only deploy** (code changes only): `./scripts/deploy-to-aws.sh` — Build JARs → Docker → ECR → ECS rollout (no Terraform/migrations)
+  - See `terraform/README.md` and `terraform/DEPLOYMENT.md` for details.
 
 ### Local profile override (optional)
 

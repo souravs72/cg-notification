@@ -81,6 +81,11 @@ resource "aws_kms_key" "s3" {
 resource "aws_kms_alias" "s3" {
   name          = "alias/cg-notification-s3"
   target_key_id = aws_kms_key.s3.key_id
+
+  lifecycle {
+    # Alias may pre-exist pointing to a different key; avoid conflicts after import
+    ignore_changes = [target_key_id]
+  }
 }
 
 # CRITICAL: Enable SSE-KMS encryption (not SSE-S3)

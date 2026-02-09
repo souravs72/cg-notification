@@ -1,22 +1,8 @@
-FROM maven:3.9-eclipse-temurin-17 AS build
-WORKDIR /app
-
-# Copy parent POM and all modules (Maven validates all modules in parent POM)
-COPY pom.xml .
-COPY common-proto ./common-proto
-COPY notification-api ./notification-api
-COPY email-worker ./email-worker
-COPY whatsapp-worker ./whatsapp-worker
-
-# Build only whatsapp-worker and its dependencies (common-proto)
-# Cache Maven dependencies for faster subsequent builds
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -q -pl whatsapp-worker -am clean package -DskipTests
-
+# Uses pre-built JAR - run 'mvn -pl whatsapp-worker -am package -DskipTests' first.
 FROM gcr.io/distroless/java17-debian12:nonroot
 WORKDIR /app
 
-COPY --from=build /app/whatsapp-worker/target/whatsapp-worker.jar app.jar
+COPY whatsapp-worker/target/whatsapp-worker.jar app.jar
 
 EXPOSE 8082
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]

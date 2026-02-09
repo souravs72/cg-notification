@@ -48,9 +48,21 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: notification-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: notification-kafka
+    restart: on-failure
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -97,6 +109,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
@@ -104,8 +118,12 @@ services:
       SPRING_DATASOURCE_USERNAME: notification_user
       SPRING_DATASOURCE_PASSWORD: notification_pass
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-      WASENDER_API_KEY: ${WASENDER_API_KEY}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_SESSION_STORE_TYPE: redis
+      MANAGEMENT_TRACING_ENABLED: false
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key}
+      WASENDER_API_KEY: ${WASENDER_API_KEY:-}
     volumes:
       - notification_uploads:/app/uploads
 

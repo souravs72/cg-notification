@@ -19,32 +19,31 @@ import java.util.UUID;
 
 /**
  * WhatsApp message processing service.
- * 
+ *
  * ⚠️ RETRY STRATEGY: Fail-fast consumer
- * 
- * This consumer fails fast and does NOT perform retries or sleep.
- * All retries are handled by KafkaRetryService (producer-side retry authority).
- * 
- * Benefits:
- * - No Thread.sleep() blocking consumer threads
- * - Single retry authority reduces complexity
- * - Better throughput and resource utilization
- * - Consistent retry logic across all channels
- * 
+ *
+ * This consumer fails fast and does NOT perform retries. All retries are handled
+ * by KafkaRetryService (producer-side retry authority).
+ *
+ * ⚠️ WaSender SEQUENTIAL RULE: One message per session at a time; mandatory delay
+ * (default 5s) between messages. Enforced by WhatsAppSessionSequencer to ensure
+ * session stability when sending to many recipients.
+ *
  * Flow:
- * 1. Consumer processes message
- * 2. On failure: Mark as FAILED and acknowledge
+ * 1. Consumer processes message within session sequencer (send → wait delay → next)
+ * 2. On failure: Mark as FAILED, still wait delay, then acknowledge
  * 3. KafkaRetryService picks up FAILED messages and retries them
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class WhatsAppProcessingService {
-    
+
     private final WasenderService wasenderService;
     private final ObjectMapper objectMapper;
     private final WhatsAppLogService whatsAppLogService;
     private final FailureClassifier failureClassifier;
+    private final WhatsAppSessionSequencer sessionSequencer;
     
     // ⚠️ METRICS: Metrics are now emitted automatically by MessageStatusHistoryService.appendStatusChange()
     // when status changes. This prevents double-counting and ensures single source of truth.
@@ -86,9 +85,11 @@ public class WhatsAppProcessingService {
                 return;
             }
             
-            // ⚠️ FIXED: Don't set SENT before actually sending - message is already PENDING
-            // Send WhatsApp message via WASender
-            WhatsAppResult result = wasenderService.sendMessage(notification);
+            // ⚠️ WaSender: strict sequential delivery per session; mandatory 5s delay between messages
+            String sessionKey = WhatsAppSessionSequencer.deriveSessionKey(
+                notification.getWhatsappSessionName(), notification.getSiteId());
+            WhatsAppResult result = sessionSequencer.executeForSession(sessionKey, () ->
+                wasenderService.sendMessage(notification));
             
             if (result.isSuccess()) {
                 // Only set DELIVERED after successful send

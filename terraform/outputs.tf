@@ -31,6 +31,21 @@ output "ecs_cluster_name" {
   value       = aws_ecs_cluster.main.name
 }
 
+output "ecs_security_group_id" {
+  description = "ECS security group ID (Terraform VPC)"
+  value       = aws_security_group.ecs.id
+}
+
+output "migration_subnet_ids" {
+  description = "Subnet IDs for migration task (RDS VPC - where RDS Proxy is reachable)"
+  value       = data.aws_db_subnet_group.rds.subnet_ids
+}
+
+output "migration_security_group_id" {
+  description = "Security group for migration task (ECS SG in RDS VPC - allowed by RDS Proxy)"
+  value       = data.aws_security_group.ecs_in_rds_vpc.id
+}
+
 output "ecr_api_repository_url" {
   description = "ECR repository URL for notification-api"
   value       = aws_ecr_repository.api.repository_url

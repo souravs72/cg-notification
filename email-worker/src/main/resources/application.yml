@@ -76,7 +76,3 @@ logging:
     root: ${LOG_LEVEL_ROOT:INFO}
     com.clapgrow.notification: ${LOG_LEVEL_APP:INFO}
     org.springframework.kafka: INFO
-
-springdoc:
-  swagger-ui:
-    enabled: false

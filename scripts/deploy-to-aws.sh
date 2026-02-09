@@ -1,176 +1,199 @@
-#!/bin/bash
-# Deploy to AWS after successful local testing
-# This script builds images, pushes to ECR, and triggers ECS service updates
+#!/usr/bin/env bash
+# App-only deployment: Build JARs → Docker images → Push to ECR → Force ECS rollout.
+# Use this when you changed app code only (no infra changes).
+#
+# Prerequisites: Infrastructure already deployed (run deploy-trigger.sh once first).
+#
+# Usage:
+#   ./scripts/deploy-to-aws.sh                    # Deploy with tag 'latest'
+#   ./scripts/deploy-to-aws.sh --image-tag=v1.0.0 # Deploy with specific tag
+#   IMAGE_TAG=$(git rev-parse --short HEAD) ./scripts/deploy-to-aws.sh
 
-set -e
+set -Eeuo pipefail
 
-# CRITICAL: Set AWS profile and region
-export AWS_PROFILE=${AWS_PROFILE:-sourav-admin}
-export AWS_REGION=${AWS_REGION:-ap-south-1}
-# Set IMAGE_TAG for rollback-safe deploys (e.g. $(git rev-parse --short HEAD)). Default: latest.
-export IMAGE_TAG=${IMAGE_TAG:-latest}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TERRAFORM_DIR="${TERRAFORM_DIR:-$PROJECT_ROOT/terraform}"
 
+export AWS_PROFILE="${AWS_PROFILE:-sourav-admin}"
+export AWS_REGION="${AWS_REGION:-ap-south-1}"
+export IMAGE_TAG="${IMAGE_TAG:-latest}"
+
+CLUSTER_NAME="cg-notification-cluster"
+SERVICES=("notification-api-service" "email-worker-service" "whatsapp-worker-service")
+
+# Parse args
+for arg in "$@"; do
+  case "$arg" in
+    --image-tag=*) IMAGE_TAG="${arg#*=}" ;;
+    --help|-h)
+      cat <<EOF
+Usage: $0 [OPTIONS]
+
+App-only deployment (no Terraform, migrations, or secrets).
+Builds JARs, Docker images, pushes to ECR, forces ECS rollout.
+
+Options:
+  --image-tag=TAG   Docker image tag (default: latest)
+
+Environment:
+  AWS_PROFILE       AWS profile (default: sourav-admin)
+  AWS_REGION        AWS region (default: ap-south-1)
+  IMAGE_TAG         Image tag (default: latest)
+
+Examples:
+  $0
+  $0 --image-tag=\$(git rev-parse --short HEAD)
+EOF
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg (use --help)"
+      exit 1
+      ;;
+  esac
+done
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log_info() { echo -e "${CYAN}ℹ${NC} $1"; }
+log_ok() { echo -e "${GREEN}✓${NC} $1"; }
+log_err() { echo -e "${RED}✗${NC} $1" >&2; }
+
+echo ""
 echo "=========================================="
-echo "Deploying to AWS"
+echo "  App-Only Deployment to AWS"
 echo "=========================================="
 echo ""
+log_info "Image tag: $IMAGE_TAG"
+log_info "Region: $AWS_REGION"
+echo ""
 
-# Verify AWS identity
-echo "Verifying AWS identity..."
-if ! aws sts get-caller-identity > /dev/null 2>&1; then
-  echo "❌ ERROR: AWS credentials not configured or invalid"
-  echo "   Ensure AWS_PROFILE is exported or AWS credentials are configured"
+# Prereqs
+for cmd in aws docker mvn; do
+  if ! command -v "$cmd" &>/dev/null; then
+    log_err "$cmd is required"
+    exit 1
+  fi
+done
+
+if ! aws sts get-caller-identity &>/dev/null; then
+  log_err "AWS credentials invalid. Set AWS_PROFILE or configure credentials."
   exit 1
 fi
 
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-echo "Using AWS account: $ACCOUNT_ID"
-echo "Using region: $AWS_REGION"
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+log_ok "AWS account: $ACCOUNT_ID"
 echo ""
 
-# Get ECR repository URLs from Terraform
-cd terraform
-
-if [ ! -f terraform.tfstate ]; then
-    echo "❌ ERROR: Terraform state not found. Run 'terraform apply' first."
-    exit 1
-fi
-
-ECR_API_URL=$(terraform output -raw ecr_api_repository_url 2>/dev/null || echo "")
-ECR_EMAIL_URL=$(terraform output -raw ecr_email_worker_repository_url 2>/dev/null || echo "")
-ECR_WHATSAPP_URL=$(terraform output -raw ecr_whatsapp_worker_repository_url 2>/dev/null || echo "")
+# Terraform outputs (requires prior full deploy so state exists)
+cd "$TERRAFORM_DIR"
+terraform init -input=false 2>/dev/null || true
+ECR_API_URL="$(terraform output -raw ecr_api_repository_url 2>/dev/null || true)"
+ECR_EMAIL_URL="$(terraform output -raw ecr_email_worker_repository_url 2>/dev/null || true)"
+ECR_WHATSAPP_URL="$(terraform output -raw ecr_whatsapp_worker_repository_url 2>/dev/null || true)"
+cd "$PROJECT_ROOT"
 
 if [ -z "$ECR_API_URL" ] || [ -z "$ECR_EMAIL_URL" ] || [ -z "$ECR_WHATSAPP_URL" ]; then
-    echo "❌ ERROR: Could not get ECR repository URLs from Terraform outputs"
-    echo "   Run 'terraform apply' first to create ECR repositories"
-    exit 1
+  log_err "Could not get ECR URLs from Terraform. Run full deployment first: ./scripts/deploy-trigger.sh"
+  exit 1
 fi
 
-cd ..
-
-echo "ECR Repositories:"
-echo "  API: $ECR_API_URL"
-echo "  Email Worker: $ECR_EMAIL_URL"
-echo "  WhatsApp Worker: $ECR_WHATSAPP_URL"
-echo "Image tag: $IMAGE_TAG"
+log_ok "ECR repos found"
 echo ""
 
-# Login to ECR
-echo "Logging in to ECR..."
-aws ecr get-login-password --region $AWS_REGION | \
+# 1. Maven build (Dockerfiles expect pre-built JARs)
+echo "=========================================="
+echo "  Building JARs"
+echo "=========================================="
+log_info "Running Maven package..."
+mvn -q -pl notification-api,email-worker,whatsapp-worker -am package -DskipTests
+log_ok "JARs built"
+echo ""
+
+# 2. ECR login
+log_info "Logging in to ECR..."
+aws ecr get-login-password --region "$AWS_REGION" | \
   docker login --username AWS --password-stdin \
-  ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-
+  "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" >/dev/null 2>&1 || true
+log_ok "ECR login done"
 echo ""
 
-# Build and push images
+# 3. Build and push
 echo "=========================================="
-echo "Building and pushing Docker images"
+echo "  Building & Pushing Docker Images"
 echo "=========================================="
+
+build_push() {
+  local name=$1
+  local dockerfile=$2
+  local ecr_url=$3
+  log_info "Building $name..."
+  docker build -f "$dockerfile" -t "${ecr_url}:${IMAGE_TAG}" . || { log_err "Build failed: $name"; exit 1; }
+  docker tag "${ecr_url}:${IMAGE_TAG}" "${ecr_url}:latest"
+  log_info "Pushing $name..."
+  docker push "${ecr_url}:${IMAGE_TAG}"
+  docker push "${ecr_url}:latest"
+  log_ok "$name pushed"
+}
+
+build_push "notification-api" "notification-api/Dockerfile" "$ECR_API_URL"
+echo ""
+build_push "email-worker" "email-worker/Dockerfile" "$ECR_EMAIL_URL"
+echo ""
+build_push "whatsapp-worker" "whatsapp-worker/Dockerfile" "$ECR_WHATSAPP_URL"
 echo ""
 
-# Build API image
-echo "Building notification-api..."
-docker build -f notification-api/Dockerfile -t ${ECR_API_URL}:${IMAGE_TAG} .
-docker tag ${ECR_API_URL}:${IMAGE_TAG} ${ECR_API_URL}:latest
-echo "Pushing notification-api..."
-docker push ${ECR_API_URL}:${IMAGE_TAG}
-docker push ${ECR_API_URL}:latest
-echo "✓ notification-api pushed"
-echo ""
-
-# Build Email Worker image
-echo "Building email-worker..."
-docker build -f email-worker/Dockerfile -t ${ECR_EMAIL_URL}:${IMAGE_TAG} .
-docker tag ${ECR_EMAIL_URL}:${IMAGE_TAG} ${ECR_EMAIL_URL}:latest
-echo "Pushing email-worker..."
-docker push ${ECR_EMAIL_URL}:${IMAGE_TAG}
-docker push ${ECR_EMAIL_URL}:latest
-echo "✓ email-worker pushed"
-echo ""
-
-# Build WhatsApp Worker image
-echo "Building whatsapp-worker..."
-docker build -f whatsapp-worker/Dockerfile -t ${ECR_WHATSAPP_URL}:${IMAGE_TAG} .
-docker tag ${ECR_WHATSAPP_URL}:${IMAGE_TAG} ${ECR_WHATSAPP_URL}:latest
-echo "Pushing whatsapp-worker..."
-docker push ${ECR_WHATSAPP_URL}:${IMAGE_TAG}
-docker push ${ECR_WHATSAPP_URL}:latest
-echo "✓ whatsapp-worker pushed"
-echo ""
-
-# Update ECS task definitions to use IMAGE_TAG (then force deploy)
+# 4. Update task defs if custom tag (ECS uses image:tag in task definition)
 if [ "$IMAGE_TAG" != "latest" ]; then
   echo "=========================================="
-  echo "Updating task definitions (image_tag=$IMAGE_TAG)"
+  echo "  Updating ECS Task Definitions"
   echo "=========================================="
-  cd terraform
+  cd "$TERRAFORM_DIR"
   terraform apply -var="image_tag=$IMAGE_TAG" \
     -target=aws_ecs_task_definition.api \
     -target=aws_ecs_task_definition.email_worker \
     -target=aws_ecs_task_definition.whatsapp_worker \
-    -target=aws_ecs_service.api \
-    -target=aws_ecs_service.email_worker \
-    -target=aws_ecs_service.whatsapp_worker \
     -auto-approve -input=false
-  cd ..
+  cd "$PROJECT_ROOT"
   echo ""
 fi
 
-# Force ECS service deployment
+# 5. Force ECS rollout
 echo "=========================================="
-echo "Triggering ECS service updates"
+echo "  Triggering ECS Rollout"
 echo "=========================================="
-echo ""
-
-CLUSTER_NAME="cg-notification-cluster"
-
-echo "Updating notification-api-service..."
-aws ecs update-service \
-  --cluster $CLUSTER_NAME \
-  --service notification-api-service \
-  --force-new-deployment \
-  --region $AWS_REGION \
-  --query 'service.[serviceName,status,runningCount,desiredCount]' \
-  --output table
-
-echo ""
-echo "Updating email-worker-service..."
-aws ecs update-service \
-  --cluster $CLUSTER_NAME \
-  --service email-worker-service \
-  --force-new-deployment \
-  --region $AWS_REGION \
-  --query 'service.[serviceName,status,runningCount,desiredCount]' \
-  --output table
-
-echo ""
-echo "Updating whatsapp-worker-service..."
-aws ecs update-service \
-  --cluster $CLUSTER_NAME \
-  --service whatsapp-worker-service \
-  --force-new-deployment \
-  --region $AWS_REGION \
-  --query 'service.[serviceName,status,runningCount,desiredCount]' \
-  --output table
+for svc in "${SERVICES[@]}"; do
+  log_info "Updating $svc..."
+  aws ecs update-service \
+    --cluster "$CLUSTER_NAME" \
+    --service "$svc" \
+    --force-new-deployment \
+    --region "$AWS_REGION" \
+    --query 'service.[serviceName,status,desiredCount,runningCount]' \
+    --output table
+  log_ok "$svc rollout triggered"
+done
 
 echo ""
 echo "=========================================="
-echo "Deployment initiated!"
+echo "  Deployment Initiated"
 echo "=========================================="
 echo ""
-echo "Services are being updated. This may take 5-10 minutes."
+log_ok "Images pushed and ECS rollout triggered. Services typically stabilize in 5–10 minutes."
 echo ""
-echo "Monitor deployment:"
-echo "  aws ecs describe-services \\"
-echo "    --cluster $CLUSTER_NAME \\"
-echo "    --services notification-api-service email-worker-service whatsapp-worker-service \\"
-echo "    --region $AWS_REGION \\"
-echo "    --query 'services[*].[serviceName,runningCount,desiredCount,status]' \\"
-echo "    --output table"
+echo "Monitor:"
+echo "  aws ecs describe-services --cluster $CLUSTER_NAME --services ${SERVICES[*]} --region $AWS_REGION --query 'services[*].[serviceName,runningCount,desiredCount]' --output table"
 echo ""
-echo "Check service logs:"
+echo "Logs:"
 echo "  aws logs tail /ecs/cg-notification-api --follow --region $AWS_REGION"
 echo ""
-echo "Test health endpoint:"
-echo "  curl http://\$(terraform -chdir=terraform output -raw alb_dns_name)/actuator/health"
+ALB_DNS=$(terraform -chdir="$TERRAFORM_DIR" output -raw alb_dns_name 2>/dev/null || true)
+if [ -n "$ALB_DNS" ]; then
+  echo "Health: curl http://${ALB_DNS}/actuator/health"
+  echo ""
+fi

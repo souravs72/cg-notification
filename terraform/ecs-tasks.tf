@@ -17,7 +17,7 @@ resource "aws_ecs_task_definition" "api" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "1024"
-  memory                   = "2048"
+  memory                   = "4096"  # 4GB - OOM occurred at 2GB and 3GB during Kafka/consumer retry batches (100+ msgs)
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.api_task.arn
 
@@ -55,27 +55,26 @@ resource "aws_ecs_task_definition" "api" {
           name  = "SPRING_PROFILES_ACTIVE"
           value = "prod"
         },
+        # Disable tracing (no Zipkin in ECS - avoids Connection refused localhost:9411)
+        {
+          name  = "MANAGEMENT_TRACING_ENABLED"
+          value = "false"
+        },
         # whatsapp-worker API base URL (internal, via Cloud Map service discovery)
         {
           name  = "WHATSAPP_WORKER_API_BASE_URL"
           value = "http://whatsapp-worker.cg-notification.local:8082"
         },
-        # Spring Session (Redis) - required for multi-task ECS login sessions
+        # Spring Session: use none (in-memory) - API runs in RDS VPC, Redis in Terraform VPC (no connectivity).
+        # ALB stickiness keeps users on same task so sessions work.
         {
           name  = "SPRING_SESSION_STORE_TYPE"
-          value = "redis"
+          value = "none"
         },
+        # Disable Redis autoconfig - avoids connection attempts when Redis unreachable
         {
-          name  = "SPRING_DATA_REDIS_HOST"
-          value = aws_elasticache_replication_group.redis.primary_endpoint_address
-        },
-        {
-          name  = "SPRING_DATA_REDIS_PORT"
-          value = "6379"
-        },
-        {
-          name  = "SPRING_DATA_REDIS_SSL_ENABLED"
-          value = "true"
+          name  = "SPRING_AUTOCONFIGURE_EXCLUDE"
+          value = "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration"
         },
         {
           name  = "FILE_UPLOAD_DIR"
@@ -91,10 +90,6 @@ resource "aws_ecs_task_definition" "api" {
         {
           name      = "SPRING_DATASOURCE_PASSWORD"
           valueFrom = aws_secretsmanager_secret.db_password_only.arn
-        },
-        {
-          name      = "SPRING_DATA_REDIS_PASSWORD"
-          valueFrom = aws_secretsmanager_secret.redis_password.arn
         },
         {
           name      = "ADMIN_API_KEY"

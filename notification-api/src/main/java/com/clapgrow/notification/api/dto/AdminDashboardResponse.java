@@ -16,5 +16,10 @@ public class AdminDashboardResponse {
     private Long totalMessagesFailed;
     private Double overallSuccessRate;
     private List<AdminSiteMetrics> siteMetrics;
+
+    /** Lightweight placeholder for fast initial render; JS fetches real data via /admin/api/metrics */
+    public static AdminDashboardResponse empty() {
+        return new AdminDashboardResponse(0L, 0L, 0L, 0L, 0.0, List.of());
+    }
 }
 

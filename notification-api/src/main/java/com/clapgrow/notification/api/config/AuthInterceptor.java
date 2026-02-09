@@ -1,6 +1,7 @@
 package com.clapgrow.notification.api.config;
 
 import com.clapgrow.notification.api.annotation.AdminApi;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -81,6 +82,12 @@ public class AuthInterceptor implements HandlerInterceptor {
                     session != null ? session.getId() : "null", 
                     session != null ? session.getAttribute("userId") : "null",
                     cookies != null ? "present" : "missing");
+                // Clear stale JSESSIONID so browser gets a clean slate on next login
+                // (task restart loses in-memory sessions; old cookie would keep triggering 401)
+                Cookie clearCookie = new Cookie("JSESSIONID", "");
+                clearCookie.setMaxAge(0);
+                clearCookie.setPath("/");
+                response.addCookie(clearCookie);
                 response.sendRedirect("/auth/login");
                 return false;
             }

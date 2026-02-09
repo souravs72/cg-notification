@@ -17,6 +17,8 @@ resource "aws_msk_serverless_cluster" "main" {
 
   lifecycle {
     prevent_destroy = true
+    # Avoid forced replacement when subnet IDs drift (e.g. after import from different VPC)
+    ignore_changes = [vpc_config]
   }
 }
 

@@ -14,8 +14,7 @@ import java.util.UUID;
 /**
  * Email message log service.
  * 
- * ⚠️ NOTE: This duplicates code from WhatsAppLogService, but workers can't share code
- * from notification-api module. Both services maintain the same logic for consistency.
+ * ⚠️ NOTE: This duplicates code from WhatsAppLogService, but workers can't share code from notification-api module. Both services maintain the same logic for consistency.
  */
 @Service
 @RequiredArgsConstructor
