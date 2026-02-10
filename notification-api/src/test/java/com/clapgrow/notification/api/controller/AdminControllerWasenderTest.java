@@ -8,9 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.UUID;
 
@@ -20,11 +23,23 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(controllers = AdminController.class, excludeAutoConfiguration = {
-    org.springframework.boot.autoconfigure.aop.AopAutoConfiguration.class
-})
+@WebMvcTest(
+    controllers = AdminController.class,
+    excludeAutoConfiguration = {
+        org.springframework.boot.autoconfigure.aop.AopAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration.class
+    }
+)
 @AutoConfigureMockMvc(addFilters = false)
 class AdminControllerWasenderTest {
+
+    @TestConfiguration
+    static class TestConfig {
+        @Bean
+        public ObjectMapper objectMapper() {
+            return new ObjectMapper();
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;

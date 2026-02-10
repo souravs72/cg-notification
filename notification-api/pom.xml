@@ -156,9 +156,36 @@
         </dependency>
 
         <!-- OpenAPI: 2.4.0 works with Spring Boot 3.3.x; 2.5.0+ requires Spring 6.2 (ApiVersionStrategy) -->
+        <!-- Exclude Spring Boot 4.0.1 dependencies from springdoc 3.0.1, use Spring Boot 3.3.4 instead -->
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-validation</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-jackson</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-webmvc</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-servlet</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-http-converter</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-web-server</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Tests -->

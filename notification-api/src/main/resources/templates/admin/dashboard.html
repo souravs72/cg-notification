@@ -346,7 +346,7 @@
                             </div>
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="text-muted">Sessions Allowed:</span>
-                                <span class="fw-bold" id="sessionsAllowed" th:text="${user?.sessionsAllowed ?: 10}">10</span>
+                                <span class="fw-bold" id="sessionsAllowed" th:text="${user?.sessionsAllowed}">10</span>
                             </div>
                             <div class="progress mt-3" style="height: 8px;">
                                 <div class="progress-bar" id="sessionsProgress" role="progressbar" 
@@ -1411,9 +1411,16 @@
                         document.getElementById('needsScanSessions').textContent = needsScan;
                         
                         // Update subscription summary
+                        const sessionsAllowedElement = document.getElementById('sessionsAllowed');
+                        const sessionsAllowed = sessionsAllowedElement
+                            ? parseInt(sessionsAllowedElement.textContent || '0', 10)
+                            : 0;
+
                         document.getElementById('sessionsUsed').textContent = total;
-                        document.getElementById('sessionsAllowed').textContent = '10'; // Default, can be made dynamic
-                        const progress = Math.min((total / 10) * 100, 100);
+
+                        const progress = sessionsAllowed > 0
+                            ? Math.min((total / sessionsAllowed) * 100, 100)
+                            : 0;
                         document.getElementById('sessionsProgress').style.width = progress + '%';
                     }
                 })
